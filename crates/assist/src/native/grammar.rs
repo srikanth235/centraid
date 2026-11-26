@@ -1146,6 +1146,7 @@ mod tests {
             .filter_map(|line| {
                 line.strip_prefix("where: ")
                     .or_else(|| line.strip_prefix("set: "))
+                    .or_else(|| line.strip_prefix("field: "))
             })
             .flat_map(|line| line.split(" · "))
             .filter_map(|part| part.split_whitespace().next())

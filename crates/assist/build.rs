@@ -20,7 +20,8 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use centraid_domain::legacy::{ActionDecl, FieldDecl, KindDecl, Source};
+use centraid_domain::action::{ActionDecl, Field, Inverse};
+use centraid_domain::chat::{ChatField, ChatKind, Source};
 use serde_json::Value;
 
 fn camel(snake: &str) -> String {
@@ -72,7 +73,7 @@ fn via(name: &str) -> &'static str {
     }
 }
 
-fn field_expr(field: &FieldDecl) -> String {
+fn field_expr(field: &ChatField) -> String {
     let mut out = format!(
         "field({:?}, {}, {})",
         field.name,
@@ -109,13 +110,13 @@ fn main() {
     println!("cargo:rerun-if-changed={}", verbs_path.display());
     println!(
         "cargo:rerun-if-changed={}",
-        root.join("crates/domain/src/lib.rs").display()
+        root.join("crates/domain/src").display()
     );
     let verbs: Value =
         serde_json::from_str(&std::fs::read_to_string(&verbs_path).expect("verbs.json"))
             .expect("verbs.json is JSON");
 
-    let live: Vec<&KindDecl> = centraid_domain::legacy::KINDS.iter().collect();
+    let live: Vec<&ChatKind> = centraid_domain::chat::KINDS.iter().collect();
     let live_ids: Vec<&str> = live.iter().map(|kind| kind.id).collect();
     let writable: Vec<&str> = live
         .iter()
@@ -203,10 +204,14 @@ fn main() {
     out.push_str("pub static DECLARED_KINDS: &[DeclaredKind] = &[];\n\n");
 
     let vocabulary = verbs["verbs"].as_array().expect("verbs");
-    let rows: Vec<&ActionDecl> = centraid_domain::legacy::ACTIONS.iter().collect();
+    // One row per `(chat verb, chat kind, qualifier)`: an action says one verb on its kinds.
+    let direct: Vec<(&ActionDecl, &centraid_domain::action::Say)> = centraid_domain::ACTIONS
+        .iter()
+        .filter_map(|action| action.says().map(|say| (action, say)))
+        .collect();
     let backs = |name: &str| {
-        rows.iter().any(|row| {
-            (row.verb == name || row.also.contains(&name)) && writable.contains(&row.kind)
+        direct.iter().any(|(_, say)| {
+            say.verb == name && say.kinds.iter().any(|kind| writable.contains(kind))
         })
     };
     let live_verbs: Vec<&Value> = vocabulary
@@ -231,56 +236,70 @@ fn main() {
             .position(|known| *known == id)
             .unwrap_or(usize::MAX)
     };
+    let id_param = |action: &ActionDecl| -> &'static str {
+        ["id", "item_id"]
+            .into_iter()
+            .find(|name| action.input.iter().any(|field| field.name == *name))
+            .unwrap_or("id")
+    };
     let mut commands: BTreeMap<&str, Vec<(usize, &str, &str)>> = BTreeMap::new();
     let mut seen: Vec<(&str, &str, Option<&str>)> = Vec::new();
-    let mut runnable: Vec<(&ActionDecl, &str)> = Vec::new();
-    for row in &rows {
+    for (action, say) in &direct {
         assert!(
-            writable.contains(&row.kind),
-            "catalog: action {} serves {}, which is not a writable kind",
-            row.name,
-            row.kind
+            live_verb_names.contains(&say.verb),
+            "catalog: action {} says `{}`, which verbs.json does not declare",
+            action.name(),
+            say.verb
         );
-        for verb in std::iter::once(&row.verb).chain(row.also) {
+        for kind in say.kinds {
             assert!(
-                live_verb_names.contains(verb),
-                "catalog: action {} serves `{verb}`, which verbs.json does not declare",
-                row.name
+                writable.contains(kind),
+                "catalog: action {} says {kind}, which is not a writable chat kind",
+                action.name()
             );
-            let key = (*verb, row.kind, row.qualifier);
+            let key = (say.verb, *kind, say.qualifier);
             assert!(
                 !seen.contains(&key),
-                "catalog: `{verb} {}` is backed twice (second: {}/{})",
-                row.kind,
-                row.app,
-                row.name
+                "catalog: `{} {kind}` is said twice (second: {})",
+                say.verb,
+                action.name()
             );
             seen.push(key);
-            runnable.push((row, verb));
-            if row.qualifier.is_none() {
-                commands.entry(verb).or_default().push((
-                    kind_order(row.kind),
-                    row.kind,
-                    row.command,
+            if say.qualifier.is_none() {
+                commands.entry(say.verb).or_default().push((
+                    kind_order(kind),
+                    kind,
+                    action.command,
                 ));
             }
         }
     }
 
+    let by_name = |name: &str| {
+        centraid_domain::ACTIONS
+            .iter()
+            .find(|row| row.name() == name)
+            .unwrap_or_else(|| panic!("catalog: no action named {name}"))
+    };
+    let field_names =
+        |fields: &[&Field]| -> Vec<&str> { fields.iter().map(|field| field.name).collect() };
     out.push_str("/// THE ONE LOOKUP: `(verb, kind, qualifier)` to the action chat runs.\n");
     out.push_str("pub static ACTIONS: &[ActionSpec] = &[\n");
-    for (action, verb) in &runnable {
-        let inverse = action
-            .inverse
-            .and_then(|name| rows.iter().find(|back| back.name == name))
-            .map_or("None".to_owned(), |back| {
-                format!(
-                    "Some(InverseSpec {{ app: {:?}, action: {:?}, command: {:?}, id_param: {:?} }})",
-                    back.app, back.name, back.command, back.id_param
-                )
-            });
-        let aliases: Vec<String> = action
-            .aliases
+    for (action, say) in &direct {
+        let inverse = match action.inverse {
+            Inverse::Pair(name) => Some(by_name(name)),
+            Inverse::Restore => Some(*action),
+            Inverse::None => None,
+        }
+        .map_or("None".to_owned(), |back| {
+            format!(
+                "Some(InverseSpec {{ app: \"\", action: \"\", command: {:?}, id_param: {:?} }})",
+                back.command,
+                id_param(back)
+            )
+        });
+        let aliases: Vec<String> = say
+            .names
             .iter()
             .map(|(property, names)| format!("({property:?}, {})", list(names)))
             .collect();
@@ -291,25 +310,33 @@ fn main() {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        let _ = writeln!(
-            out,
-            "    ActionSpec {{ app: {:?}, action: {:?}, command: {:?}, verb: Verb::{}, qualifier: {}, kind: Kind::{}, id_param: {:?}, inverse: {inverse}, properties: {}, required: {}, aliases: &[{}], consts: &[{}], defaults: &[{}], minted: {} }},",
-            action.app,
-            action.name,
-            action.command,
-            camel(verb),
-            action
-                .qualifier
-                .map_or("None".to_owned(), |q| format!("Some({q:?})")),
-            camel(action.kind),
-            action.id_param,
-            list(action.properties),
-            list(action.required),
-            aliases.join(", "),
-            pairs(action.consts),
-            pairs(action.defaults),
-            list(action.minted),
-        );
+        let all: Vec<&Field> = action.input.iter().collect();
+        let required: Vec<&Field> = action.input.iter().filter(|field| field.required).collect();
+        let minted: Vec<&Field> = action.input.iter().filter(|field| field.minted).collect();
+        for kind in say.kinds {
+            let chat_kind = live
+                .iter()
+                .find(|row| row.id == *kind)
+                .expect("a writable kind is live");
+            let _ = writeln!(
+                out,
+                "    ActionSpec {{ app: {:?}, action: {:?}, command: {:?}, verb: Verb::{}, qualifier: {}, kind: Kind::{}, id_param: {:?}, inverse: {inverse}, properties: {}, required: {}, aliases: &[{}], consts: &[{}], defaults: &[{}], minted: {} }},",
+                chat_kind.app,
+                action.name(),
+                action.command,
+                camel(say.verb),
+                say.qualifier
+                    .map_or("None".to_owned(), |q| format!("Some({q:?})")),
+                camel(kind),
+                id_param(action),
+                list(&field_names(&all)),
+                list(&field_names(&required)),
+                aliases.join(", "),
+                pairs(say.fixed),
+                pairs(say.filled),
+                list(&field_names(&minted)),
+            );
+        }
     }
     out.push_str("];\n\n");
 

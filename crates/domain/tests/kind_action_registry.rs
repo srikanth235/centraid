@@ -13,6 +13,7 @@ use centraid_domain::action::{
     ACTION_VERBS, ActionDecl, Chat, Confirm, Handoff, Inverse, MAX_TARGETS, SYSTEM_COMMANDS,
     SYSTEM_VERBS, Target, Ty,
 };
+use centraid_domain::chat;
 use centraid_domain::kind::{Export, Footer, KindDecl, Share, Shown, Trash, Versions};
 use centraid_domain::read::Shape;
 use centraid_domain::{ACTIONS, KINDS, READS};
@@ -60,11 +61,10 @@ fn facts(world: &World) -> Facts {
     for (kind, home) in words("SELECT kind, home_kind FROM home_shape") {
         homes.entry(kind).or_default().insert(home);
     }
-    let captured =
-        words("SELECT kind, home_kind FROM home_shape WHERE kind IN ('photo', 'document')")
-            .into_iter()
-            .map(|(_, home)| home)
-            .collect();
+    let captured = words("SELECT kind, home_kind FROM home_shape WHERE kind = 'photo'")
+        .into_iter()
+        .map(|(_, home)| home)
+        .collect();
     Facts {
         linkable: words("SELECT code, linkable FROM entity_kind WHERE linkable = 1")
             .into_iter()
@@ -584,7 +584,7 @@ fn action_problems(
         ),
     }
     match action.chat {
-        Chat::Direct(say) => {
+        Chat::Direct(say) | Chat::Card(_, say) => {
             need(
                 verbs.contains(say.verb),
                 "it says a verb verbs.json does not have",
@@ -594,7 +594,12 @@ fn action_problems(
                 "it is Direct and says nothing on any kind: screen-only",
             );
             for kind in say.kinds {
-                need(ids().contains(kind), "it says a kind that is not declared");
+                need(
+                    chat::KINDS
+                        .iter()
+                        .any(|row| row.id == *kind && row.writable),
+                    "it says a kind the model has no word for",
+                );
             }
         }
         Chat::Handoff(_) => {}
@@ -667,6 +672,9 @@ fn an_action_with_no_inverse_and_no_class_or_that_is_screen_only_fails() {
             verb: "delete",
             kinds: &[],
             qualifier: None,
+            names: &[],
+            fixed: &[],
+            filled: &[],
         }),
         ..*trash
     };
@@ -680,6 +688,9 @@ fn an_action_with_no_inverse_and_no_class_or_that_is_screen_only_fails() {
             verb: "obliterate",
             kinds: &["note"],
             qualifier: None,
+            names: &[],
+            fixed: &[],
+            filled: &[],
         }),
         ..*trash
     };
@@ -694,7 +705,7 @@ fn an_action_with_no_inverse_and_no_class_or_that_is_screen_only_fails() {
 fn what_chat_says_names_one_action_and_each_action_one_verb() {
     let mut said: BTreeMap<(&str, &str, Option<&str>), String> = BTreeMap::new();
     for action in ACTIONS {
-        if let Chat::Direct(say) = action.chat {
+        if let Some(say) = action.says() {
             for kind in say.kinds {
                 if let Some(other) = said.insert((say.verb, kind, say.qualifier), action.name()) {
                     panic!(
@@ -720,9 +731,7 @@ fn the_confirm_classes_and_the_chat_surfaces_are_the_catalogues_rules() {
             .map(ActionDecl::name)
             .collect()
     };
-    let handoff = |reason: Handoff| {
-        by(&|action| matches!(action.chat, Chat::Handoff(found) if found == reason))
-    };
+    let handoff = |reason: Handoff| by(&|action| action.handoff() == Some(reason));
     assert_eq!(
         handoff(Handoff::PickFile),
         named(&[
@@ -737,6 +746,22 @@ fn the_confirm_classes_and_the_chat_surfaces_are_the_catalogues_rules() {
         ])
     );
     assert_eq!(handoff(Handoff::Reveal), named(&["locker.totp_code"]));
+    assert_eq!(
+        handoff(Handoff::OwnerCheck),
+        named(&[
+            "txn.export_csv",
+            "vault.export_all",
+            "event.export_ics",
+            "task.export_ics",
+            "note.export",
+            "document.export_zip",
+            "photo.export_zip",
+            "person.export_vcf",
+            "person.export_csv",
+            "health.export_csv",
+            "locker.export",
+        ])
+    );
     assert_eq!(
         handoff(Handoff::Destructive),
         named(&[
@@ -822,7 +847,7 @@ trait Card {
 
 impl Card for ActionDecl {
     fn chat_is_a_card(&self) -> bool {
-        matches!(self.chat, Chat::Handoff(Handoff::Destructive))
+        self.handoff() == Some(Handoff::Destructive)
     }
 }
 

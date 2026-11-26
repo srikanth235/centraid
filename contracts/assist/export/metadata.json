@@ -1,8 +1,3986 @@
 {
-  "actions": [],
+  "actions": [
+    {
+      "action": "account.add",
+      "app": "money",
+      "command": "account.add",
+      "id_param": "id",
+      "kind": "account",
+      "names": [
+        "name",
+        "type"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "account.edit",
+      "app": "money",
+      "command": "account.edit",
+      "id_param": "id",
+      "kind": "account",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "account.set_opening",
+      "app": "money",
+      "command": "account.set_opening",
+      "id_param": "id",
+      "kind": "account",
+      "names": [],
+      "qualifier": "opening",
+      "verb": "edit"
+    },
+    {
+      "action": "budget.set",
+      "app": "money",
+      "command": "budget.set",
+      "id_param": "id",
+      "kind": "budget",
+      "names": [],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "budget.set_carry",
+      "app": "money",
+      "command": "budget.set_carry",
+      "id_param": "id",
+      "kind": "budget",
+      "names": [],
+      "qualifier": "carry",
+      "verb": "edit"
+    },
+    {
+      "action": "category.add",
+      "app": "money",
+      "command": "category.add",
+      "id_param": "id",
+      "kind": "category",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "checkpoint.record",
+      "app": "money",
+      "command": "checkpoint.record",
+      "id_param": "id",
+      "kind": "account",
+      "names": [],
+      "qualifier": null,
+      "verb": "log"
+    },
+    {
+      "action": "rule.add",
+      "app": "money",
+      "command": "rule.add",
+      "id_param": "id",
+      "kind": "rule",
+      "names": [],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "rule.edit",
+      "app": "money",
+      "command": "rule.edit",
+      "id_param": "id",
+      "kind": "rule",
+      "names": [],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "rule.delete",
+      "app": "money",
+      "command": "rule.delete",
+      "id_param": "id",
+      "kind": "rule",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "txn.add",
+      "app": "money",
+      "command": "txn.add",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "txn.edit",
+      "app": "money",
+      "command": "txn.edit",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "txn.split",
+      "app": "money",
+      "command": "txn.split",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": "split",
+      "verb": "edit"
+    },
+    {
+      "action": "txn.unlink_transfer",
+      "app": "money",
+      "command": "txn.unlink_transfer",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": "transfer",
+      "verb": "unlink"
+    },
+    {
+      "action": "container.create",
+      "app": "docs",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [
+        "area",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "container.create",
+      "app": "notes",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [
+        "area",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "container.create",
+      "app": "photos",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "album",
+      "names": [
+        "area",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "container.create",
+      "app": "reminders",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "list",
+      "names": [
+        "area",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "container.move",
+      "app": "docs",
+      "command": "container.move",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [],
+      "qualifier": "position",
+      "verb": "edit"
+    },
+    {
+      "action": "container.move",
+      "app": "notes",
+      "command": "container.move",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [],
+      "qualifier": "position",
+      "verb": "edit"
+    },
+    {
+      "action": "container.move",
+      "app": "photos",
+      "command": "container.move",
+      "id_param": "id",
+      "kind": "album",
+      "names": [],
+      "qualifier": "position",
+      "verb": "edit"
+    },
+    {
+      "action": "container.move",
+      "app": "reminders",
+      "command": "container.move",
+      "id_param": "id",
+      "kind": "list",
+      "names": [],
+      "qualifier": "position",
+      "verb": "edit"
+    },
+    {
+      "action": "container.style",
+      "app": "docs",
+      "command": "container.style",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [],
+      "qualifier": "color",
+      "verb": "edit"
+    },
+    {
+      "action": "container.style",
+      "app": "notes",
+      "command": "container.style",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [],
+      "qualifier": "color",
+      "verb": "edit"
+    },
+    {
+      "action": "container.style",
+      "app": "photos",
+      "command": "container.style",
+      "id_param": "id",
+      "kind": "album",
+      "names": [],
+      "qualifier": "color",
+      "verb": "edit"
+    },
+    {
+      "action": "container.style",
+      "app": "reminders",
+      "command": "container.style",
+      "id_param": "id",
+      "kind": "list",
+      "names": [],
+      "qualifier": "color",
+      "verb": "edit"
+    },
+    {
+      "action": "album.set_cover",
+      "app": "photos",
+      "command": "album.set_cover",
+      "id_param": "id",
+      "kind": "album",
+      "names": [],
+      "qualifier": "cover",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.trash",
+      "app": "calendar",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "docs",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "health",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "locker",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "money",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "notes",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "photos",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "reminders",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "people",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "docs",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "notes",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "photos",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "album",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "reminders",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "list",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.trash",
+      "app": "money",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "account",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "entity.restore",
+      "app": "calendar",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "docs",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "health",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "locker",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "money",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "notes",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "photos",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "reminders",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "people",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "docs",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "notes",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "photos",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "album",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "reminders",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "list",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.restore",
+      "app": "money",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "account",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "entity.move",
+      "app": "notes",
+      "command": "entity.move",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": "move",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.move",
+      "app": "docs",
+      "command": "entity.move",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": "move",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.move",
+      "app": "reminders",
+      "command": "entity.move",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": "move",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.move",
+      "app": "people",
+      "command": "entity.move",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": "move",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.move",
+      "app": "docs",
+      "command": "entity.move",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [],
+      "qualifier": "move",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.move",
+      "app": "notes",
+      "command": "entity.move",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [],
+      "qualifier": "move",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "calendar",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "event",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "docs",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "health",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "locker",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "money",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "notes",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "photos",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "reminders",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "people",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "person",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "docs",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "notes",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "photos",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "album",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "reminders",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "list",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "entity.retitle",
+      "app": "money",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "account",
+      "names": [
+        "name"
+      ],
+      "qualifier": "title",
+      "verb": "edit"
+    },
+    {
+      "action": "flag.set/starred",
+      "app": "docs",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "flag.set/starred",
+      "app": "locker",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "flag.set/starred",
+      "app": "notes",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "flag.set/starred",
+      "app": "people",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "flag.set/starred",
+      "app": "photos",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "flag.set/starred",
+      "app": "reminders",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "flag.set/pinned",
+      "app": "notes",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": "pinned",
+      "verb": "edit"
+    },
+    {
+      "action": "flag.set/archived",
+      "app": "locker",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "archive"
+    },
+    {
+      "action": "flag.set/archived",
+      "app": "money",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "account",
+      "names": [],
+      "qualifier": null,
+      "verb": "archive"
+    },
+    {
+      "action": "flag.set/archived",
+      "app": "money",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "category",
+      "names": [],
+      "qualifier": null,
+      "verb": "archive"
+    },
+    {
+      "action": "flag.set/archived",
+      "app": "photos",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "archive"
+    },
+    {
+      "action": "flag.clear/starred",
+      "app": "docs",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "flag.clear/starred",
+      "app": "locker",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "flag.clear/starred",
+      "app": "notes",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "flag.clear/starred",
+      "app": "people",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "flag.clear/starred",
+      "app": "photos",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "flag.clear/starred",
+      "app": "reminders",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "flag.clear/pinned",
+      "app": "notes",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": "unpinned",
+      "verb": "edit"
+    },
+    {
+      "action": "flag.clear/archived",
+      "app": "locker",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "unarchive"
+    },
+    {
+      "action": "flag.clear/archived",
+      "app": "money",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "account",
+      "names": [],
+      "qualifier": null,
+      "verb": "unarchive"
+    },
+    {
+      "action": "flag.clear/archived",
+      "app": "money",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "category",
+      "names": [],
+      "qualifier": null,
+      "verb": "unarchive"
+    },
+    {
+      "action": "flag.clear/archived",
+      "app": "photos",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "unarchive"
+    },
+    {
+      "action": "tag.add",
+      "app": "docs",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "tag.add",
+      "app": "locker",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "tag.add",
+      "app": "notes",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "tag.add",
+      "app": "photos",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "tag.add",
+      "app": "reminders",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "tag.remove",
+      "app": "docs",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "tag.remove",
+      "app": "locker",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "tag.remove",
+      "app": "notes",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "tag.remove",
+      "app": "photos",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "tag.remove",
+      "app": "reminders",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "tag.color",
+      "app": "docs",
+      "command": "tag.color",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": "label_color",
+      "verb": "edit"
+    },
+    {
+      "action": "edge.add/contains",
+      "app": "photos",
+      "command": "edge.add",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "add_to"
+    },
+    {
+      "action": "edge.remove/contains",
+      "app": "photos",
+      "command": "edge.remove",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [
+        "from"
+      ],
+      "qualifier": null,
+      "verb": "remove_from"
+    },
+    {
+      "action": "link.remove",
+      "app": "calendar",
+      "command": "link.remove",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "link.remove",
+      "app": "docs",
+      "command": "link.remove",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "link.remove",
+      "app": "health",
+      "command": "link.remove",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "link.remove",
+      "app": "locker",
+      "command": "link.remove",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "link.remove",
+      "app": "money",
+      "command": "link.remove",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "link.remove",
+      "app": "notes",
+      "command": "link.remove",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "link.remove",
+      "app": "photos",
+      "command": "link.remove",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "link.remove",
+      "app": "reminders",
+      "command": "link.remove",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "link.remove",
+      "app": "people",
+      "command": "link.remove",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "event.propose",
+      "app": "calendar",
+      "command": "event.propose",
+      "id_param": "id",
+      "kind": "event",
+      "names": [
+        "description",
+        "duration",
+        "date",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "event.add_guest",
+      "app": "calendar",
+      "command": "event.add_guest",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": "guest",
+      "verb": "edit"
+    },
+    {
+      "action": "event.edit",
+      "app": "calendar",
+      "command": "event.edit",
+      "id_param": "id",
+      "kind": "event",
+      "names": [
+        "description",
+        "duration",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "event.edit_occurrence",
+      "app": "calendar",
+      "command": "event.edit_occurrence",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "reschedule"
+    },
+    {
+      "action": "event.split",
+      "app": "calendar",
+      "command": "event.split",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": "split",
+      "verb": "reschedule"
+    },
+    {
+      "action": "event.cancel",
+      "app": "calendar",
+      "command": "event.cancel",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "cancel"
+    },
+    {
+      "action": "alert.snooze",
+      "app": "reminders",
+      "command": "alert.snooze",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": "snooze",
+      "verb": "reschedule"
+    },
+    {
+      "action": "alert.snooze",
+      "app": "calendar",
+      "command": "alert.snooze",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": "snooze",
+      "verb": "reschedule"
+    },
+    {
+      "action": "alert.snooze",
+      "app": "people",
+      "command": "alert.snooze",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": "snooze",
+      "verb": "reschedule"
+    },
+    {
+      "action": "alert.snooze",
+      "app": "locker",
+      "command": "alert.snooze",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": "snooze",
+      "verb": "reschedule"
+    },
+    {
+      "action": "reminder.add",
+      "app": "reminders",
+      "command": "reminder.add",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": "reminder",
+      "verb": "edit"
+    },
+    {
+      "action": "reminder.add",
+      "app": "calendar",
+      "command": "reminder.add",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": "reminder",
+      "verb": "edit"
+    },
+    {
+      "action": "reminder.add",
+      "app": "people",
+      "command": "reminder.add",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": "reminder",
+      "verb": "edit"
+    },
+    {
+      "action": "reminder.add",
+      "app": "locker",
+      "command": "reminder.add",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": "reminder",
+      "verb": "edit"
+    },
+    {
+      "action": "reminder.remove",
+      "app": "reminders",
+      "command": "reminder.remove",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": "no_reminder",
+      "verb": "edit"
+    },
+    {
+      "action": "reminder.remove",
+      "app": "calendar",
+      "command": "reminder.remove",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": "no_reminder",
+      "verb": "edit"
+    },
+    {
+      "action": "reminder.remove",
+      "app": "people",
+      "command": "reminder.remove",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": "no_reminder",
+      "verb": "edit"
+    },
+    {
+      "action": "reminder.remove",
+      "app": "locker",
+      "command": "reminder.remove",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": "no_reminder",
+      "verb": "edit"
+    },
+    {
+      "action": "task.add",
+      "app": "reminders",
+      "command": "task.add",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "description",
+        "date",
+        "list",
+        "priority",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "task.edit",
+      "app": "reminders",
+      "command": "task.edit",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "description",
+        "date",
+        "priority",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "task.edit/reschedule",
+      "app": "reminders",
+      "command": "task.edit",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "description",
+        "date",
+        "priority",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "reschedule"
+    },
+    {
+      "action": "task.complete",
+      "app": "reminders",
+      "command": "task.complete",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "complete"
+    },
+    {
+      "action": "task.reopen",
+      "app": "reminders",
+      "command": "task.reopen",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "reopen"
+    },
+    {
+      "action": "task.cancel",
+      "app": "reminders",
+      "command": "task.cancel",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "cancel"
+    },
+    {
+      "action": "task.organize",
+      "app": "reminders",
+      "command": "task.organize",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "add_to"
+    },
+    {
+      "action": "note.create",
+      "app": "notes",
+      "command": "note.create",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "body",
+        "notebook",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "note.edit",
+      "app": "notes",
+      "command": "note.edit",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "body",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "note.restore_version",
+      "app": "notes",
+      "command": "note.restore_version",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": "version",
+      "verb": "restore"
+    },
+    {
+      "action": "document.create_text",
+      "app": "docs",
+      "command": "document.create_text",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "text",
+        "folder",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "document.edit",
+      "app": "docs",
+      "command": "document.edit",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "document.restore_version",
+      "app": "docs",
+      "command": "document.restore_version",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": "version",
+      "verb": "restore"
+    },
+    {
+      "action": "photo.edit",
+      "app": "photos",
+      "command": "photo.edit",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "photo.set_place",
+      "app": "photos",
+      "command": "photo.set_place",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": "place",
+      "verb": "edit"
+    },
+    {
+      "action": "person.add",
+      "app": "people",
+      "command": "person.add",
+      "id_param": "id",
+      "kind": "person",
+      "names": [
+        "cadence",
+        "nickname",
+        "role",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "person.edit",
+      "app": "people",
+      "command": "person.edit",
+      "id_param": "id",
+      "kind": "person",
+      "names": [
+        "cadence",
+        "met",
+        "nickname",
+        "role",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "person.edit/cadence",
+      "app": "people",
+      "command": "person.edit",
+      "id_param": "id",
+      "kind": "person",
+      "names": [
+        "cadence",
+        "met",
+        "nickname",
+        "role",
+        "name"
+      ],
+      "qualifier": "cadence",
+      "verb": "edit"
+    },
+    {
+      "action": "person.add_note",
+      "app": "notes",
+      "command": "person.add_note",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": "person",
+      "verb": "create"
+    },
+    {
+      "action": "person.move",
+      "app": "people",
+      "command": "person.move",
+      "id_param": "id",
+      "kind": "person",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "add_to"
+    },
+    {
+      "action": "touch.log",
+      "app": "people",
+      "command": "touch.log",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "log"
+    },
+    {
+      "action": "workout.log",
+      "app": "health",
+      "command": "workout.log",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [
+        "climb",
+        "distance",
+        "end",
+        "energy",
+        "heart_rate",
+        "moving",
+        "date",
+        "name",
+        "type"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "workout.edit",
+      "app": "health",
+      "command": "workout.edit",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [
+        "climb",
+        "distance",
+        "end",
+        "energy",
+        "heart_rate",
+        "moving",
+        "date",
+        "name",
+        "type"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "measurement.log",
+      "app": "health",
+      "command": "measurement.log",
+      "id_param": "id",
+      "kind": "daily figure",
+      "names": [
+        "date",
+        "name",
+        "value"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "measurement.clear",
+      "app": "health",
+      "command": "measurement.clear",
+      "id_param": "id",
+      "kind": "daily figure",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "locker.add_item",
+      "app": "locker",
+      "command": "locker.add_item",
+      "id_param": "item_id",
+      "kind": "locker item",
+      "names": [
+        "name",
+        "type"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "locker.edit_item",
+      "app": "locker",
+      "command": "locker.edit_item",
+      "id_param": "item_id",
+      "kind": "locker item",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "locker.set_field",
+      "app": "locker",
+      "command": "locker.set_field",
+      "id_param": "item_id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": "field",
+      "verb": "edit"
+    },
+    {
+      "action": "locker.remove_field",
+      "app": "locker",
+      "command": "locker.remove_field",
+      "id_param": "item_id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": "field",
+      "verb": "delete"
+    },
+    {
+      "action": "locker.totp_code",
+      "app": "locker",
+      "command": "locker.totp_code",
+      "id_param": "item_id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "reveal"
+    }
+  ],
   "catalog": {
-    "actions": [],
-    "queries": []
+    "actions": [
+      {
+        "action": "account.add",
+        "chat": "direct",
+        "command": "account.add",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "account",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "account"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "account.edit",
+        "chat": "direct",
+        "command": "account.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "account",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "account"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "account.edit/currency",
+        "chat": "handoff:destructive",
+        "command": "account.edit",
+        "confirm": "outlined",
+        "inverse": "account.edit/currency",
+        "kind": "account",
+        "qualifier": "currency",
+        "says": null,
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "account.set_opening",
+        "chat": "direct",
+        "command": "account.set_opening",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "account",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "account"
+          ],
+          "qualifier": "opening",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "set_opening"
+      },
+      {
+        "action": "budget.set",
+        "chat": "direct",
+        "command": "budget.set",
+        "confirm": "none",
+        "inverse": "budget.set",
+        "kind": "budget",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "budget"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "set"
+      },
+      {
+        "action": "budget.set_carry",
+        "chat": "direct",
+        "command": "budget.set_carry",
+        "confirm": "none",
+        "inverse": "budget.set_carry",
+        "kind": "budget",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "budget"
+          ],
+          "qualifier": "carry",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "set_carry"
+      },
+      {
+        "action": "category.add",
+        "chat": "direct",
+        "command": "category.add",
+        "confirm": "none",
+        "inverse": "entity.purge",
+        "kind": "category",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "category"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "checkpoint.record",
+        "chat": "direct",
+        "command": "checkpoint.record",
+        "confirm": "none",
+        "inverse": "checkpoint.record",
+        "kind": "checkpoint",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "account"
+          ],
+          "qualifier": null,
+          "verb": "log"
+        },
+        "target": "one",
+        "verb": "record"
+      },
+      {
+        "action": "rule.add",
+        "chat": "direct",
+        "command": "rule.add",
+        "confirm": "none",
+        "inverse": "rule.delete",
+        "kind": "rule",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "rule"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "rule.edit",
+        "chat": "direct",
+        "command": "rule.edit",
+        "confirm": "none",
+        "inverse": "rule.edit",
+        "kind": "rule",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "rule"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "rule.delete",
+        "chat": "direct",
+        "command": "rule.delete",
+        "confirm": "none",
+        "inverse": "rule.add",
+        "kind": "rule",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "rule"
+          ],
+          "qualifier": null,
+          "verb": "delete"
+        },
+        "target": "one",
+        "verb": "delete"
+      },
+      {
+        "action": "rule.apply",
+        "chat": "handoff:open",
+        "command": "rule.apply",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "rule",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "apply"
+      },
+      {
+        "action": "txn.add",
+        "chat": "direct",
+        "command": "txn.add",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "txn",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "transaction"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "txn.add/csv",
+        "chat": "handoff:pickfile",
+        "command": "txn.add",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "txn",
+        "qualifier": "csv",
+        "says": null,
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "txn.edit",
+        "chat": "direct",
+        "command": "txn.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "txn",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "transaction"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "txn.categorize",
+        "chat": "handoff:open",
+        "command": "txn.categorize",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "txn",
+        "qualifier": null,
+        "says": null,
+        "target": "set",
+        "verb": "categorize"
+      },
+      {
+        "action": "txn.split",
+        "chat": "direct",
+        "command": "txn.split",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "txn",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "transaction"
+          ],
+          "qualifier": "split",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "split"
+      },
+      {
+        "action": "txn.link_transfer",
+        "chat": "handoff:open",
+        "command": "txn.link_transfer",
+        "confirm": "none",
+        "inverse": "txn.unlink_transfer",
+        "kind": "txn",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "link_transfer"
+      },
+      {
+        "action": "txn.unlink_transfer",
+        "chat": "direct",
+        "command": "txn.unlink_transfer",
+        "confirm": "none",
+        "inverse": "txn.link_transfer",
+        "kind": "txn",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "transaction"
+          ],
+          "qualifier": "transfer",
+          "verb": "unlink"
+        },
+        "target": "one",
+        "verb": "unlink_transfer"
+      },
+      {
+        "action": "txn.confirm_match",
+        "chat": "handoff:open",
+        "command": "txn.confirm_match",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "txn",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "confirm_match"
+      },
+      {
+        "action": "txn.dismiss_match",
+        "chat": "handoff:open",
+        "command": "txn.dismiss_match",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "txn",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "dismiss_match"
+      },
+      {
+        "action": "txn.export_csv",
+        "chat": "handoff:ownercheck",
+        "command": "txn.export_csv",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "txn",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export_csv"
+      },
+      {
+        "action": "container.create",
+        "chat": "direct",
+        "command": "container.create",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "container",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "folder",
+            "notebook",
+            "album",
+            "list"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "create"
+      },
+      {
+        "action": "container.move",
+        "chat": "direct",
+        "command": "container.move",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "container",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "folder",
+            "notebook",
+            "album",
+            "list"
+          ],
+          "qualifier": "position",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "move"
+      },
+      {
+        "action": "container.style",
+        "chat": "direct",
+        "command": "container.style",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "container",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "folder",
+            "notebook",
+            "album",
+            "list"
+          ],
+          "qualifier": "color",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "style"
+      },
+      {
+        "action": "album.set_cover",
+        "chat": "direct",
+        "command": "album.set_cover",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "album",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "album"
+          ],
+          "qualifier": "cover",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "set_cover"
+      },
+      {
+        "action": "entity.trash",
+        "chat": "direct",
+        "command": "entity.trash",
+        "confirm": "none",
+        "inverse": "entity.restore",
+        "kind": "entity",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event",
+            "document",
+            "workout",
+            "locker_item",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person",
+            "folder",
+            "notebook",
+            "album",
+            "list",
+            "account"
+          ],
+          "qualifier": null,
+          "verb": "delete"
+        },
+        "target": "set",
+        "verb": "trash"
+      },
+      {
+        "action": "entity.restore",
+        "chat": "direct",
+        "command": "entity.restore",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "entity",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event",
+            "document",
+            "workout",
+            "locker_item",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person",
+            "folder",
+            "notebook",
+            "album",
+            "list",
+            "account"
+          ],
+          "qualifier": null,
+          "verb": "restore"
+        },
+        "target": "set",
+        "verb": "restore"
+      },
+      {
+        "action": "entity.move",
+        "chat": "direct",
+        "command": "entity.move",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "entity",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "note",
+            "document",
+            "task",
+            "person",
+            "folder",
+            "notebook"
+          ],
+          "qualifier": "move",
+          "verb": "edit"
+        },
+        "target": "set",
+        "verb": "move"
+      },
+      {
+        "action": "entity.retitle",
+        "chat": "direct",
+        "command": "entity.retitle",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "entity",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event",
+            "document",
+            "workout",
+            "locker_item",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person",
+            "folder",
+            "notebook",
+            "album",
+            "list",
+            "account"
+          ],
+          "qualifier": "title",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "retitle"
+      },
+      {
+        "action": "entity.purge",
+        "chat": "handoff:destructive",
+        "command": "entity.purge",
+        "confirm": "outlined",
+        "inverse": null,
+        "kind": "entity",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "purge"
+      },
+      {
+        "action": "entity.empty_trash",
+        "chat": "handoff:destructive",
+        "command": "entity.empty_trash",
+        "confirm": "outlined",
+        "inverse": null,
+        "kind": "entity",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "empty_trash"
+      },
+      {
+        "action": "flag.set/starred",
+        "chat": "direct",
+        "command": "flag.set",
+        "confirm": "none",
+        "inverse": "flag.clear/starred",
+        "kind": "flag",
+        "qualifier": "starred",
+        "says": {
+          "kinds": [
+            "document",
+            "locker_item",
+            "note",
+            "person",
+            "photo",
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "star"
+        },
+        "target": "set",
+        "verb": "set"
+      },
+      {
+        "action": "flag.set/pinned",
+        "chat": "direct",
+        "command": "flag.set",
+        "confirm": "none",
+        "inverse": "flag.clear/pinned",
+        "kind": "flag",
+        "qualifier": "pinned",
+        "says": {
+          "kinds": [
+            "note"
+          ],
+          "qualifier": "pinned",
+          "verb": "edit"
+        },
+        "target": "set",
+        "verb": "set"
+      },
+      {
+        "action": "flag.set/archived",
+        "chat": "direct",
+        "command": "flag.set",
+        "confirm": "none",
+        "inverse": "flag.clear/archived",
+        "kind": "flag",
+        "qualifier": "archived",
+        "says": {
+          "kinds": [
+            "locker_item",
+            "account",
+            "category",
+            "photo"
+          ],
+          "qualifier": null,
+          "verb": "archive"
+        },
+        "target": "set",
+        "verb": "set"
+      },
+      {
+        "action": "flag.clear/starred",
+        "chat": "direct",
+        "command": "flag.clear",
+        "confirm": "none",
+        "inverse": "flag.set/starred",
+        "kind": "flag",
+        "qualifier": "starred",
+        "says": {
+          "kinds": [
+            "document",
+            "locker_item",
+            "note",
+            "person",
+            "photo",
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "unstar"
+        },
+        "target": "set",
+        "verb": "clear"
+      },
+      {
+        "action": "flag.clear/pinned",
+        "chat": "direct",
+        "command": "flag.clear",
+        "confirm": "none",
+        "inverse": "flag.set/pinned",
+        "kind": "flag",
+        "qualifier": "pinned",
+        "says": {
+          "kinds": [
+            "note"
+          ],
+          "qualifier": "unpinned",
+          "verb": "edit"
+        },
+        "target": "set",
+        "verb": "clear"
+      },
+      {
+        "action": "flag.clear/archived",
+        "chat": "direct",
+        "command": "flag.clear",
+        "confirm": "none",
+        "inverse": "flag.set/archived",
+        "kind": "flag",
+        "qualifier": "archived",
+        "says": {
+          "kinds": [
+            "locker_item",
+            "account",
+            "category",
+            "photo"
+          ],
+          "qualifier": null,
+          "verb": "unarchive"
+        },
+        "target": "set",
+        "verb": "clear"
+      },
+      {
+        "action": "tag.add",
+        "chat": "direct",
+        "command": "tag.add",
+        "confirm": "none",
+        "inverse": "tag.remove",
+        "kind": "tag",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "document",
+            "locker_item",
+            "note",
+            "photo",
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "tag"
+        },
+        "target": "set",
+        "verb": "add"
+      },
+      {
+        "action": "tag.remove",
+        "chat": "direct",
+        "command": "tag.remove",
+        "confirm": "none",
+        "inverse": "tag.add",
+        "kind": "tag",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "document",
+            "locker_item",
+            "note",
+            "photo",
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "untag"
+        },
+        "target": "set",
+        "verb": "remove"
+      },
+      {
+        "action": "tag.color",
+        "chat": "direct",
+        "command": "tag.color",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "tag",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "document"
+          ],
+          "qualifier": "label_color",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "color"
+      },
+      {
+        "action": "edge.add",
+        "chat": "handoff:open",
+        "command": "edge.add",
+        "confirm": "none",
+        "inverse": "edge.remove",
+        "kind": "edge",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "edge.add/contains",
+        "chat": "direct",
+        "command": "edge.add",
+        "confirm": "none",
+        "inverse": "edge.remove/contains",
+        "kind": "edge",
+        "qualifier": "contains",
+        "says": {
+          "kinds": [
+            "photo"
+          ],
+          "qualifier": null,
+          "verb": "add_to"
+        },
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "edge.remove",
+        "chat": "handoff:open",
+        "command": "edge.remove",
+        "confirm": "none",
+        "inverse": "edge.add",
+        "kind": "edge",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "remove"
+      },
+      {
+        "action": "edge.remove/contains",
+        "chat": "direct",
+        "command": "edge.remove",
+        "confirm": "none",
+        "inverse": "edge.add/contains",
+        "kind": "edge",
+        "qualifier": "contains",
+        "says": {
+          "kinds": [
+            "photo"
+          ],
+          "qualifier": null,
+          "verb": "remove_from"
+        },
+        "target": "one",
+        "verb": "remove"
+      },
+      {
+        "action": "edge.move",
+        "chat": "handoff:open",
+        "command": "edge.move",
+        "confirm": "none",
+        "inverse": "edge.move",
+        "kind": "edge",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "move"
+      },
+      {
+        "action": "link.add",
+        "chat": "handoff:open",
+        "command": "link.add",
+        "confirm": "none",
+        "inverse": "link.remove",
+        "kind": "link",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "link.remove",
+        "chat": "direct",
+        "command": "link.remove",
+        "confirm": "none",
+        "inverse": "link.add",
+        "kind": "link",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event",
+            "document",
+            "workout",
+            "locker_item",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person"
+          ],
+          "qualifier": null,
+          "verb": "unlink"
+        },
+        "target": "one",
+        "verb": "remove"
+      },
+      {
+        "action": "concept.merge",
+        "chat": "handoff:destructive",
+        "command": "concept.merge",
+        "confirm": "outlined",
+        "inverse": null,
+        "kind": "concept",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "merge"
+      },
+      {
+        "action": "history.keep_version",
+        "chat": "handoff:open",
+        "command": "history.keep_version",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "history",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "keep_version"
+      },
+      {
+        "action": "history.restore_version",
+        "chat": "handoff:open",
+        "command": "history.restore_version",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "history",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "restore_version"
+      },
+      {
+        "action": "vault.rename",
+        "chat": "handoff:open",
+        "command": "vault.rename",
+        "confirm": "none",
+        "inverse": "vault.rename",
+        "kind": "vault",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "rename"
+      },
+      {
+        "action": "vault.export_all",
+        "chat": "handoff:ownercheck",
+        "command": "vault.export_all",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "vault",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export_all"
+      },
+      {
+        "action": "event.propose",
+        "chat": "direct",
+        "command": "event.propose",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "event",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "propose"
+      },
+      {
+        "action": "event.propose/ics",
+        "chat": "handoff:pickfile",
+        "command": "event.propose",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "event",
+        "qualifier": "ics",
+        "says": null,
+        "target": "one",
+        "verb": "propose"
+      },
+      {
+        "action": "event.add_guest",
+        "chat": "direct",
+        "command": "event.add_guest",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "event",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event"
+          ],
+          "qualifier": "guest",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "add_guest"
+      },
+      {
+        "action": "event.edit",
+        "chat": "direct",
+        "command": "event.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "event",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "event.edit_occurrence",
+        "chat": "direct",
+        "command": "event.edit_occurrence",
+        "confirm": "none",
+        "inverse": "event.edit_occurrence",
+        "kind": "event",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event"
+          ],
+          "qualifier": null,
+          "verb": "reschedule"
+        },
+        "target": "one",
+        "verb": "edit_occurrence"
+      },
+      {
+        "action": "event.split",
+        "chat": "direct",
+        "command": "event.split",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "event",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event"
+          ],
+          "qualifier": "split",
+          "verb": "reschedule"
+        },
+        "target": "one",
+        "verb": "split"
+      },
+      {
+        "action": "event.cancel",
+        "chat": "direct",
+        "command": "event.cancel",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "event",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "event"
+          ],
+          "qualifier": null,
+          "verb": "cancel"
+        },
+        "target": "one",
+        "verb": "cancel"
+      },
+      {
+        "action": "event.respond",
+        "chat": "handoff:open",
+        "command": "event.respond",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "event",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "respond"
+      },
+      {
+        "action": "event.export_ics",
+        "chat": "handoff:ownercheck",
+        "command": "event.export_ics",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "event",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export_ics"
+      },
+      {
+        "action": "alert.snooze",
+        "chat": "direct",
+        "command": "alert.snooze",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "alert",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "task",
+            "event",
+            "person",
+            "locker_item"
+          ],
+          "qualifier": "snooze",
+          "verb": "reschedule"
+        },
+        "target": "one",
+        "verb": "snooze"
+      },
+      {
+        "action": "reminder.add",
+        "chat": "direct",
+        "command": "reminder.add",
+        "confirm": "none",
+        "inverse": "reminder.remove",
+        "kind": "reminder",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "task",
+            "event",
+            "person",
+            "locker_item"
+          ],
+          "qualifier": "reminder",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "reminder.remove",
+        "chat": "direct",
+        "command": "reminder.remove",
+        "confirm": "none",
+        "inverse": "reminder.add",
+        "kind": "reminder",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "task",
+            "event",
+            "person",
+            "locker_item"
+          ],
+          "qualifier": "no_reminder",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "remove"
+      },
+      {
+        "action": "task.add",
+        "chat": "direct",
+        "command": "task.add",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "task",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "task.edit",
+        "chat": "direct",
+        "command": "task.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "task",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "task.edit/reschedule",
+        "chat": "direct",
+        "command": "task.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "task",
+        "qualifier": "reschedule",
+        "says": {
+          "kinds": [
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "reschedule"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "task.complete",
+        "chat": "direct",
+        "command": "task.complete",
+        "confirm": "none",
+        "inverse": "task.reopen",
+        "kind": "task",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "complete"
+        },
+        "target": "one",
+        "verb": "complete"
+      },
+      {
+        "action": "task.reopen",
+        "chat": "direct",
+        "command": "task.reopen",
+        "confirm": "none",
+        "inverse": "task.complete",
+        "kind": "task",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "reopen"
+        },
+        "target": "one",
+        "verb": "reopen"
+      },
+      {
+        "action": "task.cancel",
+        "chat": "direct",
+        "command": "task.cancel",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "task",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "cancel"
+        },
+        "target": "one",
+        "verb": "cancel"
+      },
+      {
+        "action": "task.organize",
+        "chat": "direct",
+        "command": "task.organize",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "task",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "task"
+          ],
+          "qualifier": null,
+          "verb": "add_to"
+        },
+        "target": "one",
+        "verb": "organize"
+      },
+      {
+        "action": "task.export_ics",
+        "chat": "handoff:ownercheck",
+        "command": "task.export_ics",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "task",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export_ics"
+      },
+      {
+        "action": "note.create",
+        "chat": "direct",
+        "command": "note.create",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "note",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "note"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "create"
+      },
+      {
+        "action": "note.edit",
+        "chat": "direct",
+        "command": "note.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "note",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "note"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "note.asset_add",
+        "chat": "handoff:open",
+        "command": "note.asset_add",
+        "confirm": "none",
+        "inverse": "note.asset_remove",
+        "kind": "note",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "asset_add"
+      },
+      {
+        "action": "note.asset_remove",
+        "chat": "handoff:open",
+        "command": "note.asset_remove",
+        "confirm": "none",
+        "inverse": "note.asset_add",
+        "kind": "note",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "asset_remove"
+      },
+      {
+        "action": "note.asset_reorder",
+        "chat": "handoff:open",
+        "command": "note.asset_reorder",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "note",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "asset_reorder"
+      },
+      {
+        "action": "note.import",
+        "chat": "handoff:pickfile",
+        "command": "note.import",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "note",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "import"
+      },
+      {
+        "action": "note.export",
+        "chat": "handoff:ownercheck",
+        "command": "note.export",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "note",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export"
+      },
+      {
+        "action": "note.restore_version",
+        "chat": "direct",
+        "command": "note.restore_version",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "note",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "note"
+          ],
+          "qualifier": "version",
+          "verb": "restore"
+        },
+        "target": "one",
+        "verb": "restore_version"
+      },
+      {
+        "action": "document.add",
+        "chat": "handoff:pickfile",
+        "command": "document.add",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "document",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "document.create_text",
+        "chat": "direct",
+        "command": "document.create_text",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "document",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "document"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "create_text"
+      },
+      {
+        "action": "document.edit",
+        "chat": "direct",
+        "command": "document.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "document",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "document"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "document.replace",
+        "chat": "handoff:pickfile",
+        "command": "document.replace",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "document",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "replace"
+      },
+      {
+        "action": "document.restore_version",
+        "chat": "direct",
+        "command": "document.restore_version",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "document",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "document"
+          ],
+          "qualifier": "version",
+          "verb": "restore"
+        },
+        "target": "one",
+        "verb": "restore_version"
+      },
+      {
+        "action": "document.export_zip",
+        "chat": "handoff:ownercheck",
+        "command": "document.export_zip",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "document",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export_zip"
+      },
+      {
+        "action": "photo.add",
+        "chat": "handoff:pickfile",
+        "command": "photo.add",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "photo",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "photo.edit",
+        "chat": "direct",
+        "command": "photo.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "photo",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "photo"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "photo.set_place",
+        "chat": "direct",
+        "command": "photo.set_place",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "photo",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "photo"
+          ],
+          "qualifier": "place",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "set_place"
+      },
+      {
+        "action": "photo.export_zip",
+        "chat": "handoff:ownercheck",
+        "command": "photo.export_zip",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "photo",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export_zip"
+      },
+      {
+        "action": "place.add",
+        "chat": "handoff:open",
+        "command": "place.add",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "place",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "place.edit",
+        "chat": "handoff:open",
+        "command": "place.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "place",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "place.locate",
+        "chat": "handoff:open",
+        "command": "place.locate",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "place",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "locate"
+      },
+      {
+        "action": "place.merge",
+        "chat": "handoff:destructive",
+        "command": "place.merge",
+        "confirm": "outlined",
+        "inverse": null,
+        "kind": "place",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "merge"
+      },
+      {
+        "action": "person.add",
+        "chat": "direct",
+        "command": "person.add",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "person",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "person"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "person.edit",
+        "chat": "direct",
+        "command": "person.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "person"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "person.edit/cadence",
+        "chat": "direct",
+        "command": "person.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": "cadence",
+        "says": {
+          "kinds": [
+            "person"
+          ],
+          "qualifier": "cadence",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "person.add_date",
+        "chat": "handoff:open",
+        "command": "person.add_date",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "add_date"
+      },
+      {
+        "action": "person.edit_date",
+        "chat": "handoff:open",
+        "command": "person.edit_date",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "edit_date"
+      },
+      {
+        "action": "person.remove_date",
+        "chat": "handoff:open",
+        "command": "person.remove_date",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "remove_date"
+      },
+      {
+        "action": "person.add_note",
+        "chat": "direct",
+        "command": "person.add_note",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "person",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "note"
+          ],
+          "qualifier": "person",
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "add_note"
+      },
+      {
+        "action": "person.add_relationship",
+        "chat": "handoff:open",
+        "command": "person.add_relationship",
+        "confirm": "none",
+        "inverse": "edge.remove",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "add_relationship"
+      },
+      {
+        "action": "person.save_contact_point",
+        "chat": "handoff:open",
+        "command": "person.save_contact_point",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "save_contact_point"
+      },
+      {
+        "action": "person.remove_contact_point",
+        "chat": "handoff:open",
+        "command": "person.remove_contact_point",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "remove_contact_point"
+      },
+      {
+        "action": "person.prefer_contact_point",
+        "chat": "handoff:open",
+        "command": "person.prefer_contact_point",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "prefer_contact_point"
+      },
+      {
+        "action": "person.reorder_contact_points",
+        "chat": "handoff:open",
+        "command": "person.reorder_contact_points",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "reorder_contact_points"
+      },
+      {
+        "action": "person.set_avatar",
+        "chat": "handoff:open",
+        "command": "person.set_avatar",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "set_avatar"
+      },
+      {
+        "action": "person.move",
+        "chat": "direct",
+        "command": "person.move",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "person",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "person"
+          ],
+          "qualifier": null,
+          "verb": "add_to"
+        },
+        "target": "one",
+        "verb": "move"
+      },
+      {
+        "action": "person.merge",
+        "chat": "handoff:destructive",
+        "command": "person.merge",
+        "confirm": "outlined",
+        "inverse": null,
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "merge"
+      },
+      {
+        "action": "person.import_vcf",
+        "chat": "handoff:pickfile",
+        "command": "person.import_vcf",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "import_vcf"
+      },
+      {
+        "action": "person.import_csv",
+        "chat": "handoff:pickfile",
+        "command": "person.import_csv",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "import_csv"
+      },
+      {
+        "action": "person.export_vcf",
+        "chat": "handoff:ownercheck",
+        "command": "person.export_vcf",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export_vcf"
+      },
+      {
+        "action": "person.export_csv",
+        "chat": "handoff:ownercheck",
+        "command": "person.export_csv",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "person",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export_csv"
+      },
+      {
+        "action": "touch.log",
+        "chat": "direct",
+        "command": "touch.log",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "touch",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "person"
+          ],
+          "qualifier": null,
+          "verb": "log"
+        },
+        "target": "one",
+        "verb": "log"
+      },
+      {
+        "action": "touch.edit",
+        "chat": "handoff:open",
+        "command": "touch.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "touch",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "workout.log",
+        "chat": "direct",
+        "command": "workout.log",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "workout",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "workout"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "log"
+      },
+      {
+        "action": "workout.edit",
+        "chat": "direct",
+        "command": "workout.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "workout",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "workout"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "reading.add",
+        "chat": "handoff:open",
+        "command": "reading.add",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "reading",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "add"
+      },
+      {
+        "action": "reading.edit",
+        "chat": "handoff:open",
+        "command": "reading.edit",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "reading",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "edit"
+      },
+      {
+        "action": "measurement.log",
+        "chat": "direct",
+        "command": "measurement.log",
+        "confirm": "none",
+        "inverse": "measurement.clear",
+        "kind": "measurement",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "daily_figure"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "log"
+      },
+      {
+        "action": "measurement.clear",
+        "chat": "direct",
+        "command": "measurement.clear",
+        "confirm": "none",
+        "inverse": "measurement.log",
+        "kind": "measurement",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "daily_figure"
+          ],
+          "qualifier": null,
+          "verb": "delete"
+        },
+        "target": "one",
+        "verb": "clear"
+      },
+      {
+        "action": "health.export_csv",
+        "chat": "handoff:ownercheck",
+        "command": "health.export_csv",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "health",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export_csv"
+      },
+      {
+        "action": "locker.add_item",
+        "chat": "direct",
+        "command": "locker.add_item",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "locker",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "locker_item"
+          ],
+          "qualifier": null,
+          "verb": "create"
+        },
+        "target": "one",
+        "verb": "add_item"
+      },
+      {
+        "action": "locker.edit_item",
+        "chat": "direct",
+        "command": "locker.edit_item",
+        "confirm": "owner",
+        "inverse": "restore",
+        "kind": "locker",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "locker_item"
+          ],
+          "qualifier": null,
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "edit_item"
+      },
+      {
+        "action": "locker.duplicate_item",
+        "chat": "handoff:open",
+        "command": "locker.duplicate_item",
+        "confirm": "none",
+        "inverse": "entity.trash",
+        "kind": "locker",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "duplicate_item"
+      },
+      {
+        "action": "locker.set_field",
+        "chat": "direct",
+        "command": "locker.set_field",
+        "confirm": "owner",
+        "inverse": "restore",
+        "kind": "locker",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "locker_item"
+          ],
+          "qualifier": "field",
+          "verb": "edit"
+        },
+        "target": "one",
+        "verb": "set_field"
+      },
+      {
+        "action": "locker.remove_field",
+        "chat": "direct",
+        "command": "locker.remove_field",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "locker",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "locker_item"
+          ],
+          "qualifier": "field",
+          "verb": "delete"
+        },
+        "target": "one",
+        "verb": "remove_field"
+      },
+      {
+        "action": "locker.set_passkey",
+        "chat": "handoff:open",
+        "command": "locker.set_passkey",
+        "confirm": "owner",
+        "inverse": "restore",
+        "kind": "locker",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "set_passkey"
+      },
+      {
+        "action": "locker.remove_passkey",
+        "chat": "handoff:open",
+        "command": "locker.remove_passkey",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "locker",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "remove_passkey"
+      },
+      {
+        "action": "locker.totp_code",
+        "chat": "handoff:reveal",
+        "command": "locker.totp_code",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "locker",
+        "qualifier": null,
+        "says": {
+          "kinds": [
+            "locker_item"
+          ],
+          "qualifier": null,
+          "verb": "reveal"
+        },
+        "target": "one",
+        "verb": "totp_code"
+      },
+      {
+        "action": "locker.export",
+        "chat": "handoff:ownercheck",
+        "command": "locker.export",
+        "confirm": "owner",
+        "inverse": null,
+        "kind": "locker",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "export"
+      },
+      {
+        "action": "follow.stop",
+        "chat": "handoff:open",
+        "command": "follow.stop",
+        "confirm": "outlined",
+        "inverse": null,
+        "kind": "follow",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "stop"
+      },
+      {
+        "action": "follow.take_stated",
+        "chat": "handoff:open",
+        "command": "follow.take_stated",
+        "confirm": "none",
+        "inverse": "restore",
+        "kind": "follow",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "take_stated"
+      },
+      {
+        "action": "thread.clear",
+        "chat": "handoff:destructive",
+        "command": "thread.clear",
+        "confirm": "outlined",
+        "inverse": null,
+        "kind": "thread",
+        "qualifier": null,
+        "says": null,
+        "target": "one",
+        "verb": "clear"
+      }
+    ]
   },
   "constants": {
     "DIRECTORY_CAP": 8,
@@ -74,21 +4052,1521 @@
     "never_mind",
     "not_found"
   ],
-  "kinds": [],
+  "kinds": [
+    {
+      "app": "people",
+      "card": "person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes · verbs: create edit delete restore star unstar add_to log unlink",
+      "container": false,
+      "date": {
+        "label": "last contacted",
+        "source": {
+          "column": "starts",
+          "table": "touch"
+        }
+      },
+      "entity": "person",
+      "fields": [
+        {
+          "name": "role",
+          "source": {
+            "column": "role",
+            "table": "person"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "nickname",
+          "source": {
+            "column": "nickname",
+            "table": "person"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "met",
+          "source": {
+            "column": "met",
+            "table": "person"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "cadence",
+          "source": {
+            "column": "cadence_days",
+            "table": "person"
+          },
+          "type": "number",
+          "unit": "days",
+          "values": []
+        },
+        {
+          "name": "starred",
+          "source": {
+            "column": "starred_at",
+            "table": "entity"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "person",
+      "links": [
+        {
+          "kind": "event",
+          "label": "events",
+          "via": "attendee"
+        },
+        {
+          "kind": "task",
+          "label": "tasks",
+          "via": "about"
+        },
+        {
+          "kind": "note",
+          "label": "notes",
+          "via": "about"
+        }
+      ],
+      "name": "person",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "people",
+      "search": null,
+      "table": "person",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "add_to",
+        "log",
+        "unlink"
+      ],
+      "where_fields": [
+        "role",
+        "nickname",
+        "met",
+        "cadence",
+        "starred"
+      ]
+    },
+    {
+      "app": "calendar",
+      "card": "event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore unlink",
+      "container": false,
+      "date": {
+        "label": "start",
+        "source": {
+          "column": "starts",
+          "table": "event"
+        }
+      },
+      "entity": "event",
+      "fields": [
+        {
+          "name": "status",
+          "source": {
+            "column": "status",
+            "table": "event"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "confirmed",
+              "confirmed"
+            ],
+            [
+              "tentative",
+              "tentative"
+            ],
+            [
+              "cancelled",
+              "cancelled"
+            ]
+          ]
+        },
+        {
+          "name": "duration",
+          "source": {
+            "column": "ends",
+            "table": "event"
+          },
+          "type": "number",
+          "unit": "min",
+          "values": []
+        },
+        {
+          "name": "description",
+          "source": {
+            "column": "description",
+            "table": "event"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "event",
+      "links": [
+        {
+          "kind": "person",
+          "label": "people",
+          "via": "attendee"
+        }
+      ],
+      "name": "event",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "events",
+      "search": null,
+      "table": "event",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "reschedule",
+        "cancel",
+        "delete",
+        "restore",
+        "unlink"
+      ],
+      "where_fields": [
+        "status",
+        "duration",
+        "description"
+      ]
+    },
+    {
+      "app": "reminders",
+      "card": "task: name, date (due), status (open|completed|cancelled), priority (0 to 9), completed (date), description, starred (yes|no) · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore star unstar add_to tag untag unlink",
+      "container": false,
+      "date": {
+        "label": "due",
+        "source": {
+          "column": "due",
+          "table": "task"
+        }
+      },
+      "entity": "task",
+      "fields": [
+        {
+          "name": "status",
+          "source": {
+            "column": "status",
+            "table": "task"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "open",
+              "open"
+            ],
+            [
+              "completed",
+              "done"
+            ],
+            [
+              "cancelled",
+              "cancelled"
+            ]
+          ]
+        },
+        {
+          "name": "priority",
+          "source": {
+            "column": "priority",
+            "table": "task"
+          },
+          "type": "number",
+          "unit": "0 to 9",
+          "values": []
+        },
+        {
+          "name": "completed",
+          "source": {
+            "column": "done_at",
+            "table": "task"
+          },
+          "type": "date",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "description",
+          "source": {
+            "column": "description",
+            "table": "task"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "starred",
+          "source": {
+            "column": "starred_at",
+            "table": "entity"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "task",
+      "links": [
+        {
+          "kind": "task",
+          "label": "subtasks",
+          "via": "subtask"
+        },
+        {
+          "kind": "person",
+          "label": "people",
+          "via": "about"
+        },
+        {
+          "kind": "list",
+          "label": "list",
+          "via": "list_column"
+        }
+      ],
+      "name": "task",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "tasks",
+      "search": null,
+      "table": "task",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "reschedule",
+        "complete",
+        "reopen",
+        "cancel",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "add_to",
+        "tag",
+        "untag",
+        "unlink"
+      ],
+      "where_fields": [
+        "status",
+        "priority",
+        "completed",
+        "description",
+        "starred"
+      ]
+    },
+    {
+      "app": "notes",
+      "card": "note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar tag untag unlink",
+      "container": false,
+      "date": {
+        "label": "created",
+        "source": {
+          "column": "created_at",
+          "table": "entity"
+        }
+      },
+      "entity": "note",
+      "fields": [
+        {
+          "name": "body",
+          "source": {
+            "column": "body",
+            "table": "note"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "pinned",
+          "source": {
+            "column": "pinned_at",
+            "table": "entity"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "starred",
+          "source": {
+            "column": "starred_at",
+            "table": "entity"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "note",
+      "links": [
+        {
+          "kind": "notebook",
+          "label": "notebook",
+          "via": "entry"
+        },
+        {
+          "kind": "person",
+          "label": "people",
+          "via": "about"
+        }
+      ],
+      "name": "note",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "notes",
+      "search": null,
+      "table": "note",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "tag",
+        "untag",
+        "unlink"
+      ],
+      "where_fields": [
+        "body",
+        "pinned",
+        "starred"
+      ]
+    },
+    {
+      "app": "docs",
+      "card": "document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar tag untag unlink",
+      "container": false,
+      "date": {
+        "label": "created",
+        "source": {
+          "column": "created_at",
+          "table": "entity"
+        }
+      },
+      "entity": "document",
+      "fields": [
+        {
+          "name": "starred",
+          "source": {
+            "column": "starred_at",
+            "table": "entity"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "document",
+      "links": [
+        {
+          "kind": "folder",
+          "label": "folder",
+          "via": "folder_column"
+        }
+      ],
+      "name": "document",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "documents",
+      "search": null,
+      "table": "document",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "tag",
+        "untag",
+        "unlink"
+      ],
+      "where_fields": [
+        "starred"
+      ]
+    },
+    {
+      "app": "photos",
+      "card": "photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag unlink archive unarchive",
+      "container": false,
+      "date": {
+        "label": "taken",
+        "source": {
+          "column": "taken_at",
+          "table": "photo"
+        }
+      },
+      "entity": "photo",
+      "fields": [
+        {
+          "name": "starred",
+          "source": {
+            "column": "starred_at",
+            "table": "entity"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "photo",
+      "links": [
+        {
+          "kind": "album",
+          "label": "albums",
+          "via": "entry"
+        }
+      ],
+      "name": "photo",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "photos",
+      "search": null,
+      "table": "photo",
+      "trash": true,
+      "verbs": [
+        "edit",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "add_to",
+        "remove_from",
+        "tag",
+        "untag",
+        "unlink",
+        "archive",
+        "unarchive"
+      ],
+      "where_fields": [
+        "starred"
+      ]
+    },
+    {
+      "app": "photos",
+      "card": "album: name · links: photos · verbs: create delete restore",
+      "container": true,
+      "date": null,
+      "entity": "album",
+      "fields": [],
+      "kind": "album",
+      "links": [
+        {
+          "kind": "photo",
+          "label": "photos",
+          "via": "entry"
+        }
+      ],
+      "name": "album",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "albums",
+      "search": null,
+      "table": "container",
+      "trash": false,
+      "verbs": [
+        "create",
+        "delete",
+        "restore"
+      ],
+      "where_fields": []
+    },
+    {
+      "app": "locker",
+      "card": "locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag unlink archive unarchive",
+      "container": false,
+      "date": null,
+      "entity": "locker_item",
+      "fields": [
+        {
+          "name": "type",
+          "source": {
+            "column": "type",
+            "table": "locker_item"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "login",
+              "login"
+            ],
+            [
+              "card",
+              "card"
+            ],
+            [
+              "note",
+              "note"
+            ],
+            [
+              "identity",
+              "identity"
+            ],
+            [
+              "wifi",
+              "wifi"
+            ],
+            [
+              "password",
+              "password"
+            ],
+            [
+              "ssh_key",
+              "ssh_key"
+            ],
+            [
+              "api_credential",
+              "api_credential"
+            ],
+            [
+              "passport",
+              "passport"
+            ],
+            [
+              "bank_account",
+              "bank_account"
+            ],
+            [
+              "driving_licence",
+              "driving_licence"
+            ],
+            [
+              "software_licence",
+              "software_licence"
+            ],
+            [
+              "crypto_wallet",
+              "crypto_wallet"
+            ],
+            [
+              "membership",
+              "membership"
+            ],
+            [
+              "document",
+              "document"
+            ]
+          ]
+        },
+        {
+          "name": "username",
+          "source": {
+            "column": "value_text",
+            "table": "locker_item_field"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "url",
+          "source": {
+            "column": "value_text",
+            "table": "locker_item_field"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "notes",
+          "source": {
+            "column": "value_text",
+            "table": "locker_item_field"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "starred",
+          "source": {
+            "column": "starred_at",
+            "table": "entity"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "locker_item",
+      "links": [],
+      "name": "locker item",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "locker items",
+      "search": null,
+      "table": "locker_item",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "reveal",
+        "tag",
+        "untag",
+        "unlink",
+        "archive",
+        "unarchive"
+      ],
+      "where_fields": [
+        "type",
+        "username",
+        "url",
+        "notes",
+        "starred"
+      ]
+    },
+    {
+      "app": "notes",
+      "card": "notebook: name · links: notes · verbs: create delete restore",
+      "container": true,
+      "date": null,
+      "entity": "notebook",
+      "fields": [],
+      "kind": "notebook",
+      "links": [
+        {
+          "kind": "note",
+          "label": "notes",
+          "via": "entry"
+        }
+      ],
+      "name": "notebook",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "notebooks",
+      "search": null,
+      "table": "container",
+      "trash": false,
+      "verbs": [
+        "create",
+        "delete",
+        "restore"
+      ],
+      "where_fields": []
+    },
+    {
+      "app": "docs",
+      "card": "folder: name · links: documents · verbs: create delete restore",
+      "container": true,
+      "date": null,
+      "entity": "folder",
+      "fields": [],
+      "kind": "folder",
+      "links": [
+        {
+          "kind": "document",
+          "label": "documents",
+          "via": "folder_column"
+        }
+      ],
+      "name": "folder",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "folders",
+      "search": null,
+      "table": "container",
+      "trash": false,
+      "verbs": [
+        "create",
+        "delete",
+        "restore"
+      ],
+      "where_fields": []
+    },
+    {
+      "app": "reminders",
+      "card": "list: name, area · links: tasks · verbs: create delete restore",
+      "container": true,
+      "date": null,
+      "entity": "task_list",
+      "fields": [
+        {
+          "name": "area",
+          "source": {
+            "column": "parent_id",
+            "table": "entity"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "list",
+      "links": [
+        {
+          "kind": "task",
+          "label": "tasks",
+          "via": "list_column"
+        }
+      ],
+      "name": "list",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "lists",
+      "search": null,
+      "table": "container",
+      "trash": false,
+      "verbs": [
+        "create",
+        "delete",
+        "restore"
+      ],
+      "where_fields": [
+        "area"
+      ]
+    },
+    {
+      "app": "money",
+      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (pending|posted) · verbs: create edit delete restore unlink",
+      "container": false,
+      "date": {
+        "label": "posted",
+        "source": {
+          "column": "posted_on",
+          "table": "txn"
+        }
+      },
+      "entity": "txn",
+      "fields": [
+        {
+          "name": "amount",
+          "source": {
+            "column": "amount_minor",
+            "table": "txn"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "account",
+          "source": {
+            "column": "account_id",
+            "table": "txn"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "category",
+          "source": {
+            "column": "category_id",
+            "table": "txn_split"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "transfer",
+          "source": {
+            "column": "b",
+            "table": "transfer"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "status",
+          "source": {
+            "column": "status",
+            "table": "txn"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "pending",
+              "pending"
+            ],
+            [
+              "posted",
+              "posted"
+            ]
+          ]
+        }
+      ],
+      "kind": "transaction",
+      "links": [],
+      "name": "transaction",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "transactions",
+      "search": null,
+      "table": "txn",
+      "trash": false,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "unlink"
+      ],
+      "where_fields": [
+        "amount",
+        "account",
+        "category",
+        "transfer",
+        "status"
+      ]
+    },
+    {
+      "app": "health",
+      "card": "daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value · verbs: create delete",
+      "container": false,
+      "date": {
+        "label": "day",
+        "source": {
+          "column": "day",
+          "table": "measurement"
+        }
+      },
+      "entity": "measurement",
+      "fields": [
+        {
+          "name": "metric",
+          "source": {
+            "column": "metric",
+            "table": "measurement"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "steps",
+              "steps"
+            ],
+            [
+              "active_energy_kcal",
+              "active_energy_kcal"
+            ],
+            [
+              "exercise_min",
+              "exercise_min"
+            ],
+            [
+              "sleep_min",
+              "sleep_min"
+            ],
+            [
+              "resting_hr_bpm",
+              "resting_hr_bpm"
+            ],
+            [
+              "weight_kg",
+              "weight_kg"
+            ]
+          ]
+        },
+        {
+          "name": "value",
+          "source": {
+            "column": "value",
+            "table": "measurement"
+          },
+          "type": "number",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "daily_figure",
+      "links": [],
+      "name": "daily figure",
+      "name_source": {
+        "column": "metric",
+        "table": "measurement"
+      },
+      "pk": "day",
+      "plural": "daily figures",
+      "search": null,
+      "table": "measurement",
+      "trash": false,
+      "verbs": [
+        "create",
+        "delete"
+      ],
+      "where_fields": [
+        "metric",
+        "value"
+      ]
+    },
+    {
+      "app": "health",
+      "card": "workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m) · verbs: create edit delete restore unlink",
+      "container": false,
+      "date": {
+        "label": "start",
+        "source": {
+          "column": "starts",
+          "table": "workout"
+        }
+      },
+      "entity": "workout",
+      "fields": [
+        {
+          "name": "moving",
+          "source": {
+            "column": "moving_s",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "s",
+          "values": []
+        },
+        {
+          "name": "distance",
+          "source": {
+            "column": "distance_m",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "m",
+          "values": []
+        },
+        {
+          "name": "energy",
+          "source": {
+            "column": "energy_kcal",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "kcal",
+          "values": []
+        },
+        {
+          "name": "heart_rate",
+          "source": {
+            "column": "heart_bpm",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "bpm",
+          "values": []
+        },
+        {
+          "name": "climb",
+          "source": {
+            "column": "climb_m",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "m",
+          "values": []
+        }
+      ],
+      "kind": "workout",
+      "links": [],
+      "name": "workout",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "workouts",
+      "search": null,
+      "table": "workout",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "unlink"
+      ],
+      "where_fields": [
+        "moving",
+        "distance",
+        "energy",
+        "heart_rate",
+        "climb"
+      ]
+    },
+    {
+      "app": "money",
+      "card": "account: name, type (checking|savings|credit_card|cash|loan|investment|asset), currency, opening (USD), opening_on, on_budget (yes|no) · verbs: create edit delete restore log archive unarchive",
+      "container": false,
+      "date": null,
+      "entity": "account",
+      "fields": [
+        {
+          "name": "type",
+          "source": {
+            "column": "type",
+            "table": "account"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "checking",
+              "checking"
+            ],
+            [
+              "savings",
+              "savings"
+            ],
+            [
+              "credit_card",
+              "credit_card"
+            ],
+            [
+              "cash",
+              "cash"
+            ],
+            [
+              "loan",
+              "loan"
+            ],
+            [
+              "investment",
+              "investment"
+            ],
+            [
+              "asset",
+              "asset"
+            ]
+          ]
+        },
+        {
+          "name": "currency",
+          "source": {
+            "column": "currency",
+            "table": "account"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "opening",
+          "source": {
+            "column": "opening_minor",
+            "table": "account"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "opening_on",
+          "source": {
+            "column": "opening_on",
+            "table": "account"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "on_budget",
+          "source": {
+            "column": "on_budget",
+            "table": "account"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "account",
+      "links": [],
+      "name": "account",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "accounts",
+      "search": null,
+      "table": "account",
+      "trash": false,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "log",
+        "archive",
+        "unarchive"
+      ],
+      "where_fields": [
+        "type",
+        "currency",
+        "opening",
+        "opening_on",
+        "on_budget"
+      ]
+    },
+    {
+      "app": "money",
+      "card": "category: name, key, group · verbs: create archive unarchive",
+      "container": false,
+      "date": null,
+      "entity": "category",
+      "fields": [
+        {
+          "name": "key",
+          "source": {
+            "column": "key",
+            "table": "concept"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "group",
+          "source": {
+            "column": "parent_id",
+            "table": "entity"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "category",
+      "links": [],
+      "name": "category",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "categories",
+      "search": null,
+      "table": "concept",
+      "trash": false,
+      "verbs": [
+        "create",
+        "archive",
+        "unarchive"
+      ],
+      "where_fields": [
+        "key",
+        "group"
+      ]
+    },
+    {
+      "app": "money",
+      "card": "budget: name, date (month), amount (USD), carry (yes|no) · verbs: edit",
+      "container": false,
+      "date": {
+        "label": "month",
+        "source": {
+          "column": "month",
+          "table": "budget"
+        }
+      },
+      "entity": "budget",
+      "fields": [
+        {
+          "name": "amount",
+          "source": {
+            "column": "amount_minor",
+            "table": "budget"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "carry",
+          "source": {
+            "column": "carry",
+            "table": "budget"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "budget",
+      "links": [],
+      "name": "budget",
+      "name_source": {
+        "column": "category_id",
+        "table": "budget"
+      },
+      "pk": "category_id",
+      "plural": "budgets",
+      "search": null,
+      "table": "budget",
+      "trash": false,
+      "verbs": [
+        "edit"
+      ],
+      "where_fields": [
+        "amount",
+        "carry"
+      ]
+    },
+    {
+      "app": "money",
+      "card": "rule: name, date (created), category, position · verbs: create edit delete",
+      "container": false,
+      "date": {
+        "label": "created",
+        "source": {
+          "column": "created_at",
+          "table": "rule"
+        }
+      },
+      "entity": "rule",
+      "fields": [
+        {
+          "name": "category",
+          "source": {
+            "column": "category_id",
+            "table": "rule"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "position",
+          "source": {
+            "column": "position",
+            "table": "rule"
+          },
+          "type": "number",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "rule",
+      "links": [],
+      "name": "rule",
+      "name_source": {
+        "column": "pattern",
+        "table": "rule"
+      },
+      "pk": "id",
+      "plural": "rules",
+      "search": null,
+      "table": "rule",
+      "trash": false,
+      "verbs": [
+        "create",
+        "edit",
+        "delete"
+      ],
+      "where_fields": [
+        "category",
+        "position"
+      ]
+    }
+  ],
   "log_kinds": [
     "call",
     "message",
     "visit",
     "coffee"
   ],
-  "mapped_columns": [],
+  "mapped_columns": [
+    "account.currency",
+    "account.id",
+    "account.on_budget",
+    "account.opening_minor",
+    "account.opening_on",
+    "account.type",
+    "budget.amount_minor",
+    "budget.carry",
+    "budget.category_id",
+    "budget.month",
+    "concept.id",
+    "concept.key",
+    "container.id",
+    "document.id",
+    "entity.created_at",
+    "entity.parent_id",
+    "entity.pinned_at",
+    "entity.starred_at",
+    "entity.title",
+    "event.description",
+    "event.ends",
+    "event.id",
+    "event.starts",
+    "event.status",
+    "locker_item.id",
+    "locker_item.type",
+    "locker_item_field.value_text",
+    "measurement.day",
+    "measurement.metric",
+    "measurement.value",
+    "note.body",
+    "note.id",
+    "person.cadence_days",
+    "person.id",
+    "person.met",
+    "person.nickname",
+    "person.role",
+    "photo.id",
+    "photo.taken_at",
+    "rule.category_id",
+    "rule.created_at",
+    "rule.id",
+    "rule.pattern",
+    "rule.position",
+    "task.description",
+    "task.done_at",
+    "task.due",
+    "task.id",
+    "task.priority",
+    "task.status",
+    "touch.starts",
+    "transfer.b",
+    "txn.account_id",
+    "txn.amount_minor",
+    "txn.id",
+    "txn.posted_on",
+    "txn.status",
+    "txn_split.category_id",
+    "workout.climb_m",
+    "workout.distance_m",
+    "workout.energy_kcal",
+    "workout.heart_bpm",
+    "workout.id",
+    "workout.moving_s",
+    "workout.starts"
+  ],
   "mapped_commands": [
+    "account.add",
+    "account.edit",
+    "account.set_opening",
+    "album.set_cover",
+    "alert.snooze",
+    "budget.set",
+    "budget.set_carry",
+    "category.add",
+    "checkpoint.record",
+    "container.create",
+    "container.move",
+    "container.style",
+    "document.create_text",
+    "document.edit",
+    "document.restore_version",
     "edge.add",
     "edge.remove",
+    "entity.move",
+    "entity.restore",
+    "entity.retitle",
+    "entity.trash",
+    "event.add_guest",
+    "event.cancel",
+    "event.edit",
+    "event.edit_occurrence",
+    "event.propose",
+    "event.split",
     "flag.clear",
     "flag.set",
+    "link.remove",
+    "locker.add_item",
+    "locker.edit_item",
+    "locker.remove_field",
+    "locker.set_field",
+    "locker.totp_code",
+    "measurement.clear",
+    "measurement.log",
+    "note.create",
+    "note.edit",
+    "note.restore_version",
+    "person.add",
+    "person.add_note",
+    "person.edit",
+    "person.move",
+    "photo.edit",
+    "photo.set_place",
+    "reminder.add",
+    "reminder.remove",
+    "rule.add",
+    "rule.delete",
+    "rule.edit",
+    "tag.add",
+    "tag.color",
+    "tag.remove",
+    "task.add",
     "task.cancel",
-    "task.reopen"
+    "task.complete",
+    "task.edit",
+    "task.organize",
+    "task.reopen",
+    "touch.log",
+    "txn.add",
+    "txn.edit",
+    "txn.split",
+    "txn.unlink_transfer",
+    "workout.edit",
+    "workout.log"
   ],
   "multi_kind_params": [
     "kind",
@@ -155,12 +5633,623 @@
   "unbacked_verbs": [],
   "verbs": [
     {
+      "args": "kind: <kind>, name: <text>, then that kind's fields (dates as date expressions)",
+      "commands": [
+        [
+          "person",
+          "person.add"
+        ],
+        [
+          "event",
+          "event.propose"
+        ],
+        [
+          "task",
+          "task.add"
+        ],
+        [
+          "note",
+          "note.create"
+        ],
+        [
+          "document",
+          "document.create_text"
+        ],
+        [
+          "album",
+          "container.create"
+        ],
+        [
+          "locker_item",
+          "locker.add_item"
+        ],
+        [
+          "notebook",
+          "container.create"
+        ],
+        [
+          "folder",
+          "container.create"
+        ],
+        [
+          "list",
+          "container.create"
+        ],
+        [
+          "transaction",
+          "txn.add"
+        ],
+        [
+          "daily_figure",
+          "measurement.log"
+        ],
+        [
+          "workout",
+          "workout.log"
+        ],
+        [
+          "account",
+          "account.add"
+        ],
+        [
+          "category",
+          "category.add"
+        ],
+        [
+          "rule",
+          "rule.add"
+        ]
+      ],
+      "done": "created",
+      "flag": null,
+      "name": "create",
+      "verb": "create"
+    },
+    {
+      "args": "field: value lines (name, or any editable field; body+: or description+: adds text)",
+      "commands": [
+        [
+          "person",
+          "person.edit"
+        ],
+        [
+          "event",
+          "event.edit"
+        ],
+        [
+          "task",
+          "task.edit"
+        ],
+        [
+          "note",
+          "note.edit"
+        ],
+        [
+          "document",
+          "document.edit"
+        ],
+        [
+          "photo",
+          "photo.edit"
+        ],
+        [
+          "locker_item",
+          "locker.edit_item"
+        ],
+        [
+          "transaction",
+          "txn.edit"
+        ],
+        [
+          "workout",
+          "workout.edit"
+        ],
+        [
+          "account",
+          "account.edit"
+        ],
+        [
+          "budget",
+          "budget.set"
+        ],
+        [
+          "rule",
+          "rule.edit"
+        ]
+      ],
+      "done": "edited",
+      "flag": null,
+      "name": "edit",
+      "verb": "edit"
+    },
+    {
+      "args": "to: <date expression>",
+      "commands": [
+        [
+          "task",
+          "task.edit"
+        ],
+        [
+          "event",
+          "event.edit_occurrence"
+        ]
+      ],
+      "done": "rescheduled",
+      "flag": null,
+      "name": "reschedule",
+      "verb": "reschedule"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "task",
+          "task.complete"
+        ]
+      ],
+      "done": "completed",
+      "flag": null,
+      "name": "complete",
+      "verb": "complete"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "task",
+          "task.reopen"
+        ]
+      ],
+      "done": "reopened",
+      "flag": null,
+      "name": "reopen",
+      "verb": "reopen"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "event",
+          "event.cancel"
+        ],
+        [
+          "task",
+          "task.cancel"
+        ]
+      ],
+      "done": "cancelled",
+      "flag": null,
+      "name": "cancel",
+      "verb": "cancel"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "person",
+          "entity.trash"
+        ],
+        [
+          "event",
+          "entity.trash"
+        ],
+        [
+          "task",
+          "entity.trash"
+        ],
+        [
+          "note",
+          "entity.trash"
+        ],
+        [
+          "document",
+          "entity.trash"
+        ],
+        [
+          "photo",
+          "entity.trash"
+        ],
+        [
+          "album",
+          "entity.trash"
+        ],
+        [
+          "locker_item",
+          "entity.trash"
+        ],
+        [
+          "notebook",
+          "entity.trash"
+        ],
+        [
+          "folder",
+          "entity.trash"
+        ],
+        [
+          "list",
+          "entity.trash"
+        ],
+        [
+          "transaction",
+          "entity.trash"
+        ],
+        [
+          "daily_figure",
+          "measurement.clear"
+        ],
+        [
+          "workout",
+          "entity.trash"
+        ],
+        [
+          "account",
+          "entity.trash"
+        ],
+        [
+          "rule",
+          "rule.delete"
+        ]
+      ],
+      "done": "deleted",
+      "flag": null,
+      "name": "delete",
+      "verb": "delete"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "person",
+          "entity.restore"
+        ],
+        [
+          "event",
+          "entity.restore"
+        ],
+        [
+          "task",
+          "entity.restore"
+        ],
+        [
+          "note",
+          "entity.restore"
+        ],
+        [
+          "document",
+          "entity.restore"
+        ],
+        [
+          "photo",
+          "entity.restore"
+        ],
+        [
+          "album",
+          "entity.restore"
+        ],
+        [
+          "locker_item",
+          "entity.restore"
+        ],
+        [
+          "notebook",
+          "entity.restore"
+        ],
+        [
+          "folder",
+          "entity.restore"
+        ],
+        [
+          "list",
+          "entity.restore"
+        ],
+        [
+          "transaction",
+          "entity.restore"
+        ],
+        [
+          "workout",
+          "entity.restore"
+        ],
+        [
+          "account",
+          "entity.restore"
+        ]
+      ],
+      "done": "restored",
+      "flag": null,
+      "name": "restore",
+      "verb": "restore"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "person",
+          "flag.set"
+        ],
+        [
+          "task",
+          "flag.set"
+        ],
+        [
+          "note",
+          "flag.set"
+        ],
+        [
+          "document",
+          "flag.set"
+        ],
+        [
+          "photo",
+          "flag.set"
+        ],
+        [
+          "locker_item",
+          "flag.set"
+        ]
+      ],
+      "done": "starred",
+      "flag": "starred",
+      "name": "star",
+      "verb": "star"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "person",
+          "flag.clear"
+        ],
+        [
+          "task",
+          "flag.clear"
+        ],
+        [
+          "note",
+          "flag.clear"
+        ],
+        [
+          "document",
+          "flag.clear"
+        ],
+        [
+          "photo",
+          "flag.clear"
+        ],
+        [
+          "locker_item",
+          "flag.clear"
+        ]
+      ],
+      "done": "unstarred",
+      "flag": "starred",
+      "name": "unstar",
+      "verb": "unstar"
+    },
+    {
+      "args": "to: #n (the album, notebook, folder or list)",
+      "commands": [
+        [
+          "photo",
+          "edge.add"
+        ],
+        [
+          "task",
+          "task.organize"
+        ],
+        [
+          "person",
+          "person.move"
+        ]
+      ],
+      "done": "added",
+      "flag": null,
+      "name": "add_to",
+      "verb": "add_to"
+    },
+    {
+      "args": "from: #n",
+      "commands": [
+        [
+          "photo",
+          "edge.remove"
+        ]
+      ],
+      "done": "removed",
+      "flag": null,
+      "name": "remove_from",
+      "verb": "remove_from"
+    },
+    {
+      "args": "kind: call|message|visit|coffee",
+      "commands": [
+        [
+          "person",
+          "touch.log"
+        ],
+        [
+          "account",
+          "checkpoint.record"
+        ]
+      ],
+      "done": "logged",
+      "flag": null,
+      "name": "log",
+      "verb": "log"
+    },
+    {
+      "args": "field: password|code|card_number|cvv|content",
+      "commands": [
+        [
+          "locker_item",
+          "locker.totp_code"
+        ]
+      ],
+      "done": "revealed",
+      "flag": null,
+      "name": "reveal",
+      "verb": "reveal"
+    },
+    {
       "args": "",
       "commands": [],
       "done": "undone",
       "flag": null,
       "name": "undo",
       "verb": "undo"
+    },
+    {
+      "args": "label: <text>",
+      "commands": [
+        [
+          "task",
+          "tag.add"
+        ],
+        [
+          "note",
+          "tag.add"
+        ],
+        [
+          "document",
+          "tag.add"
+        ],
+        [
+          "photo",
+          "tag.add"
+        ],
+        [
+          "locker_item",
+          "tag.add"
+        ]
+      ],
+      "done": "tagged",
+      "flag": null,
+      "name": "tag",
+      "verb": "tag"
+    },
+    {
+      "args": "label: <text>",
+      "commands": [
+        [
+          "task",
+          "tag.remove"
+        ],
+        [
+          "note",
+          "tag.remove"
+        ],
+        [
+          "document",
+          "tag.remove"
+        ],
+        [
+          "photo",
+          "tag.remove"
+        ],
+        [
+          "locker_item",
+          "tag.remove"
+        ]
+      ],
+      "done": "untagged",
+      "flag": null,
+      "name": "untag",
+      "verb": "untag"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "person",
+          "link.remove"
+        ],
+        [
+          "event",
+          "link.remove"
+        ],
+        [
+          "task",
+          "link.remove"
+        ],
+        [
+          "note",
+          "link.remove"
+        ],
+        [
+          "document",
+          "link.remove"
+        ],
+        [
+          "photo",
+          "link.remove"
+        ],
+        [
+          "locker_item",
+          "link.remove"
+        ],
+        [
+          "transaction",
+          "link.remove"
+        ],
+        [
+          "workout",
+          "link.remove"
+        ]
+      ],
+      "done": "unlinked",
+      "flag": null,
+      "name": "unlink",
+      "verb": "unlink"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "photo",
+          "flag.set"
+        ],
+        [
+          "locker_item",
+          "flag.set"
+        ],
+        [
+          "account",
+          "flag.set"
+        ],
+        [
+          "category",
+          "flag.set"
+        ]
+      ],
+      "done": "archived",
+      "flag": "archived",
+      "name": "archive",
+      "verb": "archive"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "photo",
+          "flag.clear"
+        ],
+        [
+          "locker_item",
+          "flag.clear"
+        ],
+        [
+          "account",
+          "flag.clear"
+        ],
+        [
+          "category",
+          "flag.clear"
+        ]
+      ],
+      "done": "unarchived",
+      "flag": "archived",
+      "name": "unarchive",
+      "verb": "unarchive"
     }
   ]
 }

@@ -8,7 +8,12 @@
   "catalog_hash": "487261c0f8548972e20267601cb0b672a6fd7d29c8f77e5fd01133a0fdce81dd",
   "tokenizer_blake3": "3fd498e7fff0650ca4cf62dccd4e0844ed5ad2f1abcee9adfda013fef06c4220",
   "stale": {
-    "since": "create and edit cover 13 kinds and almost only `name`; no money, measurement or Locker fields. Chat is meant to create Locker secrets, so those are gaps to fill, not exclusions",
-    "level": "coverage"
+    "since": "the kinds, verbs and actions are generated from the app plane's catalogue (#1214): a new kind card and prompt, the same tool catalogue; create and edit cover 13 kinds and almost only `name`; no money, measurement or Locker fields. Chat is meant to create Locker secrets, so those are gaps to fill, not exclusions",
+    "level": "coverage",
+    "at": {
+      "tools_hash": "c4a759dfe93337fc3f925ed7a7768030cf3658076a4224639b0860bccbd6fc4b",
+      "prompt_hash": "8b0d841580d89053ccf711a5a2ffd53eb2554b0d1ba9d5e0b7a38f862b551a6c",
+      "catalog_hash": "619b0a6040e51a36d7503d5927c4fb5a24a0206a0722640941c8e4f59ae2fc51"
+    }
   }
 }

@@ -294,10 +294,11 @@ The shell reports scroll as `RoomScrolled{anchor_selector_id, anchor_fraction_mi
 | `Direct` | Parametric actions with an inverse or no destructive effect: create, edit, complete, move, star, tag, link, snooze, trash, restore, categorize, respond | The model's call runs as `actor='assistant'`; the answer shows a card with Undo |
 | `Handoff(PickFile)` | `document.add`/`replace`, `photo.add`, `note.import`, `person.import_vcf`/`import_csv`, `txn.add`/`csv`, `event.propose`/`ics` | A card opens the screen with the inputs filled; the member picks the file |
 | `Handoff(Reveal)` | `locker.totp_code`, any reveal of a Locker secret | The card opens Locker behind its wall; no secret enters a prompt |
+| `Handoff(Open)` | what the assistant's runtime has no plan for yet: `link`, `attach`, `detach`, `respond`, `categorize`, `duplicate`, `apply`, `follow.stop`, and the actions whose kind the model has no word for (places, readings, dates, contact points) | The card opens the screen with the inputs filled |
 | `Handoff(Destructive)` | `entity.purge`, `entity.empty_trash`, every `merge`, a currency change, `thread.clear` | The card opens the confirm sheet, filled |
 | `Handoff(OwnerCheck)` | every `export*` | The card opens the screen; the OS owner check comes first, which a model's call cannot pass |
 
-The **census** (a test generated from `ACTIONS`, **(target)**) counts both surfaces as reachable and fails a build that adds an action neither covers. The export in [`contracts/assist/export/`](../../../contracts/assist/export) is generated from the catalogue; each action maps to at most one chat verb of [`verbs.json`](../../../contracts/assist/verbs.json). `cargo xtask model-pin` runs **once**, at the end of lane A, and again only when a catalogue change moves the prompt ([contract](../assistant/contract.md)).
+The **census** ([`catalog-census.csv`](../../../contracts/assist/catalog-census.csv), held by [`census.rs`](../../../crates/domain/tests/census.rs), regenerated with `cargo run -p centraid-domain --bin export-census`) lists every action with how chat reaches it, and fails a build that adds an action neither surface covers. The assistant's catalogue and the export in [`contracts/assist/export/`](../../../contracts/assist/export) are generated from `ACTIONS` and the model's kinds ([`chat.rs`](../../../crates/domain/src/chat.rs)) and no screen or read: a `Direct` action says one verb of [`verbs.json`](../../../contracts/assist/verbs.json) on its chat kinds, so each action maps to at most one chat verb. `cargo xtask model-pin` runs **once**, at the end of lane A, and again only when a catalogue change moves the prompt ([contract](../assistant/contract.md)).
 
 A chat card holds no words of the item: it names an entity id and a short `qualifier` code (`due`, `balance`); a thread resolves titles when it opens, and a purged item draws "An item you deleted" (S1, S2).
 
@@ -408,6 +409,10 @@ Where the plan left a choice, the safest was taken. Reverse by editing this page
 | Calendar | No drag to move an event in v0 |
 | Events from the shell | `RoomEvent` carries only member events; appeared, left, timers, data changes and effect results stay on the envelope's `ScreenEvent` |
 | `account.remember_layout`, `thread.settle_proposal`, `locker.counts` | System: called by the import flow, the assistant's turn and reads |
+| Chat kinds | Two tables: `KINDS` says what a vault entity kind owes a member (section 8), and `chat::KINDS` says what the model may call things and which fields a question can name (18 kinds, the nine apps'). A `Say` names chat kinds, so `budget`, `rule` and `daily figure`, which are tables and not entities, are sayable |
+| Qualifiers | `flag.set` and `flag.clear` are three actions each (`starred`, `pinned`, `archived`); `account.edit/currency`, `txn.add/csv`, `event.propose/ics`, `edge.add/contains`, `edge.remove/contains`, `task.edit/reschedule` and `person.edit/cadence` tell a second intent of one command apart |
+| `Restore` | The vault has `history.restore_version` for one `(entity, seq)` and no `restore_many`; the core runs it over the pairs a commit wrote |
+| `follow.stop`, `thread.clear` | `outlined`: no Undo exists (a stopped follow is the follow service's to resume) |
 
 ## 14. Adding to the plane
 

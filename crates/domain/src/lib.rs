@@ -4,10 +4,13 @@
 //! the screens' reads and the registry test are generated from or held to. A kind is one row
 //! of promises ([`kind`]); an action wraps one vault command ([`action`]); a read is registered
 //! SQL under SQLite's authorizer and a plan gate ([`read`]). The apps' own modules ([`apps`])
-//! declare their kinds and reads.
+//! declare their kinds and reads. [`chat`] is what the model may call a kind and which fields a
+//! question can name; the assistant's catalogue is generated from it and from [`ACTIONS`], and
+//! [`census`] says how chat reaches each action.
 //!
 //! The rest is the vault read door the assistant and the search index share: a keyset page, a
-//! row, the statement grammar and the money law.
+//! row, the statement grammar and the money law. `actions`, `grammar`, `manifest`, `reads`,
+//! `statement` and `testdoor` are the old plane's door; each leaves with its last caller.
 
 /// The slices joined into one `const` slice, in the order given. `$fill` only gives the array
 /// something to hold while it is built.
@@ -38,6 +41,8 @@ pub mod action;
 pub mod actions;
 pub mod apps;
 pub mod catalogue;
+pub mod census;
+pub mod chat;
 pub mod civil;
 pub mod denial;
 pub mod error;
@@ -75,73 +80,3 @@ pub const KINDS: &[KindDecl] = apps::KINDS;
 pub const ACTIONS: &[ActionDecl] = catalogue::ACTIONS;
 /// Every registered read.
 pub const READS: &[ReadDecl] = apps::READS;
-
-/// The assistant's catalogue as it was declared before the app plane: model-facing kinds with
-/// their fields, and the actions chat ran. `crates/assist/build.rs` still reads it until the
-/// catalogue is generated from [`ACTIONS`].
-pub mod legacy {
-    /// A table and a column: where a value is read from.
-    pub type Source = (&'static str, &'static str);
-
-    /// One model-facing field of a kind.
-    #[derive(Debug, Clone, Copy)]
-    pub struct FieldDecl {
-        pub name: &'static str,
-        pub kind: &'static str,
-        pub source: Source,
-        pub unit: Option<&'static str>,
-        pub values: &'static [(&'static str, &'static str)],
-    }
-
-    /// A link from one kind to another, and the vault relation it travels.
-    #[derive(Debug, Clone, Copy)]
-    pub struct LinkDecl {
-        pub kind: &'static str,
-        pub label: &'static str,
-        pub via: &'static str,
-    }
-
-    /// A kind the assistant can name: a person, a task, a note.
-    #[derive(Debug, Clone, Copy)]
-    pub struct KindDecl {
-        pub app: &'static str,
-        pub id: &'static str,
-        pub name: &'static str,
-        pub plural: &'static str,
-        pub entity: &'static str,
-        pub table: &'static str,
-        pub pk: &'static str,
-        pub name_source: Source,
-        pub date: Option<(&'static str, Source)>,
-        pub fields: &'static [FieldDecl],
-        pub links: &'static [LinkDecl],
-        pub trash: bool,
-        pub container: bool,
-        pub writable: bool,
-        /// The full-text domain whose hits are this kind's rows, when the kind is searchable.
-        pub search: Option<&'static str>,
-    }
-
-    /// An action chat runs on its own: `(verb, kind, qualifier)` and the vault command behind it.
-    #[derive(Debug, Clone, Copy)]
-    pub struct ActionDecl {
-        pub app: &'static str,
-        pub name: &'static str,
-        pub command: &'static str,
-        pub verb: &'static str,
-        pub also: &'static [&'static str],
-        pub kind: &'static str,
-        pub qualifier: Option<&'static str>,
-        pub id_param: &'static str,
-        pub inverse: Option<&'static str>,
-        pub properties: &'static [&'static str],
-        pub required: &'static [&'static str],
-        pub aliases: &'static [(&'static str, &'static [&'static str])],
-        pub consts: &'static [(&'static str, &'static str)],
-        pub defaults: &'static [(&'static str, &'static str)],
-        pub minted: &'static [&'static str],
-    }
-
-    pub const KINDS: &[KindDecl] = &[];
-    pub const ACTIONS: &[ActionDecl] = &[];
-}
