@@ -16,8 +16,9 @@ button{font:inherit;color:inherit}
 </style>
 </helmet>
 <div data-theme="dark" style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--surface-plain-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink);">
+  <!-- part:Header variant="keys" t0="People" -->
   <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 20px 4px;">
-    <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">People</h1>
+    <h1 data-slot="t0" style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">People</h1>
     <div style="display: flex; gap: 8px;">
       <button aria-label="Filter and sort" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--surface-border); background: var(--glass-85); display: flex; align-items: center; justify-content: center;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"></path></svg>
@@ -27,6 +28,7 @@ button{font:inherit;color:inherit}
       </button>
     </div>
   </div>
+  <!-- /part -->
   
 
 
@@ -50,10 +52,12 @@ button{font:inherit;color:inherit}
         <div style="font-size: 13px; color: var(--text-meta);">Friend · last touch 12 days ago · <span style="color: var(--app-people);">Birthday in 5 days</span></div>
       </div>
     </a>
+    <!-- part:Row variant="plain" t0="AD" t1="Ana Díaz" t2="Birthday today" -->
     <div style="display: flex; align-items: center; gap: 12px; padding: 8px 20px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: var(--fill-dce8f4); display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--app-calendar);">AD</span>
-      <div style="flex-grow: 1; border-bottom: 1px solid var(--surface-line); padding-bottom: 8px;"><div style="font-size: 16px;">Ana Díaz</div><div style="font-size: 13px; color: var(--text-meta);">Landlord · last touch 3 days ago · <span style="color: var(--app-people);">Birthday today</span></div></div>
+      <span data-slot="t0" style="width: 40px; height: 40px; border-radius: 20px; background: var(--fill-dce8f4); display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--app-calendar);">AD</span>
+      <div style="flex-grow: 1; border-bottom: 1px solid var(--surface-line); padding-bottom: 8px;"><div data-slot="t1" style="font-size: 16px;">Ana Díaz</div><div style="font-size: 13px; color: var(--text-meta);">Landlord · last touch 3 days ago · <span data-slot="t2" style="color: var(--app-people);">Birthday today</span></div></div>
     </div>
+    <!-- /part -->
     <div style="font-size: 13px; font-weight: 600; color: var(--text-meta); padding: 10px 20px 4px;">B</div>
     <div style="display: flex; align-items: center; gap: 12px; padding: 8px 20px;">
       <span style="width: 40px; height: 40px; border-radius: 20px; background: var(--fill-f6e3d6); display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--app-health);">BO</span>

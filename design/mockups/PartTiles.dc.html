@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Tiles</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Tiles</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">Home's app tiles: label, subtitle and glyph.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">A TILE</div>
+  <div>
+    <!-- variant:money -->
+    <div style="border-radius: 18px; background: var(--surface-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--app-money)" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v10M9.5 9.5c0-1 1-1.5 2.5-1.5s2.5.6 2.5 1.7c0 2.5-5 1.3-5 3.8 0 1.1 1 1.5 2.5 1.5s2.5-.5 2.5-1.5"></path></svg>
+      <span data-slot="t0" style="font-size: 12px; font-weight: 600;">₹21.6k</span><span data-slot="t1" style="font-size: 10px; color: var(--text-meta);">left</span><span data-slot="t2" style="font-size: 10px; color: var(--text-meta);">Money</span>
+    </div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">A TILE</div>
+  <div>
+    <!-- variant:health -->
+    <div style="border-radius: 18px; background: var(--surface-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--app-health)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M8 20c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3zM16 13c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3z"></path></svg>
+      <span data-slot="t0" style="font-size: 12px; font-weight: 600;">9,108</span><span data-slot="t1" style="font-size: 10px; color: var(--text-meta);">steps</span><span data-slot="t2" style="font-size: 10px; color: var(--text-meta);">Health</span>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

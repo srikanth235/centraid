@@ -71,45 +71,47 @@ button{font:inherit;color:inherit}
 
   <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim-12);"></div>
 
+  <!-- part:Filter variant="menu" t0="Clear filters" t1="Type · PDFs" t2="Modified · Any time" t3="Label · Any label" t4="Sort" t5="Date changed · Newest first" t6="Date changed · Oldest first" t7="Name · A to Z" t8="Name · Z to A" t9="Kind · A to Z" t10="Size · Largest first" t11="View" t12="List" -->
   <div role="menu" aria-label="Filter and sort, on" style="position: absolute; top: 106px; right: 16px; width: 262px; border-radius: 22px; border: 1px solid var(--surface-border); background: var(--glass-72); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 6px 20px var(--shadow-8); overflow: hidden; font-size: 16px;">
-    <div role="menuitem" style="display: flex; align-items: center; height: 44px; padding: 0 16px 0 40px;">Clear filters</div>
+    <div data-slot="t0" role="menuitem" style="display: flex; align-items: center; height: 44px; padding: 0 16px 0 40px;">Clear filters</div>
     <div aria-hidden="true" style="height: 6px; background: var(--surface-line);"></div>
 
     <div role="menuitem" aria-haspopup="menu" style="display: flex; align-items: center; height: 44px; padding: 0 14px 0 40px; border-bottom: 1px solid var(--surface-line);">
-      <span style="flex-grow: 1;">Type · PDFs</span>
+      <span data-slot="t1" style="flex-grow: 1;">Type · PDFs</span>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-meta)" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </div>
     <div role="menuitem" aria-haspopup="menu" style="display: flex; align-items: center; height: 44px; padding: 0 14px 0 40px; border-bottom: 1px solid var(--surface-line);">
-      <span style="flex-grow: 1;">Modified · Any time</span>
+      <span data-slot="t2" style="flex-grow: 1;">Modified · Any time</span>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-meta)" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </div>
     <div role="menuitem" aria-haspopup="menu" style="display: flex; align-items: center; height: 44px; padding: 0 14px 0 40px;">
-      <span style="flex-grow: 1;">Label · Any label</span>
+      <span data-slot="t3" style="flex-grow: 1;">Label · Any label</span>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-meta)" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </div>
     <div aria-hidden="true" style="height: 6px; background: var(--surface-line);"></div>
 
-    <div style="font-size: 13px; color: var(--text-meta); padding: 8px 16px 2px 40px;">Sort</div>
+    <div data-slot="t4" style="font-size: 13px; color: var(--text-meta); padding: 8px 16px 2px 40px;">Sort</div>
     <div role="menuitemradio" aria-checked="true" style="display: flex; align-items: center; height: 40px; padding: 0 14px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0;"><path d="M5 12l5 5 9-10"></path></svg>
-      <span style="margin-left: 10px;">Date changed · Newest first</span>
+      <span data-slot="t5" style="margin-left: 10px;">Date changed · Newest first</span>
     </div>
-    <div role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Date changed · Oldest first</div>
-    <div role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Name · A to Z</div>
-    <div role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Name · Z to A</div>
-    <div role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Kind · A to Z</div>
-    <div role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Size · Largest first</div>
+    <div data-slot="t6" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Date changed · Oldest first</div>
+    <div data-slot="t7" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Name · A to Z</div>
+    <div data-slot="t8" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Name · Z to A</div>
+    <div data-slot="t9" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Kind · A to Z</div>
+    <div data-slot="t10" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Size · Largest first</div>
     <div aria-hidden="true" style="height: 6px; background: var(--surface-line); margin-top: 4px;"></div>
 
-    <div style="font-size: 13px; color: var(--text-meta); padding: 8px 16px 2px 40px;">View</div>
+    <div data-slot="t11" style="font-size: 13px; color: var(--text-meta); padding: 8px 16px 2px 40px;">View</div>
     <div role="menuitemradio" aria-checked="true" style="display: flex; align-items: center; height: 40px; padding: 0 14px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0;"><path d="M5 12l5 5 9-10"></path></svg>
-      <span style="margin-left: 10px;">List</span>
+      <span data-slot="t12" style="margin-left: 10px;">List</span>
     </div>
     <div role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 4px 40px;">
       Grid
     </div>
   </div>
+  <!-- /part -->
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>

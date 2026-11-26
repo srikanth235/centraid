@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Band</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Band</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">The home key, two to four places, then More, and the search key.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">FOUR PLACES AND MORE</div>
+  <div>
+    <!-- variant:places -->
+    <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; display: flex; align-items: center; gap: 8px;">
+      <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg>
+      </button>
+      <div style="flex-grow: 1; height: 56px; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
+        <span aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-ink); font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Recents</span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-meta);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 012-2h5l2 2h7a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>Browse</span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-meta);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"></path></svg>Starred</span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-meta);"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>More</span>
+      </div>
+      <button aria-label="Search titles and contents" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+      </button>
+    </div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">TWO PLACES</div>
+  <div>
+    <!-- variant:two -->
+    <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; display: flex; align-items: center; gap: 8px;">
+      <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg>
+      </button>
+      <div style="flex-grow: 1; height: 56px; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
+        <span aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-ink); font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="7" r="2"></circle><circle cx="5" cy="17" r="2"></circle><path d="M10 7h11M10 17h11"></path></svg>Reminders</span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-meta);"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>More</span>
+      </div>
+      <button aria-label="Search" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+      </button>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

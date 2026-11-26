@@ -28,11 +28,13 @@ button{font:inherit;color:inherit}
     </div>
   </div>
 
+  <!-- part:Hero variant="item" t0="G" t1="Login · last used today" -->
   <div style="display: flex; flex-direction: column; align-items: center; margin-top: 6px;">
-    <span style="width: 64px; height: 64px; border-radius: 16px; background: var(--surface-tile); display: flex; align-items: center; justify-content: center; color: var(--on-fill); font-weight: 700; font-size: 28px;">G</span>
+    <span data-slot="t0" style="width: 64px; height: 64px; border-radius: 16px; background: var(--surface-tile); display: flex; align-items: center; justify-content: center; color: var(--on-fill); font-weight: 700; font-size: 28px;">G</span>
     <div style="font-size: 24px; font-weight: 700; margin-top: 8px; display: flex; align-items: center; gap: 6px;">GitHub <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--app-locker)" aria-label="Starred" role="img"><path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"></path></svg></div>
-    <div style="font-size: 14px; color: var(--text-meta);">Login · last used today</div>
+    <div data-slot="t1" style="font-size: 14px; color: var(--text-meta);">Login · last used today</div>
   </div>
+  <!-- /part -->
 
   <div style="margin: 14px 16px 0; background: var(--surface-card); border-radius: 16px; padding: 12px 14px; display: flex; align-items: center; gap: 12px;">
     <span style="width: 36px; height: 36px; border-radius: 18px; border: 3px solid var(--fill-e8f2ec); border-top-color: var(--state-green); border-right-color: var(--state-green); box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--state-green);">17</span>
@@ -43,32 +45,36 @@ button{font:inherit;color:inherit}
     <button style="height: 36px; padding: 0 14px; border-radius: 18px; border: none; background: var(--fill-e8f2ec); color: var(--state-green); font-weight: 600; font-size: 14px;">Copy</button>
   </div>
 
+  <!-- part:Facts variant="sealed" t0="Username" t1="srikanth@crowdshakti.com" t2="Copy" t3="Password · hides in 24 s" t4="v7#Lq9-tmZ2!pR" t5="Hide" t6="Copy" t7="Address" t8="github.com/login" t9="Open" -->
   <div style="margin: 10px 16px 0; background: var(--surface-card); border-radius: 16px;">
     <div style="display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--surface-line);">
-      <div style="flex-grow: 1;"><div style="font-size: 12px; color: var(--text-meta);">Username</div><div style="font-size: 16px;">srikanth@crowdshakti.com</div></div>
-      <button style="border: none; background: none; color: var(--app-locker); font-weight: 600; font-size: 14px; padding: 8px;">Copy</button>
+      <div style="flex-grow: 1;"><div data-slot="t0" style="font-size: 12px; color: var(--text-meta);">Username</div><div data-slot="t1" style="font-size: 16px;">srikanth@crowdshakti.com</div></div>
+      <button data-slot="t2" style="border: none; background: none; color: var(--app-locker); font-weight: 600; font-size: 14px; padding: 8px;">Copy</button>
     </div>
     <div style="display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--surface-line);">
-      <div style="flex-grow: 1;"><div style="font-size: 12px; color: var(--text-meta);">Password · hides in 24 s</div><div style="font-family: 'Geist Mono', monospace; font-size: 16px;">v7#Lq9-tmZ2!pR</div></div>
-      <button style="border: none; background: none; color: var(--app-locker); font-weight: 600; font-size: 14px; padding: 8px;">Hide</button>
-      <button style="border: none; background: none; color: var(--app-locker); font-weight: 600; font-size: 14px; padding: 8px;">Copy</button>
+      <div style="flex-grow: 1;"><div data-slot="t3" style="font-size: 12px; color: var(--text-meta);">Password · hides in 24 s</div><div data-slot="t4" style="font-family: 'Geist Mono', monospace; font-size: 16px;">v7#Lq9-tmZ2!pR</div></div>
+      <button data-slot="t5" style="border: none; background: none; color: var(--app-locker); font-weight: 600; font-size: 14px; padding: 8px;">Hide</button>
+      <button data-slot="t6" style="border: none; background: none; color: var(--app-locker); font-weight: 600; font-size: 14px; padding: 8px;">Copy</button>
     </div>
     <div style="display: flex; align-items: center; padding: 10px 14px;">
-      <div style="flex-grow: 1;"><div style="font-size: 12px; color: var(--text-meta);">Address</div><div style="font-size: 16px;">github.com/login</div></div>
-      <button style="border: none; background: none; color: var(--app-locker); font-weight: 600; font-size: 14px; padding: 8px;">Open</button>
+      <div style="flex-grow: 1;"><div data-slot="t7" style="font-size: 12px; color: var(--text-meta);">Address</div><div data-slot="t8" style="font-size: 16px;">github.com/login</div></div>
+      <button data-slot="t9" style="border: none; background: none; color: var(--app-locker); font-weight: 600; font-size: 14px; padding: 8px;">Open</button>
     </div>
   </div>
+  <!-- /part -->
   <p style="margin: 6px 20px 0; font-size: 12px; color: var(--text-meta);">Revealed secrets hide again after 30 seconds.</p>
 
+  <!-- part:Facts variant="recovery" t0="Change password on website" t1="Passkey" t2="Stored · MacBook" t3="Recovery code" t4="•••••• · Reveal" t5="Tags" t6="work · dev" -->
   <div style="margin: 12px 16px 0; background: var(--surface-card); border-radius: 16px;">
     <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--surface-line);">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--app-locker)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"></path></svg>
-      <span style="flex-grow: 1; font-size: 15px; color: var(--app-locker);">Change password on website</span>
+      <span data-slot="t0" style="flex-grow: 1; font-size: 15px; color: var(--app-locker);">Change password on website</span>
     </div>
-    <div style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--surface-line);"><span style="flex-grow: 1; font-size: 15px;">Passkey</span><span style="font-size: 14px; color: var(--text-meta);">Stored · MacBook</span></div>
-    <div style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--surface-line);"><span style="flex-grow: 1; font-size: 15px;">Recovery code</span><span style="font-size: 14px; color: var(--text-meta);">•••••• · Reveal</span></div>
-    <div style="display: flex; align-items: center; padding: 12px 14px;"><span style="flex-grow: 1; font-size: 15px;">Tags</span><span style="font-size: 14px; color: var(--text-meta);">work · dev</span></div>
+    <div style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--surface-line);"><span data-slot="t1" style="flex-grow: 1; font-size: 15px;">Passkey</span><span data-slot="t2" style="font-size: 14px; color: var(--text-meta);">Stored · MacBook</span></div>
+    <div style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--surface-line);"><span data-slot="t3" style="flex-grow: 1; font-size: 15px;">Recovery code</span><span data-slot="t4" style="font-size: 14px; color: var(--text-meta);">•••••• · Reveal</span></div>
+    <div style="display: flex; align-items: center; padding: 12px 14px;"><span data-slot="t5" style="flex-grow: 1; font-size: 15px;">Tags</span><span data-slot="t6" style="font-size: 14px; color: var(--text-meta);">work · dev</span></div>
   </div>
+  <!-- /part -->
 
   <div style="margin: 12px 16px 0; background: var(--surface-card); border-radius: 16px; padding: 10px 14px;">
     <div style="font-size: 12px; color: var(--text-meta);">Memo · searchable, not for secrets</div>

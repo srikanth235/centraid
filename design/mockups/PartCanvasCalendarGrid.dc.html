@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Canvas: calendar grid</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Canvas: calendar grid</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">The time grid of a view, drawn natively; blocks around it pin above and below.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">WEEKDAY HEADER</div>
+  <div>
+    <!-- variant:weekdays -->
+    <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 0 12px; text-align: center;">
+      <span data-slot="t0" style="font-size: 12px; color: var(--text-meta);">M</span><span data-slot="t1" style="font-size: 12px; color: var(--text-meta);">T</span><span data-slot="t2" style="font-size: 12px; color: var(--text-meta);">W</span><span data-slot="t3" style="font-size: 12px; color: var(--text-meta);">T</span><span data-slot="t4" style="font-size: 12px; color: var(--text-meta);">F</span><span data-slot="t5" style="font-size: 12px; color: var(--text-85807a);">S</span><span data-slot="t6" style="font-size: 12px; color: var(--text-85807a);">S</span>
+    </div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">MONTH GRID</div>
+  <div>
+    <!-- variant:month -->
+    <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 4px 12px 0; text-align: center;">
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t0" style="color: var(--text-85807a);">26</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t1" style="color: var(--text-85807a);">27</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t2" style="color: var(--text-85807a);">28</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t3" style="color: var(--text-85807a);">29</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t4" style="color: var(--text-85807a);">30</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t5" style="color: var(--text-85807a);">31</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t6" style="color: var(--text-85807a);">1</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t7" style="color: var(--text-ink);">2</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t8" style="color: var(--text-ink);">3</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t9" style="color: var(--text-ink);">4</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t10" style="color: var(--text-ink);">5</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t11" style="color: var(--text-ink);">6</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t12" style="color: var(--text-85807a);">7</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t13" style="color: var(--text-85807a);">8</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t14" style="width: 34px; height: 34px; border-radius: 17px; background: var(--app-calendar-fill); color: var(--on-fill); font-weight: 600; display: flex; align-items: center; justify-content: center;">9</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t15" style="color: var(--text-ink);">10</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t16" style="color: var(--text-ink);">11</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t17" style="color: var(--text-ink);">12</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t18" style="color: var(--text-ink);">13</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t19" style="color: var(--text-85807a);">14</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t20" style="color: var(--text-85807a);">15</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t21" style="color: var(--text-ink);">16</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t22" style="color: var(--text-ink);">17</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t23" style="color: var(--text-ink);">18</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t24" style="color: var(--text-ink);">19</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t25" style="color: var(--text-ink);">20</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t26" style="color: var(--text-85807a);">21</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t27" style="color: var(--text-85807a);">22</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t28" style="color: var(--text-ink);">23</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t29" style="color: var(--text-ink);">24</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t30" style="color: var(--text-ink);">25</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t31" style="color: var(--text-ink);">26</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t32" style="color: var(--text-ink);">27</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t33" style="color: var(--text-85807a);">28</span></div>
+      <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid var(--surface-line);"><span data-slot="t34" style="color: var(--text-85807a);">29</span></div>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

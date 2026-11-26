@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Trash (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div data-theme="dark" style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Trash</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">Heading with retention, rows with Restore and Erase, Empty trash.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">A DELETED ROW</div>
+  <div>
+    <!-- variant:row -->
+    <div style="flex-grow: 1; min-width: 0;"><div data-slot="t0" style="font-size: 16px;">Netflix</div><div data-slot="t1" style="font-size: 13px; color: var(--text-meta); line-height: 1.35;">Deleted Mon 2 November · Erased Wed 2 December</div></div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">HEADING WITH RETENTION</div>
+  <div>
+    <!-- variant:heading -->
+    <span data-slot="t0" style="font-size: 13px; color: var(--text-meta);">Trash · 3</span>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">EMPTY TRASH</div>
+  <div>
+    <!-- variant:empty -->
+    <button data-slot="t0" style="display: block; margin: 8px 20px 0; min-height: 44px; border: none; background: none; padding: 0; color: var(--state-red); font-size: 16px; font-weight: 600;">Empty trash</button>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

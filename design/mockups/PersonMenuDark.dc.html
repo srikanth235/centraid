@@ -16,6 +16,7 @@ button{font:inherit;color:inherit}
 </style>
 </helmet>
 <div data-theme="dark" style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: linear-gradient(180deg, var(--fill-e9e1f3) 0px, var(--surface-page) 330px); font-family: Geist, system-ui, sans-serif; color: var(--text-ink);">
+  <!-- part:Header variant="pushed" t0="Edit" -->
   <div style="display: flex; align-items: center; justify-content: space-between; padding: 56px 20px 4px;">
     <a href="PeopleDark.dc.html" aria-label="Back to People" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--glass-80); background: var(--glass-60); display: flex; align-items: center; justify-content: center;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
@@ -24,18 +25,21 @@ button{font:inherit;color:inherit}
       <button aria-label="More" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--glass-80); background: var(--glass-60); display: flex; align-items: center; justify-content: center;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--text-ink)" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
       </button>
-      <button style="height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid var(--glass-80); background: var(--glass-60); font-size: 16px; font-weight: 600;">Edit</button>
+      <button data-slot="t0" style="height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid var(--glass-80); background: var(--glass-60); font-size: 16px; font-weight: 600;">Edit</button>
     </div>
   </div>
+  <!-- /part -->
 
   <div role="status" style="margin: 0 20px 8px; min-height: 36px; border-radius: 12px; background: var(--glass-60); border: 1px solid var(--glass-90); display: flex; align-items: center; padding: 6px 14px; box-sizing: border-box; font-size: 13px; line-height: 1.3; color: var(--text-ink);">Couldn’t check what your phone says.</div>
 
+  <!-- part:Hero variant="person" t0="AL" t1="Ada Lovelace" t2="Phone says Ada Lovelase" t3="Use phone’s" t4="Friend · London" t5="Every 14 days · last touch 12 days ago" -->
   <div style="display: flex; flex-direction: column; align-items: center;">
-    <span style="width: 96px; height: 96px; border-radius: 48px; background: var(--glass-70); border: 1px solid var(--glass-90); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 600; color: var(--app-people);">AL</span>
-    <div style="font-size: 26px; font-weight: 700; margin-top: 10px;">Ada Lovelace</div><div style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-meta);"><span>Phone says Ada Lovelase</span><button aria-label="Use the name your phone has, Ada Lovelase" style="border: none; background: none; padding: 0; min-height: 44px; font-size: 13px; font-weight: 600; color: var(--app-people); flex-shrink: 0;">Use phone’s</button></div>
-    <div style="font-size: 14px; color: var(--text-body);">Friend · London</div>
-    <div style="font-size: 13px; color: var(--text-meta); margin-top: 4px;">Every 14 days · last touch 12 days ago</div>
+    <span data-slot="t0" style="width: 96px; height: 96px; border-radius: 48px; background: var(--glass-70); border: 1px solid var(--glass-90); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 600; color: var(--app-people);">AL</span>
+    <div data-slot="t1" style="font-size: 26px; font-weight: 700; margin-top: 10px;">Ada Lovelace</div><div style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-meta);"><span data-slot="t2">Phone says Ada Lovelase</span><button data-slot="t3" aria-label="Use the name your phone has, Ada Lovelase" style="border: none; background: none; padding: 0; min-height: 44px; font-size: 13px; font-weight: 600; color: var(--app-people); flex-shrink: 0;">Use phone’s</button></div>
+    <div data-slot="t4" style="font-size: 14px; color: var(--text-body);">Friend · London</div>
+    <div data-slot="t5" style="font-size: 13px; color: var(--text-meta); margin-top: 4px;">Every 14 days · last touch 12 days ago</div>
   </div>
+  <!-- /part -->
 
   <div style="display: flex; justify-content: center; gap: 14px; margin-top: 14px;">
     <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--text-body);"><button aria-label="Message" style="width: 52px; height: 52px; border-radius: 26px; border: 1px solid var(--glass-90); background: var(--glass-70); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="var(--app-people)" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg></button>message</div>
@@ -44,11 +48,13 @@ button{font:inherit;color:inherit}
     <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--text-body); font-weight: 600;"><button aria-label="Log a touch" style="width: 52px; height: 52px; border-radius: 26px; border: none; background: var(--app-people-fill); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"></path></svg></button>log touch</div>
   </div>
 
+  <!-- part:Facts variant="contact" t0="mobile · preferred" t1="+44 20 7946 0000" t2="email · work" t3="ada@analytical.example" t4="home" t5="12 Crescent Rd, London" t6="Phone still has +44 7700 900123" t7="Add back" t8="Phone says ada@lovelace.example" t9="Use phone’s" -->
   <div style="margin: 16px 16px 0; background: var(--surface-card); border-radius: 16px;">
-    <div style="padding: 10px 14px; display: flex; align-items: center;"><div style="flex-grow: 1;"><div style="font-size: 12px; color: var(--text-meta);">mobile · preferred</div><div style="font-size: 16px;">+44 20 7946 0000</div></div></div>
-    <div style="padding: 10px 14px;"><div style="font-size: 12px; color: var(--text-meta);">email · work</div><div style="font-size: 16px;">ada@analytical.example</div></div>
-    <div style="padding: 10px 14px;"><div style="font-size: 12px; color: var(--text-meta);">home</div><div style="font-size: 16px;">12 Crescent Rd, London</div></div><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid var(--surface-line);"><span style="font-size: 13px; color: var(--text-meta);">Phone still has +44 7700 900123</span><button aria-label="Add back the number +44 7700 900123 from your phone" style="border: none; background: none; padding: 0; min-height: 44px; font-size: 13px; font-weight: 600; color: var(--app-people); flex-shrink: 0;">Add back</button></div><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; min-height: 44px;"><span style="font-size: 13px; color: var(--text-meta);">Phone says ada@lovelace.example</span><button aria-label="Use the email your phone has, ada@lovelace.example" style="border: none; background: none; padding: 0; min-height: 44px; font-size: 13px; font-weight: 600; color: var(--app-people); flex-shrink: 0;">Use phone’s</button></div>
+    <div style="padding: 10px 14px; display: flex; align-items: center;"><div style="flex-grow: 1;"><div data-slot="t0" style="font-size: 12px; color: var(--text-meta);">mobile · preferred</div><div data-slot="t1" style="font-size: 16px;">+44 20 7946 0000</div></div></div>
+    <div style="padding: 10px 14px;"><div data-slot="t2" style="font-size: 12px; color: var(--text-meta);">email · work</div><div data-slot="t3" style="font-size: 16px;">ada@analytical.example</div></div>
+    <div style="padding: 10px 14px;"><div data-slot="t4" style="font-size: 12px; color: var(--text-meta);">home</div><div data-slot="t5" style="font-size: 16px;">12 Crescent Rd, London</div></div><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid var(--surface-line);"><span data-slot="t6" style="font-size: 13px; color: var(--text-meta);">Phone still has +44 7700 900123</span><button data-slot="t7" aria-label="Add back the number +44 7700 900123 from your phone" style="border: none; background: none; padding: 0; min-height: 44px; font-size: 13px; font-weight: 600; color: var(--app-people); flex-shrink: 0;">Add back</button></div><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; min-height: 44px;"><span data-slot="t8" style="font-size: 13px; color: var(--text-meta);">Phone says ada@lovelace.example</span><button data-slot="t9" aria-label="Use the email your phone has, ada@lovelace.example" style="border: none; background: none; padding: 0; min-height: 44px; font-size: 13px; font-weight: 600; color: var(--app-people); flex-shrink: 0;">Use phone’s</button></div>
   </div>
+  <!-- /part -->
 
   <div style="margin: 10px 16px 0; background: var(--surface-card); border-radius: 16px;">
     <div style="padding: 10px 14px; border-bottom: 1px solid var(--surface-line); display: flex; align-items: center;">

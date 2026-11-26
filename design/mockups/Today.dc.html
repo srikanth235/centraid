@@ -35,10 +35,12 @@ button{font:inherit;color:inherit}
   <p style="margin: 0 20px 12px; font-size: 14px; color: var(--text-meta);">Wednesday 4 November · 5 to do · 1 done</p>
 
   <div style="padding: 0 20px;">
+    <!-- part:Section variant="overdue" t0="Overdue" t1="Catch up" -->
     <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0 4px;">
-      <span style="font-size: 15px; font-weight: 600; color: var(--state-red);">Overdue</span>
-      <button style="border: none; background: none; color: var(--app-calendar); font-size: 14px; font-weight: 600; padding: 6px 0;">Catch up</button>
+      <span data-slot="t0" style="font-size: 15px; font-weight: 600; color: var(--state-red);">Overdue</span>
+      <button data-slot="t1" style="border: none; background: none; color: var(--app-calendar); font-size: 14px; font-weight: 600; padding: 6px 0;">Catch up</button>
     </div>
+    <!-- /part -->
     <div style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--surface-line);">
       <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid var(--fixed-text-meta); flex-shrink: 0; margin-top: 1px;"></span>
       <div style="flex-grow: 1;">
@@ -49,13 +51,15 @@ button{font:inherit;color:inherit}
     </div>
 
     <div style="font-size: 15px; font-weight: 600; color: var(--text-meta); padding: 18px 0 4px;">Morning</div>
+    <!-- part:Row variant="check" t0="Call the bank about the card" -->
     <div style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--surface-line);">
       <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid var(--fixed-text-meta); flex-shrink: 0; margin-top: 1px;"></span>
       <div style="flex-grow: 1;">
-        <div style="font-size: 16px;">Call the bank about the card</div>
+        <div data-slot="t0" style="font-size: 16px;">Call the bank about the card</div>
         <div style="font-size: 13px; color: var(--text-meta); margin-top: 3px;">Work · 9:30 · <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-meta)" stroke-width="2.4" aria-hidden="true"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3"></path></svg> Weekly</div>
       </div>
     </div>
+    <!-- /part -->
     <div style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--surface-line);">
       <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid var(--fixed-text-meta); flex-shrink: 0; margin-top: 1px;"></span>
       <div style="flex-grow: 1;">

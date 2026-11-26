@@ -3025,6 +3025,534 @@
       "x": 470,
       "y": 2320
     },
+    "PartAttachments.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Attachments",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "PartAttachmentsDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Attachments · dark",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "PartBand.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Band",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "PartBandDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Band · dark",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "PartCanvasCalendarGrid.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · CanvasCalendarGrid",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "PartCanvasCalendarGridDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · CanvasCalendarGrid · dark",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "PartCanvasChart.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · CanvasChart",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "PartCanvasChartDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · CanvasChart · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "PartCanvasNoteEditor.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · CanvasNoteEditor",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "PartCanvasNoteEditorDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · CanvasNoteEditor · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "PartCanvasPhotoGrid.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · CanvasPhotoGrid",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "PartCanvasPhotoGridDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · CanvasPhotoGrid · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "PartChoice.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Choice",
+      "w": 390,
+      "x": 0,
+      "y": 960
+    },
+    "PartChoiceDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Choice · dark",
+      "w": 390,
+      "x": 0,
+      "y": 960
+    },
+    "PartConfirm.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Confirm",
+      "w": 390,
+      "x": 470,
+      "y": 960
+    },
+    "PartConfirmDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Confirm · dark",
+      "w": 390,
+      "x": 470,
+      "y": 960
+    },
+    "PartEarlierVersions.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · EarlierVersions",
+      "w": 390,
+      "x": 940,
+      "y": 960
+    },
+    "PartEarlierVersionsDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · EarlierVersions · dark",
+      "w": 390,
+      "x": 940,
+      "y": 960
+    },
+    "PartEmpty.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Empty",
+      "w": 390,
+      "x": 1410,
+      "y": 960
+    },
+    "PartEmptyDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Empty · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 960
+    },
+    "PartFacts.dc.html": {
+      "h": 888,
+      "page": "parts",
+      "title": "Part · Facts",
+      "w": 390,
+      "x": 1880,
+      "y": 960
+    },
+    "PartFactsDark.dc.html": {
+      "h": 888,
+      "page": "dark",
+      "title": "Part · Facts · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 960
+    },
+    "PartFigure.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Figure",
+      "w": 390,
+      "x": 2350,
+      "y": 960
+    },
+    "PartFigureDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Figure · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 960
+    },
+    "PartFilter.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Filter",
+      "w": 390,
+      "x": 0,
+      "y": 2008
+    },
+    "PartFilterDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Filter · dark",
+      "w": 390,
+      "x": 0,
+      "y": 2008
+    },
+    "PartForm.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Form",
+      "w": 390,
+      "x": 470,
+      "y": 2008
+    },
+    "PartFormDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Form · dark",
+      "w": 390,
+      "x": 470,
+      "y": 2008
+    },
+    "PartGlance.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Glance",
+      "w": 390,
+      "x": 940,
+      "y": 2008
+    },
+    "PartGlanceDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Glance · dark",
+      "w": 390,
+      "x": 940,
+      "y": 2008
+    },
+    "PartHeader.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Header",
+      "w": 390,
+      "x": 1410,
+      "y": 2008
+    },
+    "PartHeaderDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Header · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 2008
+    },
+    "PartHero.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Hero",
+      "w": 390,
+      "x": 1880,
+      "y": 2008
+    },
+    "PartHeroDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Hero · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 2008
+    },
+    "PartLinked.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Linked",
+      "w": 390,
+      "x": 2350,
+      "y": 2008
+    },
+    "PartLinkedDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Linked · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 2008
+    },
+    "PartMedia.dc.html": {
+      "h": 1019,
+      "page": "parts",
+      "title": "Part · Media",
+      "w": 390,
+      "x": 0,
+      "y": 2968
+    },
+    "PartMediaDark.dc.html": {
+      "h": 1019,
+      "page": "dark",
+      "title": "Part · Media · dark",
+      "w": 390,
+      "x": 0,
+      "y": 2968
+    },
+    "PartMentionedIn.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · MentionedIn",
+      "w": 390,
+      "x": 470,
+      "y": 2968
+    },
+    "PartMentionedInDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · MentionedIn · dark",
+      "w": 390,
+      "x": 470,
+      "y": 2968
+    },
+    "PartMenu.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Menu",
+      "w": 390,
+      "x": 940,
+      "y": 2968
+    },
+    "PartMenuDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Menu · dark",
+      "w": 390,
+      "x": 940,
+      "y": 2968
+    },
+    "PartOrigin.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Origin",
+      "w": 390,
+      "x": 1410,
+      "y": 2968
+    },
+    "PartOriginDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Origin · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 2968
+    },
+    "PartProgress.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Progress",
+      "w": 390,
+      "x": 1880,
+      "y": 2968
+    },
+    "PartProgressDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Progress · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 2968
+    },
+    "PartProse.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Prose",
+      "w": 390,
+      "x": 2350,
+      "y": 2968
+    },
+    "PartProseDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Prose · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 2968
+    },
+    "PartRow.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Row",
+      "w": 390,
+      "x": 0,
+      "y": 4147
+    },
+    "PartRowDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Row · dark",
+      "w": 390,
+      "x": 0,
+      "y": 4147
+    },
+    "PartSays.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Says",
+      "w": 390,
+      "x": 470,
+      "y": 4147
+    },
+    "PartSaysDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Says · dark",
+      "w": 390,
+      "x": 470,
+      "y": 4147
+    },
+    "PartSearch.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Search",
+      "w": 390,
+      "x": 940,
+      "y": 4147
+    },
+    "PartSearchDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Search · dark",
+      "w": 390,
+      "x": 940,
+      "y": 4147
+    },
+    "PartSection.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Section",
+      "w": 390,
+      "x": 1410,
+      "y": 4147
+    },
+    "PartSectionDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Section · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 4147
+    },
+    "PartSelection.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Selection",
+      "w": 390,
+      "x": 1880,
+      "y": 4147
+    },
+    "PartSelectionDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Selection · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 4147
+    },
+    "PartStatusLine.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · StatusLine",
+      "w": 390,
+      "x": 2350,
+      "y": 4147
+    },
+    "PartStatusLineDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · StatusLine · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 4147
+    },
+    "PartTiles.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Tiles",
+      "w": 390,
+      "x": 0,
+      "y": 5107
+    },
+    "PartTilesDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Tiles · dark",
+      "w": 390,
+      "x": 0,
+      "y": 5107
+    },
+    "PartTrash.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Trash",
+      "w": 390,
+      "x": 470,
+      "y": 5107
+    },
+    "PartTrashDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Trash · dark",
+      "w": 390,
+      "x": 470,
+      "y": 5107
+    },
+    "PartWall.dc.html": {
+      "h": 800,
+      "page": "parts",
+      "title": "Part · Wall",
+      "w": 390,
+      "x": 940,
+      "y": 5107
+    },
+    "PartWallDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Part · Wall · dark",
+      "w": 390,
+      "x": 940,
+      "y": 5107
+    },
     "People.dc.html": {
       "h": 844,
       "page": "light",
@@ -4514,7 +5042,7 @@
       "kind": "title1",
       "maxW": 2740,
       "page": "dark",
-      "text": "Agenda: widgets and the quick-add chip",
+      "text": "Widgets and the quick-add chip",
       "w": 240,
       "x": 0,
       "y": 23000
@@ -4559,7 +5087,7 @@
       "kind": "title1",
       "maxW": 2740,
       "page": "dark",
-      "text": "Agenda: Calendar + Reminders, one app with two homes",
+      "text": "Calendar and Reminders, two apps",
       "w": 240,
       "x": 0,
       "y": 3280
@@ -4739,7 +5267,7 @@
       "kind": "title1",
       "maxW": 2740,
       "page": "light",
-      "text": "Agenda: widgets and the quick-add chip",
+      "text": "Widgets and the quick-add chip",
       "w": 240,
       "x": 0,
       "y": 23000
@@ -4793,7 +5321,7 @@
       "kind": "title1",
       "maxW": 2740,
       "page": "light",
-      "text": "Agenda: Calendar + Reminders, one app with two homes",
+      "text": "Calendar and Reminders, two apps",
       "w": 240,
       "x": 0,
       "y": 3280
@@ -5310,6 +5838,10 @@
     {
       "id": "icon",
       "name": "App icon"
+    },
+    {
+      "id": "parts",
+      "name": "Parts"
     },
     {
       "id": "light",

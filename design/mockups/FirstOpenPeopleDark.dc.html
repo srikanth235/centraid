@@ -17,8 +17,9 @@ button{font:inherit;color:inherit}
 </style>
 </helmet>
 <div data-theme="dark" style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink);">
+  <!-- part:Header variant="keys" t0="People" -->
   <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 20px 4px;">
-    <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">People</h1>
+    <h1 data-slot="t0" style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">People</h1>
     <div style="display: flex; gap: 8px;">
       <button aria-label="Filter and sort" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--surface-border); background: var(--glass-85); display: flex; align-items: center; justify-content: center;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"></path></svg>
@@ -28,6 +29,7 @@ button{font:inherit;color:inherit}
       </button>
     </div>
   </div>
+  <!-- /part -->
   <div style="margin: 28px 20px 0; background: var(--surface-card); border-radius: 16px; padding: 24px 20px 20px; display: flex; flex-direction: column; align-items: center; text-align: center;">
     <span style="width: 52px; height: 52px; border-radius: 26px; background: var(--fill-ece8f3); display: flex; align-items: center; justify-content: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--app-people)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path><path d="M8 10h.01M8 14h.01M11 10h6M11 14h6"></path></svg></span>
     <div style="font-size: 18px; font-weight: 600; margin-top: 12px; line-height: 1.3;">The people you know, and what you write about them.</div>
