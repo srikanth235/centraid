@@ -15,7 +15,6 @@ use centraid_vault::alerts::Notice;
 use centraid_vault::clock::{FixedClock, SeededIds};
 use serde_json::{Value, json};
 
-const AT: &str = "2026-11-01T00:00:00.000Z";
 /// 2026-11-26T10:00:00Z
 const NOW: i64 = 1_795_687_200_000;
 const HOUR: i64 = 3_600_000;

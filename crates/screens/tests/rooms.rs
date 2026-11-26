@@ -189,11 +189,63 @@ impl RoomScreen for Typing {
     }
 }
 
+struct Calendar {
+    anchor: String,
+}
+
+impl RoomScreen for Calendar {
+    fn key(&self) -> String {
+        "calendar".to_owned()
+    }
+
+    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let canvas = blocks::canvas(&mut b.sel, "canvas", "canvas");
+        let grid = blocks::calendar_grid(wire::RoomCalendarGrid {
+            view: wire::RoomCalendarView::Day as i32,
+            anchor_day: self.anchor.clone(),
+            create_selector_id: canvas,
+            ..wire::RoomCalendarGrid::default()
+        });
+        room(wire::RoomKind::AppPlace, "calendar")
+            .title("Calendar")
+            .ready(vec![grid])
+            .build()
+    }
+
+    fn on(&mut self, _: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        use wire::room_canvas_event::Kind as C;
+        match (tag, input) {
+            ("canvas", Input::Canvas(C::CalendarDay(pick))) => {
+                self.anchor.clone_from(&pick.day);
+                Outcome::default()
+            }
+            ("canvas", Input::Canvas(C::CalendarCreate(at))) => {
+                Outcome::say(&format!("new at {} {}", at.day, at.minute))
+            }
+            _ => Outcome::refuse("not a canvas event"),
+        }
+    }
+}
+
+fn canvas(selector: &str, kind: wire::room_canvas_event::Kind) -> wire::RoomEvent {
+    wire::RoomEvent {
+        kind: Some(wire::room_event::Kind::Canvas(wire::RoomCanvasEvent {
+            selector_id: selector.to_owned(),
+            kind: Some(kind),
+        })),
+    }
+}
+
 fn registry() -> Registry {
     Registry::new()
         .exact("notes", || Box::new(List))
         .exact("twice", || Box::new(Twice))
         .exact("typing", || Box::new(Typing))
+        .exact("calendar", || {
+            Box::new(Calendar {
+                anchor: "2026-11-26".to_owned(),
+            })
+        })
         .with(Box::new(|key| {
             key.strip_prefix("note/")
                 .map(|id| Box::new(Note(id.to_owned())) as Box<dyn RoomScreen>)
@@ -482,4 +534,64 @@ fn the_list_room_reads_as_text() {
     let (mut rooms, _) = rooms();
     let first = rooms.open("notes", "t", true).unwrap();
     snapshot::assert_room("notes_list", &first.room);
+}
+
+#[test]
+fn a_canvas_event_is_routed_to_its_screen_with_its_typed_payload() {
+    let (mut rooms, _) = rooms();
+    let first = rooms.open("calendar", "t", true).unwrap();
+    let picked = rooms
+        .event(
+            first.instance,
+            &canvas(
+                "canvas",
+                wire::room_canvas_event::Kind::CalendarDay(wire::RoomCalendarPickDay {
+                    day: "2026-12-01".into(),
+                }),
+            ),
+        )
+        .unwrap()
+        .unwrap();
+    let Some(wire::room::State::Ready(ready)) = &picked.room.state else {
+        panic!("ready");
+    };
+    let Some(wire::room_block::Kind::CalendarGrid(grid)) = &ready.blocks[0].kind else {
+        panic!("a calendar grid");
+    };
+    assert_eq!(grid.anchor_day, "2026-12-01");
+
+    let created = rooms
+        .event(
+            first.instance,
+            &canvas(
+                "canvas",
+                wire::room_canvas_event::Kind::CalendarCreate(wire::RoomCalendarCreateAt {
+                    day: "2026-12-02".into(),
+                    minute: 540,
+                    all_day: false,
+                }),
+            ),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        created.room.status_line.unwrap().sentence,
+        "new at 2026-12-02 540"
+    );
+
+    let stale = rooms
+        .event(
+            first.instance,
+            &canvas(
+                "not-a-canvas",
+                wire::room_canvas_event::Kind::ChartScrub(wire::RoomChartScrubbed {
+                    point_id: "p".into(),
+                }),
+            ),
+        )
+        .unwrap();
+    assert!(
+        stale.is_none(),
+        "a selector the room does not hold changes nothing"
+    );
 }
