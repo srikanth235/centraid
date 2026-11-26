@@ -18,8 +18,10 @@
 //! ## What a trash takes, and what a purge does with what points at an entity
 //!
 //! - **A holder takes what it holds to the trash with it** and brings it back with it: a
-//!   notebook's notes, a folder's documents, a project's sections and tasks, a calendar's events,
-//!   a task's subtasks, an account's lines, and what was written about one person alone. A row
+//!   notebook's notes, a folder's documents, a task list's tasks, a calendar's events, a task's
+//!   subtasks, an account's lines, a photo or document captured inside an item, and the touches
+//!   with or about one person alone (a person's contact points and dates are their own rows and go
+//!   with them; their notes, workouts, events, photos, documents, payments and Locker items stay). A row
 //!   the trash took has `trashed_by` naming the holder that took it (its direct holder, so nested
 //!   holders name each other); a row trashed on its own has none. **No timestamp is compared**:
 //!   restoring a holder brings back the rows that name it, and the rows that name those, and
@@ -238,14 +240,14 @@ fn held(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
             "SELECT t.id FROM txn t JOIN entity e ON e.id = t.id
               WHERE t.account_id = ?1 AND e.deleted_at IS NULL",
         ),
-        // What was written or logged about one person and no one else. A task about them is the
-        // member's own and stays, and so is a document, a line, a photograph or a Locker item
-        // joined to them: **an allow-list**, so a kind the model learns to join to a person is
-        // kept until someone decides otherwise. `depicts` never cascades.
+        // The touches with or about one person and no one else. Everything else joined to them is
+        // the member's own and stays (a note, a workout, an event, a task, a document, a line, a
+        // photograph, a Locker item): **an allow-list**, so a kind the model learns to join to a
+        // person is kept until someone decides otherwise. `depicts` never cascades.
         Kind::Person => Some(
             "SELECT e.from_id FROM edge e JOIN entity f ON f.id = e.from_id
               WHERE e.to_id = ?1 AND e.rel IN ('about', 'with')
-                AND f.kind IN ('note', 'touch', 'workout') AND f.deleted_at IS NULL
+                AND f.kind = 'touch' AND f.deleted_at IS NULL
                 AND NOT EXISTS (SELECT 1 FROM edge o WHERE o.from_id = e.from_id
                                    AND o.rel IN ('about', 'with') AND o.to_id <> ?1)",
         ),
@@ -261,9 +263,75 @@ fn held(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
     Ok(held)
 }
 
+/// How many live rows a holder takes to the trash with it: the count a notebook's, folder's,
+/// account's or task list's delete confirm names. Zero for a row that holds nothing.
+///
+/// # Errors
+/// SQLite's refusal, or an id that is no entity.
+pub fn held_count(connection: &Connection, id: &str) -> Result<i64> {
+    let found = require(connection, id)?;
+    let mut counted = 0;
+    let mut frontier = vec![found];
+    while let Some(holder) = frontier.pop() {
+        for member in held(connection, &holder)? {
+            counted += 1;
+            if let Some(member) = find(connection, &member)? {
+                frontier.push(member);
+            }
+        }
+    }
+    Ok(counted)
+}
+
 // ---------------------------------------------------------------------------
 // One home (A19)
 // ---------------------------------------------------------------------------
+
+/// What a merge does with the rows homed in the one that goes: they are homed in the one that
+/// stays (a capture filed inside a person, a tag inside a tag), so the purge that follows detaches
+/// nothing. When the survivor itself sits somewhere under the loser it first takes the loser's
+/// place, so the home cannot loop. Returns how many rows moved.
+///
+/// # Errors
+/// SQLite's refusal.
+pub(crate) fn repoint_homes(ctx: &CommandCtx<'_, '_>, loser: &str, winner: &str) -> Result<usize> {
+    let connection = ctx.connection();
+    let (parent, parent_kind): (Option<String>, Option<String>) = connection.query_row(
+        "SELECT parent_id, parent_kind FROM entity WHERE id = ?1",
+        [loser],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let under: bool = connection.query_row(
+        "WITH RECURSIVE up(id) AS (
+           SELECT parent_id FROM entity WHERE id = ?1
+           UNION SELECT e.parent_id FROM entity e JOIN up ON e.id = up.id
+            WHERE e.parent_id IS NOT NULL)
+         SELECT EXISTS (SELECT 1 FROM up WHERE id = ?2)",
+        [winner, loser],
+        |row| row.get(0),
+    )?;
+    if under {
+        connection.execute(
+            "UPDATE entity SET parent_id = ?2, parent_kind = ?3 WHERE id = ?1",
+            rusqlite::params![winner, parent, parent_kind],
+        )?;
+        ctx.touch(winner)?;
+    }
+    let moved = ids(
+        connection,
+        "SELECT id FROM entity WHERE parent_id = ?1 ORDER BY n",
+        loser,
+    )?;
+    connection.execute(
+        "UPDATE entity SET parent_id = ?2, parent_kind = (SELECT kind FROM entity WHERE id = ?2)
+          WHERE parent_id = ?1",
+        [loser, winner],
+    )?;
+    for id in &moved {
+        ctx.touch(id)?;
+    }
+    Ok(moved.len())
+}
 
 /// A sentence when a row of `kind` cannot sit in `parent` (`None`: at the top level): the home is
 /// not there or is in the trash, its kind is not one the `home_shape` table allows, the row would
@@ -817,8 +885,10 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     // ONE ITEM COMES OUT OF A TRASHED HOLDER ("I trashed the folder but need this file"): at the
     // top level, where its kind may sit. A kind that needs a home (an event, a section) is not
     // brought back into a trashed one: the holder comes back first.
+    // A photograph or document captured inside an item comes back only with the item: alone it
+    // would land in the library, where it never was.
     if let Some(title) = trashed_home(ctx.connection(), &found.id)?
-        && !may_be_top(ctx.connection(), found.kind)?
+        && (!may_be_top(ctx.connection(), found.kind)? || is_capture(ctx.connection(), &found)?)
     {
         return Ok(Some(format!(
             "“{}” is in “{title}”, which is in the trash; restore “{title}” first",
@@ -829,6 +899,19 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     // at launch (`Vault::empty_overdue_trash`); until that pass runs it is a
     // trashed row like any other, and a member who got there first gets it back.
     Ok(None)
+}
+
+/// Whether this is a photograph or document filed inside an item (not in a folder).
+fn is_capture(connection: &Connection, found: &Found) -> Result<bool> {
+    if !matches!(found.kind, Kind::Photo | Kind::Document) {
+        return Ok(false);
+    }
+    Ok(connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM entity e JOIN entity_kind k ON k.code = e.parent_kind
+                         WHERE e.id = ?1 AND e.parent_kind NOT IN (SELECT code FROM container_kind))",
+        [&found.id],
+        |row| row.get(0),
+    )?)
 }
 
 /// The title of this row's home when the home is in the trash.

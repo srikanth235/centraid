@@ -819,6 +819,8 @@ fn merge(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         "UPDATE event_guest SET person_id = ?2 WHERE person_id = ?1",
         [loser, winner],
     )?;
+    // What was captured inside the loser (a receipt, a scan) is the survivor's now.
+    crate::commands::entity::repoint_homes(ctx, loser, winner)?;
     let readings = connection.execute(
         "UPDATE reading SET person_id = ?2 WHERE person_id = ?1",
         [loser, winner],

@@ -538,6 +538,7 @@ impl Vault {
                 "SELECT e.id, e.title, d.media_type, e.updated_at
                    FROM document d JOIN entity e ON e.id = d.id
                   WHERE e.kind = 'document' AND e.deleted_at IS NULL
+                    AND (e.parent_id IS NULL OR e.parent_kind = 'folder')
                   ORDER BY e.updated_at DESC, e.id DESC LIMIT 500",
             )?;
             let rows = statement

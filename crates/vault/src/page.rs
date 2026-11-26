@@ -369,7 +369,8 @@ pub struct ColumnTest<'a> {
     pub value: &'a str,
 }
 
-/// What [`Vault::count_kind`] counts: the entities of `kind`, live or trashed, whose own row (in
+/// What [`Vault::count_kind`] counts: the entities of `kind`, live or trashed on their own (a row
+/// the trash took with its holder is the holder's to restore, not a line of the trash), whose own row (in
 /// `table`) passes every test.
 #[derive(Debug, Clone, Copy)]
 pub struct KindCount<'a> {
@@ -925,7 +926,7 @@ impl Vault {
             });
         }
         let state = if query.trashed {
-            "deleted_at IS NOT NULL"
+            "deleted_at IS NOT NULL AND trashed_by IS NULL"
         } else {
             "deleted_at IS NULL"
         };

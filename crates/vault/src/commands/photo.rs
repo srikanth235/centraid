@@ -55,7 +55,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value as Json;
 
 use crate::commands::document::{claim, pre_claimable};
-use crate::commands::entity::lookup_live;
+use crate::commands::entity::{home_refusal, lookup_live};
 use crate::commands::follow::{Gone, OriginRow, SystemMap};
 use crate::commands::{
     CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival, deserialize_patch,
@@ -180,6 +180,14 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = together_refusal(ctx) {
         return Ok(Some(sentence));
     }
+    if let Some(sentence) = home_refusal(
+        ctx.connection(),
+        Kind::Photo,
+        None,
+        ctx.optional_str("home"),
+    )? {
+        return Ok(Some(sentence));
+    }
     if let Some(source) = ctx.optional_str("edited_from")
         && let Err(sentence) = is_photo(ctx.connection(), source)?
     {
@@ -220,16 +228,21 @@ fn inherited(ctx: &CommandCtx<'_, '_>, source: Option<&str>) -> Result<Inherited
     )?)
 }
 
-/// The photograph the offered bytes already are, by the hash read through `photo_by_blob`: the
-/// oldest one, in the trash or not, and whether it is in the trash.
-fn photograph_over(ctx: &CommandCtx<'_, '_>, blob: &str) -> Result<Option<(String, bool)>> {
+/// The photograph the offered bytes already are in the same home (the library, or the item a
+/// capture is filed inside), by the hash read through `photo_by_blob`: the oldest one, in the trash
+/// or not, and whether it is in the trash.
+fn photograph_over(
+    ctx: &CommandCtx<'_, '_>,
+    blob: &str,
+    home: Option<&str>,
+) -> Result<Option<(String, bool)>> {
     Ok(ctx
         .connection()
         .query_row(
             "SELECT p.id, e.deleted_at IS NOT NULL
                FROM photo p JOIN entity e ON e.id = p.id
-              WHERE p.blob = ?1 ORDER BY e.n LIMIT 1",
-            [blob],
+              WHERE p.blob = ?1 AND e.parent_id IS ?2 ORDER BY e.n LIMIT 1",
+            rusqlite::params![blob, home],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?)
@@ -259,6 +272,7 @@ struct AddPhotoInput {
     lat: Option<f64>,
     lon: Option<f64>,
     place_id: Option<String>,
+    home: Option<String>,
     motion_blob: Option<String>,
     motion_duration_s: Option<f64>,
     phash: Option<String>,
@@ -271,7 +285,7 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: AddPhotoInput = ctx.parse_input()?;
     claim(ctx, "blob", "size")?;
     claim(ctx, "motion_blob", "motion_size")?;
-    if let Some((id, trashed)) = photograph_over(ctx, &input.blob)? {
+    if let Some((id, trashed)) = photograph_over(ctx, &input.blob, input.home.as_deref())? {
         // The burst the bytes now say they belong to, on a photograph that has none yet; a
         // photograph in the trash is left exactly as the member left it.
         if let (Some(burst), false) = (input.burst.as_deref(), trashed) {
@@ -291,10 +305,10 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let title = input.title.as_deref().unwrap_or(&source.title).trim();
     let id = match input.id.as_deref() {
         Some(id) => {
-            ctx.insert_entity_in(id, Kind::Photo, title, None)?;
+            ctx.insert_entity_in(id, Kind::Photo, title, input.home.as_deref())?;
             id.to_owned()
         }
-        None => ctx.insert_entity_under(Kind::Photo, title, None)?,
+        None => ctx.insert_entity_under(Kind::Photo, title, input.home.as_deref())?,
     };
     let form = input
         .form
@@ -683,6 +697,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "lat": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
                 "lon": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
                 "place_id": { "type": ["string", "null"] },
+                "home": { "type": ["string", "null"],
+                  "description": "The item a capture is filed inside (a payment, an event, a workout, a note, a task, a person): it stays out of the library and goes with the item." },
                 "motion_blob": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
                 "motion_size": { "type": "integer", "minimum": 0 },
                 "motion_duration_s": { "type": ["number", "null"], "minimum": 0 },
