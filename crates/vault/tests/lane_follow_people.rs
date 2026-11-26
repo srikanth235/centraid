@@ -664,15 +664,16 @@ fn an_imported_date_is_silent_until_the_member_asks_and_the_follower_writes_no_r
     assert_eq!(held(&w), (1, 0, 0), "a date arrives with no alert");
     pass(&w, "phone-1", true, records("1991-06-18"));
     assert_eq!(held(&w), (1, 0, 0), "a changed date is still silent");
-    let date: String = w.one(
-        "SELECT id FROM person_date WHERE person_id = ?1",
-        &[&grace],
-    );
+    let date: String = w.one("SELECT id FROM person_date WHERE person_id = ?1", &[&grace]);
     w.ok(
         "reminder.add",
         json!({ "entity_id": &grace, "date_id": &date, "offset_min": 1440 }),
     );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM reminder", &[]), 1, "the member asked");
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM reminder", &[]),
+        1,
+        "the member asked"
+    );
     pass(&w, "phone-1", true, records("1992-07-19"));
     assert_eq!(
         w.one::<i64>("SELECT COUNT(*) FROM reminder", &[]),
