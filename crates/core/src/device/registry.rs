@@ -89,6 +89,7 @@ pub const DEVICE_KEYS: &[KeyDecl] = &[
     family("draft.", "D1", Core, Device, Json(1)),
     key("share-in", "D2", Shell, Files, Opaque),
     family("view.", "D3", Core, Device, Json(1)),
+    key("notify.applied", "D7", Core, Device, Json(1)),
     key("widget.today", "D6", Core, Device, Json(1)),
     key("widget.health", "D6", Core, Device, Json(1)),
     key("centraid.notify.outbox", "D7", Shell, Settings, Json(1)),
