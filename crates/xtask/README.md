@@ -29,7 +29,7 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 
 | Profile | Steps it adds | Where it runs |
 | --- | --- | --- |
-| `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | by hand, before a push |
+| `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `registry`, `doc-links`, `ledgers` | by hand, before a push |
 | `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `design`, `lockfile`, `prompt-injection`, `model-record`, `fault-door` — and its `test` step runs the **whole** workspace | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `device-lanes` | `.github/workflows/nightly.yml`, 05:30 UTC |
 | `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | the release workflows |
@@ -56,6 +56,8 @@ The step says so in three places: a banner before its line naming every crate an
 `mobile-jvm` is the Kotlin half, and it is **not** a superset of anything. Its one step builds `centraid-core-ffi` (without the `llama` feature: no Kotlin spec loads a model, and llama.cpp's cold build is too slow for this profile), runs `./gradlew -p mobile mobileJvm` (`:core:jvmTest` — a real ABI round trip against the real cdylib), then runs the design drift check (`cargo xtask design --check`, in process) and fails on drift. It is kept out of `pr` because Kotlin/Gradle is a different toolchain with a different cold cost (D-1020-B2-3).
 
 **A missing mobile tree FAILS, it does not skip.** What the step does not do, it says rather than passing over: it does not compile Compose, does not link Kotlin/Native, does not run a simulator and does not touch a device. Those are `nightly`'s `device-lanes` — four lanes (`backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass`) that run only on a machine with one iPhone and one Android attached and `CENTRAID_DEVICE_RUNNER=1` set (`cargo xtask gate --profile nightly --lane <name>`), and are a loud `Skipped` otherwise — and the hand-off table in [`mobile/README.md`](../../mobile/README.md).
+
+`registry` runs `cargo test --workspace --test kind_action_registry --test read_registry`: `crates/domain`'s kind registry, action catalogue and read registry held to the vault's own tables ([app-plane](../../.claude/skills/change/app-plane.md#8-the-kind-registry-and-the-promise-charter)); it took the place of the `promises` register. It is a `local` step, so every profile carries it.
 
 `restore-drill` runs `cargo test --workspace --test restore_drill` — `centraid-vault`'s drill of the snapshot plane against the in-memory store, and `centraid`'s drill of the phone's core against the real gateway harness: back up a real library, lose the phone, restore from the 24 words at writer epoch 2, compare every row, and see the old phone refused `VAULT_MOVED` ([#1080](https://github.com/srikanth235/centraid/issues/1080)). It is a `local` step, so every profile carries it.
 
