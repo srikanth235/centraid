@@ -1456,3 +1456,49 @@ fn a_holders_confirm_names_how_many_go_with_it() {
         "a row already in the trash is not counted again"
     );
 }
+
+#[test]
+fn every_shared_verb_acts_on_a_hundred_rows_in_one_commit_and_a_bad_one_stops_them_all() {
+    let w = World::new();
+    let book = w.container("notebook", "Box", None);
+    let notes: Vec<String> = (0..100)
+        .map(|n| w.note(&format!("Note {n}"), None))
+        .collect();
+    w.ok("entity.move", json!({"ids": &notes, "parent": &book}));
+    assert!(notes.iter().all(|id| w.home(id) == Some(book.clone())));
+    w.ok("flag.set", json!({"ids": &notes, "flag": "starred"}));
+    w.ok("flag.set", json!({"ids": &notes, "flag": "archived"}));
+    w.ok("tag.add", json!({"ids": &notes, "label": "bulk"}));
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM entity WHERE kind = 'note' AND starred_at IS NOT NULL AND archived_at IS NOT NULL",
+            &[]
+        ),
+        100
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM edge WHERE rel = 'tagged'", &[]),
+        100
+    );
+    w.ok("tag.remove", json!({"ids": &notes, "label": "bulk"}));
+    w.ok("flag.clear", json!({"ids": &notes, "flag": "starred"}));
+    w.ok("entity.trash", json!({"ids": &notes}));
+    assert!(notes.iter().all(|id| w.trashed(id)));
+    w.ok("entity.restore", json!({"ids": &notes}));
+    assert!(notes.iter().all(|id| !w.trashed(id)));
+    let one_command = w.run("flag.set", json!({"ids": &notes, "flag": "pinned"}));
+    assert_eq!(one_command.status, CommandStatus::Executed);
+    assert_eq!(
+        one_command.output["count"],
+        json!(100),
+        "one command, one commit, every row"
+    );
+    let mut with_a_stranger = notes.clone();
+    with_a_stranger.push("no-such-row".to_owned());
+    let sentence = w.refused("entity.trash", json!({"ids": with_a_stranger}));
+    assert!(!sentence.is_empty());
+    assert!(
+        notes.iter().all(|id| !w.trashed(id)),
+        "a list with one bad row changes none"
+    );
+}

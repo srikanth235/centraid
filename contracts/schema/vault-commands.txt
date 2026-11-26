@@ -10,6 +10,7 @@ budget.set
 budget.set_carry
 category.add
 checkpoint.record
+concept.merge
 container.create
 container.move
 container.style
@@ -106,6 +107,7 @@ photo.set_place
 place.add
 place.edit
 place.locate
+place.merge
 reading.add
 reading.edit
 reminder.add

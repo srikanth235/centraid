@@ -274,6 +274,63 @@ impl<'conn> CommandCtx<'_, 'conn> {
         self.input.get(key).and_then(serde_json::Value::as_str)
     }
 
+    /// The rows a shared verb is asked to act on: `id`, then each of `ids`, once each. A verb
+    /// that takes either acts on all of them in the one commit it runs in.
+    #[must_use]
+    pub fn target_ids(&self) -> Vec<String> {
+        let mut found: Vec<String> = Vec::new();
+        let listed = self
+            .input
+            .get("ids")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str);
+        for id in self.optional_str("id").into_iter().chain(listed) {
+            if !found.iter().any(|seen| seen == id) {
+                found.push(id.to_owned());
+            }
+        }
+        found
+    }
+
+    /// This command's context as it is for one of its target rows alone: the same input with
+    /// `id` set to `id` and `ids` gone, so the checks and writes a verb has for one row serve each
+    /// row of many.
+    #[must_use]
+    pub fn for_target(&self, id: &str) -> CommandCtx<'_, 'conn> {
+        let mut input = self.input.clone();
+        if let Some(map) = input.as_object_mut() {
+            map.remove("ids");
+            map.insert("id".to_owned(), serde_json::Value::String(id.to_owned()));
+        }
+        CommandCtx {
+            tx: self.tx,
+            command: self.command,
+            input,
+            principal: self.principal.clone(),
+            now: self.now.clone(),
+            ids: self.ids,
+            blobs: self.blobs,
+        }
+    }
+
+    /// Run a one-row check against every target row; the first sentence is the refusal.
+    ///
+    /// # Errors
+    /// What the check returns.
+    pub fn check_each(
+        &self,
+        check: fn(&CommandCtx<'_, '_>) -> Result<Option<String>>,
+    ) -> Result<Option<String>> {
+        for id in self.target_ids() {
+            if let Some(sentence) = check(&self.for_target(&id))? {
+                return Ok(Some(sentence));
+            }
+        }
+        Ok(None)
+    }
+
     /// Deserialize the command's JSON input into a typed input struct.
     ///
     /// # Errors

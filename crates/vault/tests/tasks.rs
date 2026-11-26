@@ -268,7 +268,7 @@ fn a_task_is_made_in_a_task_list_or_under_a_task_and_moved_by_entity_move() {
     );
     assert!(
         w.refused("task.add", json!({ "title": "Deeper", "parent_id": sub }))
-            .contains("subtask of its own")
+            .contains("subtasks of its own")
     );
     assert!(
         w.refused("entity.move", json!({ "id": in_other, "parent": in_list }))
