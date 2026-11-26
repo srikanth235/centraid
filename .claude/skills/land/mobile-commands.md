@@ -19,7 +19,7 @@ Choose checks that cover the changed layer; this is a menu, not a requirement to
 cargo test -p centraid-screens
 cargo xtask rules
 cargo xtask screens-catalog --check   # only when a manifest changed
-bun run lint:product                  # copy, native controls, journey ledger
+bun run lint:product                  # copy, journey ledger
 cargo xtask design --check            # generated design outputs are current (cargo xtask design writes them)
 buf lint                              # and buf breaking against the PR base, when installed
 cargo xtask gate --profile pr

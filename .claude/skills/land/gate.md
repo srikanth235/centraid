@@ -45,8 +45,7 @@ Lines printed under an `ok` rule are known debt (the `promises` register lists w
 All of them are counts or sizes, and all only fall.
 
 - **Copy ratchet**, `scripts/lint-copy.mjs`. Banned words, `·` joins and word-count caps in the Rust string catalogue (and the assistant's `copy/chat.json` strings), as a per-rule per-file count.
-- **Native-controls ratchet**, `scripts/lint-native-controls.mjs`. Platform controls used outside the kit in the iOS and Android sources, counted the same way.
-- Both run in `bun run lint:product`. A file over its count fails. A file under its count also fails, so the count must be lowered in the same change. `--print` emits the measured counts.
+- It runs in `bun run lint:product`. A file over its count fails. A file under its count also fails, so the count must be lowered in the same change. `--print` emits the measured counts.
 - **`contracts/ledgers/library-size.json`**: the prebuilt core's stripped size per ABI. A `null` gates nothing.
 - **`contracts/ledgers/query-plans.json`**: the statements allowed to scan a big table or sort a paged read. `crates/core/tests/query_plans.rs` reads it.
 - The `ledgers` step compares each ledger with its copy at the merge base. A risen number is a finding, and so is a removed one. A gate run never writes a ledger.

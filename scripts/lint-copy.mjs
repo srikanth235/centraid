@@ -35,9 +35,8 @@
 // rule either form breaks counts once. In `copy/chat.json` the scan reads
 // `strings` only; `$comment` and `functions` are metadata, not copy.
 //
-// BUDGET. Like lint-native-controls.mjs this is a ratchet, not a judgment
-// call at commit time: BUDGET maps `rule -> { file: count }` with today's
-// measured counts and only shrinks. A file over its budget, or a file with
+// BUDGET. This is a ratchet, not a judgment call at commit time: BUDGET
+// maps `rule -> { file: count }` with today's measured counts and only shrinks. A file over its budget, or a file with
 // no entry that now counts, fails. A file UNDER its budget also fails — the
 // budget must be lowered in the same change, so the debt can never creep
 // back into the headroom a rewrite opened up. Never raise a number: cut the
