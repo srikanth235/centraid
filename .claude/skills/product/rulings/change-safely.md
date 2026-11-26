@@ -1,6 +1,6 @@
 # Change safely
 
-Trash, undo and history. The behaviour (words, rows, confirms) is in [design behaviour](../../design/behaviour.md#trash); the steps to adopt it are in [keep a promise](../../change/keep-a-promise.md).
+Trash, undo and history. The behaviour (words, rows, confirms) is in [design behaviour](../../design/behaviour.md#trash); the steps to adopt it are in [the kind registry](../../change/app-plane.md#8-the-kind-registry-and-the-promise-charter).
 
 - **Deleting has a model.** Trash first, restorable until the launch pass empties it, then purged. A holder (notebook, folder, task list, account) takes its members with it and brings back only the ones it took, and its confirm names how many. A list and an album never take their members. A person takes only what is theirs: contact points, dates and touches; notes, workouts, events, photographs, documents, payments and Locker items stay. A photograph or document captured inside an item is filed with it: it goes to the trash with the item and comes back with it, and is never listed in Trash on its own. A purge that cannot proceed refuses with a sentence naming why.
 - **Trash is one rule in every app and never promises a destruction that does not exist.** Every app moves to trash, restores, deletes forever and empties its trash, behind the outlined confirm, in the kit's words ([design behaviour](../../design/behaviour.md#trash)); the vault's shared verbs destroy for every kind, so no app offers restore only.

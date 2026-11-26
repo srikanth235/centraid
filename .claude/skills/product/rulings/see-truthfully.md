@@ -4,7 +4,7 @@ Page states, permissions, units and performance at scale.
 
 ## Page states
 
-A screen's state is `Loading`, `Ready` or `Failed`, and nothing else: there is no `Denied`, because apps are not principals (Locker's wall is Locker's own state). A read that failed, a refusal by the phone, a partial read and a check not run each say so inside the state they belong to, in a sentence ([principle 7](../SKILL.md#governing-principles)); emptiness is never the word for a failure, and 0 is never the word for unknown. The states and their words are the kit's: [status line and controls](../../design/behaviour.md#status-line), [how a screen reads](../../change/screen.md).
+A screen's state is `Loading`, `Ready` or `Failed`, and nothing else: there is no `Denied`, because apps are not principals (Locker's wall is Locker's own state). A read that failed, a refusal by the phone, a partial read and a check not run each say so inside the state they belong to, in a sentence ([principle 7](../SKILL.md#governing-principles)); emptiness is never the word for a failure, and 0 is never the word for unknown. The states and their words are the kit's: [status line and controls](../../design/behaviour.md#status-line), [how a screen reads](../../change/app-plane.md#2-the-read-registry-m1).
 
 ## What the source said
 

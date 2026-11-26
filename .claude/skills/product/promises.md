@@ -20,4 +20,4 @@ What every app owes a member. Eleven promises: P1–P8 look after the member's d
 
 Where the promises meet the member: the 24 words, pairing and "Back up" are the backup skill's ([backup/product.md](../backup/product.md)); permissions are asked once, at the moment of need, and a refusal reads the same way everywhere ([rulings/see-truthfully.md](rulings/see-truthfully.md)).
 
-Rulings behind these are in [rulings/](rulings/). To make an app keep one, see [keep a promise](../change/keep-a-promise.md).
+Rulings behind these are in [rulings/](rulings/). To make an app keep one, see [the kind registry](../change/app-plane.md#8-the-kind-registry-and-the-promise-charter).

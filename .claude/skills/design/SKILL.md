@@ -13,5 +13,5 @@ Every visual or UX change starts in `design/mockups/`. Values live in the mockup
 | Changing a board, a token or an icon; running `cargo xtask design` | [mockups.md](mockups.md) |
 | Deciding how a screen behaves: rooms, header, band, status line, search, controls, colour, accessibility | [behaviour.md](behaviour.md) |
 | Writing or changing a string, or the copy check | [wording.md](wording.md) |
-| Building the screen in Rust and both shells | [change/screen.md](../change/screen.md) |
+| Building the screen in Rust and both shells | [change/app-plane.md](../change/app-plane.md) |
 | Deciding what the product should do | [product](../product/SKILL.md) |

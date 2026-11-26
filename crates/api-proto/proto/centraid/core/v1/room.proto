@@ -1,0 +1,877 @@
+// The native wire of the app plane: rooms, blocks, four canvas slots, and the events back.
+// The meaning of every field is in `.claude/skills/change/app-plane.md`; this file states shape only.
+// Every interactive element carries a `selector_id`: the address an event names and a test taps.
+// A message states what a thing means, never how it looks.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+enum RoomKind {
+  ROOM_KIND_UNSPECIFIED = 0;
+  ROOM_KIND_HOME = 1;
+  ROOM_KIND_APP_PLACE = 2;
+  ROOM_KIND_PUSHED_PAGE = 3;
+  ROOM_KIND_EDITOR = 4;
+  ROOM_KIND_SHEET = 5;
+  ROOM_KIND_SYSTEM_PLACE = 6;
+  ROOM_KIND_STAGE = 7;
+}
+
+enum RoomTone {
+  ROOM_TONE_UNSPECIFIED = 0;
+  ROOM_TONE_NEUTRAL = 1;
+  ROOM_TONE_SEAM = 2;
+  ROOM_TONE_NET = 3;
+  ROOM_TONE_WARNING = 4;
+  ROOM_TONE_ACCENT = 5;
+}
+
+message Room {
+  RoomKind kind = 1;
+  string key = 2;
+  RoomHeader header = 3;
+  RoomBand band = 4;
+  oneof state {
+    RoomLoading loading = 5;
+    RoomReady ready = 6;
+    RoomFailed failed = 7;
+  }
+  RoomStatusLine status_line = 8;
+  RoomSearch search = 9;
+  RoomSelection selection = 10;
+  RoomPlace restore = 11;
+  bool secure = 12;
+}
+
+message RoomLoading {}
+
+message RoomFailed {
+  string sentence = 1;
+  string retry_label = 2;
+  string retry_selector_id = 3;
+}
+
+message RoomReady {
+  repeated RoomBlock blocks = 1;
+}
+
+message RoomHeader {
+  string title = 1;
+  string subtitle = 2;
+  string subtitle_clear_selector_id = 3;
+  RoomBack back = 4;
+  repeated RoomKey keys = 5;
+  RoomFilterMenu filter = 6;
+}
+
+message RoomBack {
+  string label = 1;
+  string selector_id = 2;
+}
+
+enum RoomKeyRole {
+  ROOM_KEY_ROLE_UNSPECIFIED = 0;
+  ROOM_KEY_ROLE_ADD = 1;
+  ROOM_KEY_ROLE_TOOL = 2;
+  ROOM_KEY_ROLE_MENU = 3;
+  ROOM_KEY_ROLE_VERB = 4;
+}
+
+message RoomKey {
+  string selector_id = 1;
+  RoomKeyRole role = 2;
+  string icon = 3;
+  string label = 4;
+  bool enabled = 5;
+  RoomMenu menu = 6;
+}
+
+message RoomBand {
+  repeated RoomTab tabs = 1;
+  string home_selector_id = 2;
+  string search_selector_id = 3;
+  RoomMenu more = 4;
+  string more_selector_id = 5;
+  bool more_selected = 6;
+}
+
+message RoomTab {
+  string selector_id = 1;
+  string label = 2;
+  string icon = 3;
+  bool selected = 4;
+}
+
+message RoomStatusLine {
+  string sentence = 1;
+  string action_label = 2;
+  string action_selector_id = 3;
+  bool refused = 4;
+}
+
+message RoomSearch {
+  bool open = 1;
+  string selector_id = 2;
+  string term = 3;
+  string placeholder = 4;
+  string corrected = 5;
+  string close_selector_id = 6;
+  repeated RoomRow containers = 7;
+  RoomRow ask = 8;
+}
+
+message RoomSelection {
+  bool on = 1;
+  string label = 2;
+  uint32 count = 3;
+  string select_all_selector_id = 4;
+  string done_selector_id = 5;
+  repeated RoomMenuItem actions = 6;
+}
+
+message RoomPlace {
+  string anchor_selector_id = 1;
+  uint32 anchor_fraction_milli = 2;
+  string search_term = 3;
+  repeated string filter_selector_ids = 4;
+  string lens = 5;
+}
+
+message RoomBlock {
+  oneof kind {
+    RoomHero hero = 1;
+    RoomSection section = 2;
+    RoomRow row = 3;
+    RoomFacts facts = 4;
+    RoomForm form = 5;
+    RoomChoice choice = 6;
+    RoomFigure figure = 7;
+    RoomProse prose = 8;
+    RoomMedia media = 9;
+    RoomProgress progress = 10;
+    RoomEmpty empty = 11;
+    RoomWall wall = 12;
+    RoomTiles tiles = 13;
+    RoomGlance glance = 14;
+    RoomTrash trash = 15;
+    RoomConfirm confirm = 16;
+    RoomMenu menu = 17;
+    RoomAttachments attachments = 20;
+    RoomLinked linked = 21;
+    RoomMentionedIn mentioned_in = 22;
+    RoomSays says = 23;
+    RoomEarlierVersions earlier_versions = 24;
+    RoomOrigin origin = 25;
+    RoomCalendarGrid calendar_grid = 40;
+    RoomPhotoGrid photo_grid = 41;
+    RoomNoteEditor note_editor = 42;
+    RoomChart chart = 43;
+  }
+}
+
+message RoomAction {
+  string selector_id = 1;
+  string label = 2;
+  string icon = 3;
+  bool enabled = 4;
+  bool destructive = 5;
+}
+
+message RoomChip {
+  string label = 1;
+  RoomTone tone = 2;
+  string remove_selector_id = 3;
+}
+
+message RoomMenu {
+  string selector_id = 1;
+  repeated RoomMenuSection sections = 2;
+}
+
+message RoomMenuSection {
+  string heading = 1;
+  repeated RoomMenuItem items = 2;
+}
+
+message RoomMenuItem {
+  string selector_id = 1;
+  string label = 2;
+  string secondary = 3;
+  string icon = 4;
+  bool destructive = 5;
+  bool checked = 6;
+  bool enabled = 7;
+  repeated RoomMenuItem submenu = 8;
+}
+
+message RoomFilterMenu {
+  RoomMenu menu = 1;
+  bool filtering = 2;
+  string clear_selector_id = 3;
+}
+
+message RoomGlyph {
+  string icon = 1;
+  string hue_key = 2;
+}
+
+message RoomThumb {
+  string ref = 1;
+  string alt = 2;
+  string hue_key = 3;
+}
+
+enum RoomCheckState {
+  ROOM_CHECK_STATE_UNSPECIFIED = 0;
+  ROOM_CHECK_STATE_OFF = 1;
+  ROOM_CHECK_STATE_ON = 2;
+  ROOM_CHECK_STATE_MIXED = 3;
+  ROOM_CHECK_STATE_PARTIAL = 4;
+}
+
+message RoomCheck {
+  string selector_id = 1;
+  RoomCheckState state = 2;
+}
+
+message RoomMark {
+  oneof kind {
+    RoomGlyph glyph = 1;
+    RoomThumb thumb = 2;
+    RoomCheck check = 3;
+  }
+}
+
+message RoomSwipe {
+  string selector_id = 1;
+  string label = 2;
+}
+
+message RoomRow {
+  string selector_id = 1;
+  string title = 2;
+  string meta = 3;
+  string trailing = 4;
+  RoomTone trailing_tone = 5;
+  repeated RoomChip chips = 6;
+  RoomMark mark = 7;
+  string a11y_label = 8;
+  bool dimmed = 9;
+  bool pending = 10;
+  bool selected = 11;
+  RoomMenu menu = 12;
+  RoomSwipe swipe = 13;
+}
+
+message RoomSection {
+  string selector_id = 1;
+  string heading = 2;
+  string count_label = 3;
+  RoomAction trailing = 4;
+  repeated RoomBlock blocks = 5;
+  string next_page_selector_id = 6;
+}
+
+message RoomHero {
+  string title = 1;
+  string noun = 2;
+  RoomMark mark = 3;
+  repeated string lines = 4;
+  repeated RoomChip chips = 5;
+  RoomAction primary = 6;
+  RoomMenu menu = 7;
+}
+
+enum RoomFactKind {
+  ROOM_FACT_KIND_UNSPECIFIED = 0;
+  ROOM_FACT_KIND_TEXT = 1;
+  ROOM_FACT_KIND_DATE = 2;
+  ROOM_FACT_KIND_MONEY = 3;
+  ROOM_FACT_KIND_LINK = 4;
+  ROOM_FACT_KIND_PHONE = 5;
+  ROOM_FACT_KIND_EMAIL = 6;
+  ROOM_FACT_KIND_ADDRESS = 7;
+  ROOM_FACT_KIND_SECRET = 8;
+}
+
+message RoomFact {
+  string label = 1;
+  string value = 2;
+  RoomFactKind kind = 3;
+  string open_selector_id = 4;
+  string copy_selector_id = 5;
+  bool sealed = 6;
+  string reveal_selector_id = 7;
+}
+
+message RoomFacts {
+  repeated RoomFact facts = 1;
+}
+
+message RoomOption {
+  string id = 1;
+  string label = 2;
+  bool selected = 3;
+}
+
+enum RoomChoiceStyle {
+  ROOM_CHOICE_STYLE_UNSPECIFIED = 0;
+  ROOM_CHOICE_STYLE_SEGMENTED = 1;
+  ROOM_CHOICE_STYLE_MENU = 2;
+  ROOM_CHOICE_STYLE_LIST = 3;
+  ROOM_CHOICE_STYLE_CHIPS = 4;
+}
+
+message RoomChoice {
+  string selector_id = 1;
+  string label = 2;
+  RoomChoiceStyle style = 3;
+  bool multiple = 4;
+  repeated RoomOption options = 5;
+}
+
+enum RoomTextKind {
+  ROOM_TEXT_KIND_UNSPECIFIED = 0;
+  ROOM_TEXT_KIND_LINE = 1;
+  ROOM_TEXT_KIND_PARAGRAPH = 2;
+  ROOM_TEXT_KIND_EMAIL = 3;
+  ROOM_TEXT_KIND_PHONE = 4;
+  ROOM_TEXT_KIND_URL = 5;
+  ROOM_TEXT_KIND_NUMBER = 6;
+}
+
+message RoomText {
+  RoomTextKind kind = 1;
+  string value = 2;
+  uint64 rev = 3;
+  uint32 max_chars = 4;
+  repeated RoomChip chips = 5;
+}
+
+message RoomMoney {
+  sint64 minor = 1;
+  string currency = 2;
+  uint32 exponent = 3;
+  string display = 4;
+}
+
+enum RoomMomentKind {
+  ROOM_MOMENT_KIND_UNSPECIFIED = 0;
+  ROOM_MOMENT_KIND_DAY = 1;
+  ROOM_MOMENT_KIND_TIME = 2;
+  ROOM_MOMENT_KIND_DAY_TIME = 3;
+}
+
+message RoomMoment {
+  RoomMomentKind kind = 1;
+  string value = 2;
+  string zone = 3;
+  string display = 4;
+  bool clearable = 5;
+}
+
+message RoomToggle {
+  bool on = 1;
+}
+
+message RoomItemPick {
+  string display = 1;
+  string noun = 2;
+  string clear_selector_id = 3;
+}
+
+message RoomFilePick {
+  string display = 1;
+  string clear_selector_id = 2;
+}
+
+message RoomSecret {
+  bool masked = 1;
+  string value = 2;
+  string reveal_selector_id = 3;
+}
+
+message RoomField {
+  string selector_id = 1;
+  string label = 2;
+  string hint = 3;
+  string error = 4;
+  bool required = 5;
+  bool focused = 6;
+  oneof input {
+    RoomText text = 10;
+    RoomMoney money = 11;
+    RoomMoment moment = 12;
+    RoomChoice choice = 13;
+    RoomToggle toggle = 14;
+    RoomItemPick item = 15;
+    RoomFilePick file = 16;
+    RoomSecret secret = 17;
+  }
+}
+
+message RoomFieldGroup {
+  string selector_id = 1;
+  repeated RoomField fields = 2;
+  string remove_selector_id = 3;
+}
+
+message RoomRepeat {
+  string selector_id = 1;
+  string label = 2;
+  repeated RoomFieldGroup rows = 3;
+  RoomAction add = 4;
+}
+
+enum RoomAutosavePhase {
+  ROOM_AUTOSAVE_PHASE_UNSPECIFIED = 0;
+  ROOM_AUTOSAVE_PHASE_CLEAN = 1;
+  ROOM_AUTOSAVE_PHASE_DIRTY = 2;
+  ROOM_AUTOSAVE_PHASE_SAVING = 3;
+  ROOM_AUTOSAVE_PHASE_SAVED = 4;
+  ROOM_AUTOSAVE_PHASE_REFUSED = 5;
+  ROOM_AUTOSAVE_PHASE_CONFLICT = 6;
+}
+
+message RoomAutosave {
+  RoomAutosavePhase phase = 1;
+  string label = 2;
+  bool refused = 3;
+  string reload_label = 4;
+  string reload_selector_id = 5;
+}
+
+message RoomExplicitSave {
+  string save_label = 1;
+  string save_selector_id = 2;
+  string cancel_label = 3;
+  string cancel_selector_id = 4;
+  bool save_enabled = 5;
+  bool dirty = 6;
+  bool drafted = 7;
+}
+
+message RoomForm {
+  repeated RoomField fields = 1;
+  repeated RoomRepeat repeats = 2;
+  oneof save {
+    RoomAutosave autosave = 3;
+    RoomExplicitSave explicit = 4;
+  }
+}
+
+message RoomFigure {
+  string label = 1;
+  string value = 2;
+  string caption = 3;
+  RoomTone tone = 4;
+  string selector_id = 5;
+}
+
+message RoomLinkSpan {
+  uint32 start = 1;
+  uint32 end = 2;
+  string selector_id = 3;
+}
+
+message RoomProse {
+  string text = 1;
+  repeated RoomLinkSpan spans = 2;
+}
+
+enum RoomMediaKind {
+  ROOM_MEDIA_KIND_UNSPECIFIED = 0;
+  ROOM_MEDIA_KIND_IMAGE = 1;
+  ROOM_MEDIA_KIND_VIDEO = 2;
+  ROOM_MEDIA_KIND_SCAN = 3;
+  ROOM_MEDIA_KIND_FILE = 4;
+}
+
+message RoomMedia {
+  string selector_id = 1;
+  RoomMediaKind kind = 2;
+  RoomThumb thumb = 3;
+  uint32 aspect_milli = 4;
+  string caption = 5;
+  string duration_label = 6;
+}
+
+message RoomProgress {
+  string label = 1;
+  uint64 done = 2;
+  uint64 total = 3;
+  string count_label = 4;
+  RoomAction cancel = 5;
+}
+
+message RoomEmpty {
+  RoomGlyph glyph = 1;
+  string title = 2;
+  string body = 3;
+  RoomAction action = 4;
+}
+
+message RoomWall {
+  string title = 1;
+  string body = 2;
+  RoomAction unlock = 3;
+  string failure = 4;
+}
+
+message RoomTile {
+  string selector_id = 1;
+  string label = 2;
+  string subtitle = 3;
+  RoomGlyph glyph = 4;
+}
+
+message RoomTiles {
+  repeated RoomTile tiles = 1;
+}
+
+message RoomGlance {
+  string selector_id = 1;
+  string title = 2;
+  repeated string lines = 3;
+  RoomGlyph glyph = 4;
+}
+
+message RoomTrashRow {
+  string title = 1;
+  string meta = 2;
+  RoomMark mark = 3;
+  string restore_selector_id = 4;
+  string purge_selector_id = 5;
+  string selector_id = 6;
+}
+
+message RoomTrash {
+  string heading = 1;
+  string retention = 2;
+  repeated RoomTrashRow rows = 3;
+  RoomAction empty_trash = 4;
+  string next_page_selector_id = 5;
+}
+
+enum RoomConfirmClass {
+  ROOM_CONFIRM_CLASS_UNSPECIFIED = 0;
+  ROOM_CONFIRM_CLASS_OUTLINED = 1;
+  ROOM_CONFIRM_CLASS_OWNER = 2;
+}
+
+message RoomConfirm {
+  RoomConfirmClass class = 1;
+  string title = 2;
+  string body = 3;
+  string warning = 4;
+  string confirm_label = 5;
+  string confirm_selector_id = 6;
+  string cancel_label = 7;
+  string cancel_selector_id = 8;
+}
+
+message RoomAttachments {
+  string heading = 1;
+  repeated RoomRow items = 2;
+  RoomMenu add = 3;
+  string next_page_selector_id = 4;
+}
+
+message RoomLinked {
+  string heading = 1;
+  repeated RoomRow items = 2;
+  RoomAction add = 3;
+  string next_page_selector_id = 4;
+}
+
+message RoomMentionedIn {
+  string heading = 1;
+  repeated RoomRow items = 2;
+  string next_page_selector_id = 3;
+}
+
+enum RoomSaysSource {
+  ROOM_SAYS_SOURCE_UNSPECIFIED = 0;
+  ROOM_SAYS_SOURCE_PHONE = 1;
+  ROOM_SAYS_SOURCE_STATEMENT = 2;
+}
+
+message RoomSaysField {
+  string label = 1;
+  string stated = 2;
+  string mine = 3;
+  string take_selector_id = 4;
+}
+
+message RoomSays {
+  RoomSaysSource source = 1;
+  string heading = 2;
+  repeated RoomSaysField fields = 3;
+  string take_label = 4;
+}
+
+message RoomEarlierVersions {
+  string summary = 1;
+  uint32 count = 2;
+  string selector_id = 3;
+}
+
+message RoomOrigin {
+  string line = 1;
+  string selector_id = 2;
+}
+
+enum RoomCalendarView {
+  ROOM_CALENDAR_VIEW_UNSPECIFIED = 0;
+  ROOM_CALENDAR_VIEW_DAY = 1;
+  ROOM_CALENDAR_VIEW_WEEK = 2;
+  ROOM_CALENDAR_VIEW_MONTH = 3;
+  ROOM_CALENDAR_VIEW_LIST = 4;
+  ROOM_CALENDAR_VIEW_YEAR = 5;
+}
+
+enum RoomCalendarItemKind {
+  ROOM_CALENDAR_ITEM_KIND_UNSPECIFIED = 0;
+  ROOM_CALENDAR_ITEM_KIND_EVENT = 1;
+  ROOM_CALENDAR_ITEM_KIND_TASK = 2;
+  ROOM_CALENDAR_ITEM_KIND_PERSON_DATE = 3;
+}
+
+message RoomCalendarItem {
+  string selector_id = 1;
+  RoomCalendarItemKind kind = 2;
+  string title = 3;
+  string time_label = 4;
+  bool all_day = 5;
+  uint32 start_minute = 6;
+  uint32 end_minute = 7;
+  string hue_key = 8;
+  bool done = 9;
+  bool overdue = 10;
+  bool needs_reply = 11;
+  string a11y_label = 12;
+}
+
+message RoomCalendarDay {
+  string day = 1;
+  string label = 2;
+  bool today = 3;
+  bool selected = 4;
+  bool in_scope = 5;
+  uint32 more_count = 6;
+  repeated RoomCalendarItem items = 7;
+}
+
+message RoomCalendarGrid {
+  RoomCalendarView view = 1;
+  string anchor_day = 2;
+  repeated RoomCalendarDay days = 3;
+  uint32 now_minute = 4;
+  string prev_selector_id = 5;
+  string next_selector_id = 6;
+  string today_selector_id = 7;
+  string create_selector_id = 8;
+}
+
+enum RoomPhotoZoom {
+  ROOM_PHOTO_ZOOM_UNSPECIFIED = 0;
+  ROOM_PHOTO_ZOOM_YEARS = 1;
+  ROOM_PHOTO_ZOOM_MONTHS = 2;
+  ROOM_PHOTO_ZOOM_ALL = 3;
+}
+
+enum RoomPhotoTileKind {
+  ROOM_PHOTO_TILE_KIND_UNSPECIFIED = 0;
+  ROOM_PHOTO_TILE_KIND_PHOTO = 1;
+  ROOM_PHOTO_TILE_KIND_VIDEO = 2;
+  ROOM_PHOTO_TILE_KIND_SCAN = 3;
+}
+
+message RoomPhotoTile {
+  string selector_id = 1;
+  RoomPhotoTileKind kind = 2;
+  RoomThumb thumb = 3;
+  uint32 aspect_milli = 4;
+  string duration_label = 5;
+  bool starred = 6;
+  bool selected = 7;
+  string a11y_label = 8;
+}
+
+message RoomPhotoSection {
+  string heading = 1;
+  repeated RoomPhotoTile tiles = 2;
+}
+
+message RoomPhotoViewer {
+  string tile_selector_id = 1;
+  uint32 index = 2;
+  uint32 count = 3;
+  RoomMedia current = 4;
+  string previous_ref = 5;
+  string next_ref = 6;
+  RoomMenu menu = 7;
+  repeated RoomBlock details = 8;
+  bool details_open = 9;
+  bool slideshow = 10;
+}
+
+message RoomPhotoGrid {
+  RoomPhotoZoom zoom = 1;
+  repeated RoomPhotoSection sections = 2;
+  string next_page_selector_id = 3;
+  RoomPhotoViewer viewer = 4;
+}
+
+message RoomNoteMentionCandidate {
+  string selector_id = 1;
+  string title = 2;
+  string noun = 3;
+}
+
+message RoomNoteMentionSuggest {
+  string trigger = 1;
+  string query = 2;
+  repeated RoomNoteMentionCandidate candidates = 3;
+}
+
+message RoomNoteEditor {
+  string selector_id = 1;
+  string title = 2;
+  string body = 3;
+  uint64 rev = 4;
+  string base_revision_id = 5;
+  bool read_only = 6;
+  bool focused = 7;
+  RoomAutosave autosave = 8;
+  RoomNoteMentionSuggest suggest = 9;
+  repeated RoomMedia assets = 10;
+}
+
+enum RoomChartMark {
+  ROOM_CHART_MARK_UNSPECIFIED = 0;
+  ROOM_CHART_MARK_LINE = 1;
+  ROOM_CHART_MARK_BAR = 2;
+  ROOM_CHART_MARK_AREA = 3;
+  ROOM_CHART_MARK_POINT = 4;
+}
+
+message RoomChartPoint {
+  string id = 1;
+  double x = 2;
+  double y = 3;
+  double y_low = 4;
+  double y_high = 5;
+  string x_label = 6;
+  string y_label = 7;
+  string a11y_label = 8;
+}
+
+message RoomChartSeries {
+  string id = 1;
+  string label = 2;
+  string hue_key = 3;
+  RoomChartMark mark = 4;
+  string stack = 5;
+  repeated RoomChartPoint points = 6;
+}
+
+message RoomChartTick {
+  double at = 1;
+  string label = 2;
+}
+
+message RoomChartRule {
+  double at = 1;
+  string label = 2;
+  RoomTone tone = 3;
+}
+
+message RoomChart {
+  string selector_id = 1;
+  string summary = 2;
+  repeated RoomChartSeries series = 3;
+  repeated RoomChartTick x_ticks = 4;
+  repeated RoomChartTick y_ticks = 5;
+  repeated RoomChartRule rules = 6;
+  string readout_point_id = 7;
+  string empty_sentence = 8;
+}
+
+message RoomEvent {
+  oneof kind {
+    RoomTap tap = 1;
+    RoomChange change = 2;
+    RoomScrolled scrolled = 3;
+    RoomCanvasEvent canvas = 4;
+  }
+}
+
+message RoomTap {
+  string selector_id = 1;
+}
+
+message RoomChange {
+  string selector_id = 1;
+  uint64 seq = 2;
+  oneof value {
+    string text = 3;
+    sint64 integer = 4;
+    bool flag = 5;
+    string option = 6;
+    string moment = 7;
+  }
+}
+
+message RoomScrolled {
+  string anchor_selector_id = 1;
+  uint32 anchor_fraction_milli = 2;
+}
+
+message RoomCalendarPickDay {
+  string day = 1;
+}
+
+message RoomCalendarCreateAt {
+  string day = 1;
+  uint32 minute = 2;
+  bool all_day = 3;
+}
+
+message RoomPhotoZoomed {
+  RoomPhotoZoom zoom = 1;
+}
+
+message RoomPhotoPaged {
+  uint32 index = 1;
+}
+
+message RoomNoteEdited {
+  string title = 1;
+  string body = 2;
+  uint64 seq = 3;
+  string base_revision_id = 4;
+}
+
+message RoomNoteTriggered {
+  string trigger = 1;
+  string query = 2;
+}
+
+message RoomChartScrubbed {
+  string point_id = 1;
+}
+
+message RoomCanvasEvent {
+  string selector_id = 1;
+  oneof kind {
+    RoomCalendarPickDay calendar_day = 2;
+    RoomCalendarCreateAt calendar_create = 3;
+    RoomPhotoZoomed photo_zoom = 4;
+    RoomPhotoPaged photo_page = 5;
+    RoomNoteEdited note_edit = 6;
+    RoomNoteTriggered note_trigger = 7;
+    RoomChartScrubbed chart_scrub = 8;
+  }
+}
