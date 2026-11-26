@@ -83,7 +83,7 @@ use crate::native::step::{StepOptions, decode_step};
 use crate::native::think::TraceMode;
 use crate::native::world::Key;
 use crate::native::{Flags, Session};
-use crate::prompt::{Budget, HISTORY_TURNS, Recorded, Turn, question};
+use crate::prompt::{Budget, HISTORY_TURNS, Turn, question};
 use crate::result::{CARD_CAP, Card};
 use crate::turn::{Answered, Event, Plane, Refusal};
 use log::Log;
@@ -490,7 +490,7 @@ impl NativeChat {
     fn remember(&mut self, message: &str, said: &str) {
         self.said.push(Turn {
             user: question(message),
-            record: Recorded::Answer(said.to_owned()),
+            said: said.to_owned(),
         });
         let surplus = self.said.len().saturating_sub(HISTORY_TURNS);
         self.said.drain(..surplus);

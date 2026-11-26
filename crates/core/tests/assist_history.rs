@@ -444,53 +444,6 @@ fn a_reopened_threads_retry_asks_its_last_question_again() {
     assert_ne!(stored.messages[1].text, FOUND_TASKS);
 }
 
-/// A thread stored before the native plane holds `tool` and `no_tool` records (#1078). The vault
-/// keeps them; the chat opens the thread all the same, and the turn that follows is native.
-#[test]
-fn a_thread_stored_by_the_routed_plane_still_reopens_and_joins() {
-    let sample = common::chat::sample();
-    let routed_tool = r#"{"user":"What is due today?","record":{"kind":"tool","call_json":"{\"tool\":\"agenda.task_list\",\"args\":{\"view\":\"today\"}}","headline":"2 tasks due today","answer":"Two things are due."}}"#;
-    let saved = command(
-        &sample,
-        "thread.save_turn",
-        serde_json::json!({ "turn": {
-            "question": { "text": "What is due today?" },
-            "answer": {
-                "outcome": "answered",
-                "text": "Two things are due.",
-                "cards": [],
-                "record_json": routed_tool,
-            },
-        }}),
-        "routed-1",
-    );
-    assert_eq!(
-        saved.status,
-        centraid_vault::CommandStatus::Executed,
-        "{saved:?}"
-    );
-    let stored = saved.output;
-    let thread_id = stored["thread_id"]
-        .as_str()
-        .expect("a thread id")
-        .to_owned();
-
-    sample.install(script(&read_tasks()));
-    let reopened = start_thread(&sample, &thread_id).expect("an old thread reopens");
-    let sent = send(
-        &sample,
-        reopened.session_id,
-        1,
-        "and tomorrow?",
-        false,
-        vec![],
-    );
-    assert_eq!(sent.thread_id, thread_id);
-    let stored = thread(&sample, &thread_id);
-    assert_eq!(stored.messages.len(), 4);
-    assert_eq!(stored.messages[1].text, "Two things are due.");
-}
-
 #[test]
 fn a_thread_that_is_not_in_the_vault_does_not_reopen() {
     let sample = common::chat::sample();

@@ -26,9 +26,8 @@
 //! No SQL, no connection of its own, no engine, and no persistence of its own: a
 //! chat's session is in memory and ends with the app. What was said is saved by
 //! `crates/core` through the `chat.*` commands. A stored thread reopens into a
-//! fresh native session (R-1088-10); the old `tool` and `no_tool` records a
-//! thread may hold still read ([`prompt::Turn::from_json`]), so no thread stops
-//! opening. The vault is reached only through [`native::Door`], which
+//! fresh native session (R-1088-10), with the turns that carried an attachment
+//! rebuilt from the thread's own words. The vault is reached only through [`native::Door`], which
 //! `crates/core` implements over the query path a screen uses; the model goes
 //! through [`model::Model`], which the llama.cpp binding implements.
 //!

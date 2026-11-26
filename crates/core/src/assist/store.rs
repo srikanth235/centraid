@@ -12,8 +12,8 @@
 //! # WHAT IS SAVED, AND WHAT IS LOST ON A CRASH
 //!
 //! A COMPLETED turn is one commit: the question, the answer (or the refusal the
-//! member was shown, or the words drawn before a stop), its cards and its
-//! attachments. A turn that is still running when the process dies is lost
+//! member was shown, or the words drawn before a stop), its cards (the items they show, and no word
+//! of them) and its attachments. A turn that is still running when the process dies is lost
 //! WHOLE and never kept half: the save happens after the plane returns, so
 //! there is no moment at which the vault holds a question with no answer. That
 //! is deliberate. A half-written turn would be a stored message the member
@@ -32,18 +32,20 @@
 //!
 //! # NOTHING HERE LETS A PICTURE INTO THE VAULT
 //!
-//! A vault photograph or document is saved as the reference it is. A camera-roll
-//! image is saved as a thumbnail of at most [`THUMBNAIL_EDGE`] pixels, made from
+//! A vault photograph or document is saved as the reference it is, with no word of it: its title is
+//! read live. A camera-roll image is saved with its own label and as a thumbnail of at most [`THUMBNAIL_EDGE`] pixels, made from
 //! the pixels the model was shown; the picture itself never is.
 
 use std::io::Cursor;
 
 use base64::Engine as _;
 use centraid_api_proto::core_v1 as wire;
-use centraid_assist::attach::ImageData;
+use centraid_assist::attach::{ImageData, Named, defang, marker_of};
+use centraid_assist::native::member::MemberAction;
 use centraid_assist::native::park::Confirmed;
-use centraid_assist::prompt::Turn;
+use centraid_assist::prompt::{Turn, question};
 use centraid_assist::{App, Attachments, Card, Notice, Refusal, Session};
+use centraid_vault::chat::{StoredTurn, TurnAttachment};
 use centraid_vault::commands::CommandStatus;
 
 use crate::handle::HandleState as Handle;
@@ -200,7 +202,10 @@ pub fn refs_of(
 }
 
 fn attachment_json(attachment: &AttachmentRef) -> serde_json::Value {
-    let mut out = serde_json::json!({ "form": attachment.form, "label": attachment.label });
+    let mut out = serde_json::json!({ "form": attachment.form });
+    if attachment.form == "image" {
+        out["label"] = serde_json::json!(attachment.label);
+    }
     if let Some(id) = &attachment.entity_id {
         out["entity_id"] = serde_json::json!(id);
     }
@@ -221,38 +226,44 @@ pub struct Turned<'a> {
     pub question: &'a str,
     pub attachments: &'a [AttachmentRef],
     pub said: &'a Said,
-    /// The assistant's routing record, when the plane kept one.
-    pub record: Option<&'a Turn>,
+}
+
+/// What a card saves: the item it shows and a closed code, never a word of it. A qualifier that is
+/// no closed code is dropped.
+fn card_json(card: &Card) -> serde_json::Value {
+    let mut out = serde_json::json!({ "entity_id": card.id });
+    if let Some(code) = stored_code(&card.qualifier) {
+        out["qualifier"] = serde_json::json!(code);
+    }
+    out
+}
+
+/// A card qualifier as the closed code the vault keeps: a member action (`reveal:password`) as
+/// `reveal_password`, a plain code as it is, anything else none.
+fn stored_code(qualifier: &str) -> Option<String> {
+    if let Some(action) = MemberAction::from_card("", qualifier) {
+        return Some(action.code());
+    }
+    let closed = !qualifier.is_empty()
+        && qualifier.len() <= 24
+        && qualifier.starts_with(|c: char| c.is_ascii_lowercase())
+        && qualifier
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c == '_');
+    closed.then(|| qualifier.to_owned())
 }
 
 fn command_input(turned: &Turned<'_>, thread: Option<&str>, replace: bool) -> serde_json::Value {
     let mut answer = serde_json::json!({
         "outcome": turned.said.outcome,
         "text": turned.said.text,
-        "cards": turned.said.cards.iter().map(|card| {
-            let mut out = serde_json::json!({
-                "app": card.app.id(), "entity": card.entity, "id": card.id, "title": card.title,
-            });
-            for (key, value) in [
-                ("qualifier", &card.qualifier),
-                ("subtitle", &card.subtitle),
-                ("meta", &card.meta),
-            ] {
-                if !value.is_empty() {
-                    out[key] = serde_json::json!(value);
-                }
-            }
-            out
-        }).collect::<Vec<_>>(),
+        "cards": turned.said.cards.iter().map(card_json).collect::<Vec<_>>(),
     });
     if let Some(word) = turned.said.refusal {
         answer["refusal"] = serde_json::json!(word);
     }
     if let Some(word) = turned.said.notice {
         answer["notice"] = serde_json::json!(word);
-    }
-    if let Some(record) = turned.record {
-        answer["record_json"] = serde_json::json!(record.to_json());
     }
     let mut question = serde_json::json!({ "text": turned.question });
     if !turned.attachments.is_empty() {
@@ -418,6 +429,27 @@ pub(super) fn settle_slot(
     )
 }
 
+/// A stored turn as the prompt holds it: the marker of what it carried (a deleted photograph or
+/// document drawn as such) and the question, then what was said.
+fn turn_of(stored: &StoredTurn) -> Turn {
+    fn named(held: &TurnAttachment) -> Named<'_> {
+        held.label.as_deref().map_or(Named::Deleted, Named::As)
+    }
+    let photo = stored
+        .attachments
+        .iter()
+        .find(|held| held.form != "document");
+    let document = stored
+        .attachments
+        .iter()
+        .find(|held| held.form == "document");
+    let marker = marker_of(photo.map(named), document.map(named));
+    Turn {
+        user: format!("{marker} {}", question(&defang(&stored.question))),
+        said: stored.answer.clone(),
+    }
+}
+
 /// A stored thread, as a session and its scope.
 pub struct Reopened {
     pub session: Session,
@@ -440,7 +472,7 @@ pub fn reopen(handle: &Handle, thread_id: &str) -> crate::error::Result<Option<R
         let history: Vec<Turn> = vault
             .chat_history(thread_id, REHYDRATE_TURNS)?
             .iter()
-            .filter_map(|turn| Turn::from_json(turn.record_json.as_deref()?))
+            .map(turn_of)
             .collect();
         let last_question = vault.chat_last_question(thread_id)?;
         Ok(Some(Reopened {
@@ -566,7 +598,6 @@ mod tests {
             question: "what is due?",
             attachments: &[],
             said: &said,
-            record: None,
         };
         let fresh = command_input(&turned, None, false);
         assert_eq!(fresh["scope_app"], "calendar");
@@ -575,5 +606,122 @@ mod tests {
         assert_eq!(again["thread_id"], "t-1");
         assert_eq!(again["replace_last"], true);
         assert!(again.get("scope_app").is_none());
+    }
+
+    #[test]
+    fn a_card_saves_the_item_and_a_closed_code_and_no_word_of_it() {
+        let said = Said {
+            outcome: "answered",
+            text: "Rent.".to_owned(),
+            cards: vec![
+                Card::new(App::Reminders, "task", "t-1", "Pay the rent").subtitle("Today"),
+                Card {
+                    qualifier: "reveal:password".to_owned(),
+                    ..Card::new(App::Locker, "locker_item", "i-1", "Bank")
+                },
+                Card {
+                    qualifier: "2026-10-08".to_owned(),
+                    ..Card::new(App::Calendar, "event", "e-1", "Standup")
+                },
+            ],
+            ..Said::default()
+        };
+        let turned = Turned {
+            key: "k",
+            thread: None,
+            replace_last: false,
+            scope: None,
+            question: "what is due?",
+            attachments: &[],
+            said: &said,
+        };
+        let input = command_input(&turned, None, false);
+        assert_eq!(
+            input["turn"]["answer"]["cards"],
+            serde_json::json!([
+                { "entity_id": "t-1" },
+                { "entity_id": "i-1", "qualifier": "reveal_password" },
+                { "entity_id": "e-1" },
+            ])
+        );
+        let text = input.to_string();
+        for word in ["Pay the rent", "Bank", "Standup", "Today", "reveal:"] {
+            assert!(!text.contains(word), "{word}");
+        }
+    }
+
+    #[test]
+    fn only_an_image_saves_its_label() {
+        let attachments = [
+            AttachmentRef {
+                form: "photo",
+                label: "Truckee river bend".to_owned(),
+                entity_id: Some("p-1".to_owned()),
+                thumbnail: None,
+            },
+            AttachmentRef {
+                form: "document",
+                label: "Tahoe packing list".to_owned(),
+                entity_id: Some("d-1".to_owned()),
+                thumbnail: None,
+            },
+            AttachmentRef {
+                form: "image",
+                label: "Camera roll".to_owned(),
+                entity_id: None,
+                thumbnail: Some("data:image/jpeg;base64,AAAA".to_owned()),
+            },
+        ];
+        let said = Said::default();
+        let turned = Turned {
+            key: "k",
+            thread: None,
+            replace_last: false,
+            scope: None,
+            question: "what is this?",
+            attachments: &attachments,
+            said: &said,
+        };
+        let input = command_input(&turned, None, false);
+        let saved = &input["turn"]["question"]["attachments"];
+        assert_eq!(
+            saved[0],
+            serde_json::json!({ "form": "photo", "entity_id": "p-1" })
+        );
+        assert_eq!(
+            saved[1],
+            serde_json::json!({ "form": "document", "entity_id": "d-1" })
+        );
+        assert_eq!(saved[2]["label"], "Camera roll");
+        let text = input.to_string();
+        assert!(!text.contains("Truckee") && !text.contains("Tahoe"));
+    }
+
+    #[test]
+    fn a_reopened_turn_draws_the_live_title_or_a_tombstone() {
+        let stored = |attachments: Vec<TurnAttachment>| StoredTurn {
+            question: "what  is this?".to_owned(),
+            attachments,
+            answer: "A river.".to_owned(),
+        };
+        let held = |form: &str, label: Option<&str>| TurnAttachment {
+            form: form.to_owned(),
+            label: label.map(str::to_owned),
+        };
+        assert_eq!(
+            turn_of(&stored(vec![held("photo", Some("Truckee river bend"))])),
+            Turn {
+                user: "[Photo: Truckee river bend] what is this?".to_owned(),
+                said: "A river.".to_owned(),
+            }
+        );
+        assert_eq!(
+            turn_of(&stored(vec![held("photo", None), held("document", None)])).user,
+            "[A deleted photo] [A deleted document] what is this?"
+        );
+        assert_eq!(
+            turn_of(&stored(vec![held("image", Some("Camera roll"))])).user,
+            "[Photo: Camera roll] what is this?"
+        );
     }
 }

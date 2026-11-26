@@ -280,7 +280,7 @@ fn real_tokens(model: &Arc<dyn Model>, text: &str) -> u32 {
 #[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
 fn the_token_estimate_never_undercounts_the_real_tokenizer() {
     use centraid_assist::attach::{Attachments, TextDoc, attach_prompt};
-    use centraid_assist::prompt::{Recorded, Turn, chat_prompt, estimate_tokens};
+    use centraid_assist::prompt::{Turn, chat_prompt, estimate_tokens};
 
     let Some(model) = model() else { return };
     let kinds: Vec<(&str, String)> = vec![
@@ -362,11 +362,11 @@ fn the_token_estimate_never_undercounts_the_real_tokenizer() {
     let history = [
         Turn {
             user: "what tasks do I have?".to_owned(),
-            record: Recorded::Answer("Found 12 tasks. Showing 6.".to_owned()),
+            said: "Found 12 tasks. Showing 6.".to_owned(),
         },
         Turn {
             user: "[Document: Tahoe packing list] what should I bring?".to_owned(),
-            record: Recorded::Attachment("The tent, the stove and a headlamp.".to_owned()),
+            said: "The tent, the stove and a headlamp.".to_owned(),
         },
     ];
     let document = Attachments {

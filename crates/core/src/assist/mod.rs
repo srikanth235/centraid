@@ -762,7 +762,6 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
     // holds it; the parked step holds it alone until the confirm seals it.
     let stored_question: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
     let persist = |said: &store::Said,
-                   record: Option<&centraid_assist::prompt::Turn>,
                    resolved: Option<&centraid_assist::Attachments>|
      -> Option<store::Saved> {
         let refs = if asked.attachments.is_empty() && asked.regenerate {
@@ -787,7 +786,6 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
                     .unwrap_or_else(|| text.trim()),
                 attachments: &refs,
                 said,
-                record,
             },
         );
         *locked(&slot.last_attachments) = refs;
@@ -800,7 +798,7 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
     let end_without_a_turn =
         |refusal: &Refusal, resolved: Option<&centraid_assist::Attachments>| {
             let saved = said_of_refusal(refusal, String::new(), Vec::new())
-                .and_then(|said| persist(&said, None, resolved));
+                .and_then(|said| persist(&said, resolved));
             refuse(handle, session_id, turn_id, refusal, saved.as_ref())
         };
 
@@ -853,24 +851,14 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
     // EVERY QUESTION GOES TO THE NATIVE PLANE; A TURN WITH AN ATTACHMENT TAKES THE ATTACHED PATH
     // (R-1088-9): a photograph or a document is read over the question, with no tools.
     let attached = carried.as_ref().filter(|held| !held.is_empty());
-    let (outcome, record) = if let Some(attachments) = attached {
+    let outcome = if let Some(attachments) = attached {
         let plane = Plane {
             model: &*model,
             budget: Budget::DEFAULT,
         };
-        let history_before = session.history().len();
-        let outcome =
-            plane.run_attached_turn(&mut session, &text, attachments, &slot.cancel, &mut sink);
-        // The plane's own record of the turn, when it kept one: what a reopened chat's next
-        // attachment turn reads.
-        let record = (session.history().len() == history_before + 1)
-            .then(|| session.history().last().cloned())
-            .flatten();
-        (outcome, record)
+        plane.run_attached_turn(&mut session, &text, attachments, &slot.cancel, &mut sink)
     } else {
-        // The old session only remembers the question, so Retry asks it again. The native turn
-        // keeps no record: a reopened thread starts fresh (R-1088-10), so there is nothing a
-        // stored record would restore.
+        // The old session only remembers the question, so Retry asks it again.
         session.note_question(&text);
         // THE ONE SWITCH (#1188 G4): a vault turn runs with the adapter on when the record's
         // adapter is the one for the model in use; the attached path above never does.
@@ -895,7 +883,7 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
                 .as_ref()
                 .map(|chat| chat.redacted(text.trim()));
         }
-        (outcome, None)
+        outcome
     };
     let response = match outcome {
         Ok(answered) => {
@@ -909,23 +897,9 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
                 text: answered.text.clone(),
                 refusal: None,
                 notice: store::notice_word(&answered.notices),
-                // The proposal's rows are kept as cards, so a thread reopened later draws their
-                // titles on the inert card (the pending write itself is memory).
-                cards: answered
-                    .cards
-                    .iter()
-                    .cloned()
-                    .chain(
-                        pending_seen
-                            .as_ref()
-                            .map(|card| {
-                                centraid_assist::native_turn::cards::step_cards(&card.steps)
-                            })
-                            .unwrap_or_default(),
-                    )
-                    .collect(),
+                cards: answered.cards.clone(),
             };
-            let saved = persist(&said, record.as_ref(), carried.as_ref());
+            let saved = persist(&said, carried.as_ref());
             sent(
                 session_id,
                 turn_id,
@@ -938,7 +912,7 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
         }
         Err(refusal) => {
             let saved = said_of_refusal(&refusal, streamed, cards_seen)
-                .and_then(|said| persist(&said, record.as_ref(), carried.as_ref()));
+                .and_then(|said| persist(&said, carried.as_ref()));
             refused(session_id, turn_id, &refusal, saved.as_ref())
         }
     };
