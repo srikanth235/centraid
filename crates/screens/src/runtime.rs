@@ -316,7 +316,6 @@ impl Runtime {
             // or an effect for a screen the same update closes would be drawn
             // or performed for nothing.
             out.views.retain(|view| view.instance != id);
-            out.deltas.retain(|delta| delta.instance != id);
             // ...EXCEPT A WITHDRAWN PROMPT: the screen's goodbye asked the shell to
             // take down the OS prompt it raised, and that must outlive the screen.
             out.effects
@@ -940,7 +939,6 @@ impl Runtime {
     fn empty(update: &wire::ScreenUpdate) -> bool {
         update.navigation.is_none()
             && update.views.is_empty()
-            && update.deltas.is_empty()
             && update.effects.is_empty()
             && update.closed.is_empty()
     }

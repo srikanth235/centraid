@@ -65,12 +65,6 @@ use centraid_vault::value::Value;
 use crate::error::{CoreError, Result};
 
 pub(crate) mod chat;
-// The shell's import reads (lane I): the folders a vault follows.
-pub(crate) mod imports;
-// What the phone says that differs from a followed row (#1183).
-pub(crate) mod follow;
-// A record's earlier values (#1185).
-pub(crate) mod history;
 
 /// Answer one app query against the open vault.
 ///
@@ -107,7 +101,6 @@ pub(crate) fn answer_recording(
     })
 }
 
-type Answer = wire::app_query_response::Answer;
 /// An empty string on the wire is the loader's `None`: proto3 has no absent
 /// string, and every loader already reads `""` as "not stated".
 fn non_empty(value: &str) -> Option<&str> {
@@ -137,21 +130,6 @@ pub(crate) fn zone_of(vault: &Vault, stated: &str) -> Result<FireZone> {
             }
         },
     })
-}
-
-/// THE ZONE OF A DECORATION: [`zone_of`]'s rule, except that a request which
-/// states none on a vault that names none gets `None` rather than a refusal.
-/// For an answer whose civil readings are a decoration (an editor's "Edited",
-/// a search hit's day, a file name) — failing the whole read over one would
-/// take the thing away to report its label. The readings are then EMPTY,
-/// never UTC; an unknown name is still refused, because a device that named
-/// a zone meant one.
-fn zone_if_any(vault: &Vault, stated: &str) -> Result<Option<FireZone>> {
-    let stated = non_empty(stated.trim());
-    if stated.is_none() && vault.time_zone()?.is_none() {
-        return Ok(None);
-    }
-    zone_of(vault, stated.unwrap_or_default()).map(Some)
 }
 
 /// A loader's answer as the wire's: the data, the denial, or the error — with

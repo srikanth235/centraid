@@ -133,57 +133,19 @@ message AppQueryResponse {
     // see `vault_screens.proto`).
     Holdings holdings = 1540;
     // The shell's own answers (lane I: the followed folders a vault holds).
-    ImportsFilesHeld imports_files_held = 1700;
     // The phone stores the vault was following, with the device that last did (#1185):
     // `shell.followed-stores`, read by the Reconnect screen.
-    FollowedStores followed_stores = 1705;
     // What the phone says that differs from a followed row (#1183): `shell.phone-differences`.
-    FollowDifferences follow_differences = 1702;
     // A record's earlier values, a page (#1185): `shell.earlier-versions`, and how many it
     // holds, `shell.earlier-count`.
-    EarlierVersions earlier_versions = 1703;
-    EarlierCount earlier_count = 1704;
     // One earlier version, whole (#1185): `shell.earlier-record`, behind the preview.
-    EarlierRecord earlier_record = 1712;
     // Where one record came from (#1185): `shell.origin-of`.
-    OriginOf origin_of = 1706;
     // Where the last read of a phone store got to (#1183): `shell.origin-cursor`.
-    OriginCursor origin_cursor = 1707;
     // The general link (#1185): what an item is linked to, `shell.links`, and the items the
     // picker offers, `shell.link-candidates`.
-    LinkedItems linked_items = 1710;
-    LinkCandidates link_candidates = 1711;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }
-}
-
-// The phone stores a vault follows, as its `origin` rows hold them: the shell query
-// `followed-stores`. A restored vault holds these although the new phone follows nothing yet.
-message FollowedStores {
-  repeated FollowedStore stores = 1;
-}
-
-message FollowedStore {
-  string origin_id = 1;
-  // `contacts`, `calendar`, `files` or `health`.
-  string system = 2;
-  // The shell's own name for the source (`folder:<uuid>` for a folder).
-  string origin_ref = 3;
-  // An account, a calendar, a folder or a store, as the member knows it.
-  string label = 4;
-  // The install that last followed it.
-  string device_id = 5;
-  // What the origin fills: the id of the calendar a phone calendar feeds, the folder a folder
-  // follow feeds; empty when it fills nothing (an account of contacts).
-  string fills = 6;
-}
-
-// The cursor a phone store's origin holds for this install (#1183): the shell query
-// `origin-cursor`. Empty when there is none, the origin is not there, or another install wrote it,
-// which is a complete read.
-message OriginCursor {
-  string cursor = 1;
 }
 
 // A CONSENT DENIAL, the shape every app's payload carries.
