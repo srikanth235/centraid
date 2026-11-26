@@ -37,7 +37,7 @@ A test says what must stay true, on counts and data, the same on every machine. 
 
 - `centraid_screens::testing::Driver` runs the real core through the door a shell uses. The test plays the shell.
 - Call `start()`, `send(instance, event)`, `nav(..)` and `answer_effect(..)`. Assert on `driver.views`, `driver.effects` and `driver.navigation`. `serve` answers the secrets plumbing, and `pump` drains pushed events and returns how many arrived.
-- `crates/screens/tests/proof.rs` is the model. Cover loading, data, a failed read, empty, a refusal sentence and each effect answer. The steps are in [screen](../change/screen.md).
+- `crates/screens/tests/proof.rs` is the model. Cover loading, data, a failed read, empty, a refusal sentence and each effect answer. The steps are in [app-plane](../change/app-plane.md).
 - `follow_coordinator.rs` shows a test that counts reads and permission asks.
 - Each app has `<app>_support` helpers under `crates/screens/tests/`.
 
