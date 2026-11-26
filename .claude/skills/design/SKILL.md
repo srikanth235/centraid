@@ -6,7 +6,7 @@ description: >-
 
 # Design
 
-Every visual or UX change starts in `design/mockups/`. Values live in the mockups and `design/tokens.toml`; behaviour and words live here. Both shells follow the same behaviour, words and selector ids, never the same pixels.
+Every visual or UX change starts in `design/mockups/`. Boards draw with roles from `design/tokens.toml` (`var(--role)`, never a value); behaviour and words live here. Both shells follow the same behaviour, words and selector ids, never the same pixels.
 
 | If you are doing | Read |
 | --- | --- |

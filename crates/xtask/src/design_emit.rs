@@ -7,10 +7,10 @@
 //! design/mockups/    ─┤                      mobile/androidApp/.../design/{Tokens,Catalog,Words}.kt
 //!   X.dc.html        ─┤                      mobile/androidApp/src/main/res/{values,values-night,font}
 //! crates/screens/    ─┘                      scripts/{docs,home}-site/public/assets/{centraid-tokens.css,fonts}
-//!   src/strings/*.rs                         design/mockups/XDark.dc.html
+//!   src/strings/*.rs                         design/mockups/{tokens.css,XDark.dc.html}
 //! ```
 //!
-//! This replaces the TypeScript emitters and `make_dark.py` it grew out of. The
+//! This replaces the TypeScript emitters it grew out of. The
 //! sites' sheet is [`crate::design_site`], the dark mockups are
 //! [`crate::design_boards`], and [`crate::design_site::lint`] checks what the
 //! sites author on top of the sheet. The output is
