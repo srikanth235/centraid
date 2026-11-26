@@ -176,6 +176,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.Request.kind.screen")
         .boxed(".centraid.core.v1.Response.kind.screen")
         .boxed(".centraid.core.v1.Event.kind.screen")
+        .boxed(".centraid.core.v1.Event.kind.room")
+        .boxed(".centraid.core.v1.Event.kind.notify")
+        .boxed(".centraid.core.v1.Response.kind.notify")
         .boxed(".centraid.core.v1.AppQueryResponse.answer.agenda_task")
         // The event detail carries its calendar row since #1047.
         .boxed(".centraid.core.v1.AppQueryResponse.answer.agenda_event")

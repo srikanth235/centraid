@@ -25,9 +25,11 @@ import "centraid/core/v1/change.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
+import "centraid/core/v1/notify_screens.proto";
 import "centraid/core/v1/originals.proto";
 import "centraid/core/v1/phone.proto";
 import "centraid/core/v1/query.proto";
+import "centraid/core/v1/room.proto";
 import "centraid/core/v1/screens.proto";
 import "centraid/core/v1/vault.proto";
 
@@ -146,6 +148,10 @@ message Request {
     VaultExportRequest vault_export = 48;
     // WHICH GATEWAYS HOLD ONE ORIGINAL WHOLE (#1209, R4): the delete warning's read.
     HeldWholeRequest held_whole = 49;
+    // THE APP PLANE (`room.proto`, `notify_screens.proto`): a room by key and a room's events;
+    // the notification service's launch, presses and permission.
+    RoomRequest room = 50;
+    NotifyRequest notify = 51;
   }
 }
 
@@ -194,6 +200,8 @@ message Response {
     UndoHeldResponse undo_held = 47;
     VaultExportResponse vault_export = 48;
     HeldWholeResponse held_whole = 49;
+    RoomResponse room = 50;
+    NotifyResponse notify = 51;
   }
 }
 
@@ -213,6 +221,10 @@ message Event {
     // A screen's off-thread job finished. Handled by the core inside
     // `next_event`, like `wake`; a shell never sees it.
     ScreenJobDone job_done = 7;
+    // A room Rust shows on its own (a commit reached its reads, a timer fired): `room.proto`.
+    RoomShown room = 8;
+    // The notification set the phone should hold, whole, each time it changes: `notify_screens.proto`.
+    ScheduleNotifications notify = 9;
   }
 }
 

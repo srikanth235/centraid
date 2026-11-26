@@ -372,6 +372,10 @@ pub struct HandleState {
     /// THE SCREEN RUNTIME, once a shell-facing library has attached one
     /// (#1135, lane C2): see [`crate::screens`].
     screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
+    /// THE ROOM RUNTIME (app-plane §1), once a shell-facing library has attached one.
+    pub(crate) rooms: std::sync::OnceLock<Arc<dyn crate::rooms::RoomHost>>,
+    /// THE NOTIFICATION SERVICE (app-plane §9), once its words are attached.
+    pub(crate) notify: std::sync::OnceLock<crate::notify::Service>,
     /// THE DIRECTORY OF VAULTS THIS CORE IS THE DOOR TO, when it is one
     /// (#1135, lane H2): see [`crate::vaults`]. Read once by whoever builds the
     /// shelf ([`Self::shelf_config`]).
@@ -527,6 +531,8 @@ impl Core {
             owned_bytes: Mutex::new(None),
             assist: crate::assist::Hub::new(),
             screens: std::sync::OnceLock::new(),
+            rooms: std::sync::OnceLock::new(),
+            notify: std::sync::OnceLock::new(),
             shelf_config,
             vaults: std::sync::OnceLock::new(),
             launched,
@@ -1151,6 +1157,16 @@ impl HandleState {
         let _ = self.screens.set(host);
     }
 
+    /// Attach the room runtime. Once per core.
+    pub fn attach_rooms(&self, host: Arc<dyn crate::rooms::RoomHost>) {
+        let _ = self.rooms.set(host);
+    }
+
+    /// Attach the notification service with the words it says. Once per core.
+    pub fn attach_notify(&self, words: Arc<dyn crate::notify::Words>) {
+        let _ = self.notify.set(crate::notify::Service::new(words));
+    }
+
     /// The directory of vaults this core is the door to, when it was opened as
     /// one ([`crate::CoreConfig::fronting`]).
     #[must_use]
@@ -1280,8 +1296,14 @@ impl HandleState {
                             host.assist(self, assist);
                             return Ok(Some(event));
                         }
-                        (Some(wire::event::Kind::Change(change)), Some(host)) => {
-                            host.changed(self, std::slice::from_ref(&change.table));
+                        (Some(wire::event::Kind::Change(change)), host) => {
+                            self.notify_changed(&change.table);
+                            if let Some(rooms) = self.rooms.get() {
+                                rooms.changed(self, std::slice::from_ref(&change.table));
+                            }
+                            if let Some(host) = host {
+                                host.changed(self, std::slice::from_ref(&change.table));
+                            }
                             return Ok(Some(event));
                         }
                         _ => return Ok(Some(event)),
@@ -1739,6 +1761,18 @@ impl HandleState {
                     host.call(self, request)?,
                 ))))
             }
+            // THE APP PLANE: a room by key and a room's events, and the notification service.
+            K::Room(request) => {
+                let host = self.rooms.get().ok_or_else(|| CoreError::Unsupported {
+                    type_url: "centraid.core.v1.RoomRequest".to_owned(),
+                })?;
+                Ok(response(wire::response::Kind::Room(
+                    host.call(self, request)?,
+                )))
+            }
+            K::Notify(request) => Ok(response(wire::response::Kind::Notify(Box::new(
+                self.notify_call(request)?,
+            )))),
             // THE ONE WRITE (#1135): the app's manifest names the action; the
             // core runs the duplicate-tap, frozen-vault and schema rules.
             K::Act(request) => Ok(response(wire::response::Kind::Act(Box::new(
@@ -2990,6 +3024,10 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::Act(_)
             // A SCREEN EVENT IS A HANDFUL OF `load`s and `act`s, each bounded.
             | K::Screen(_)
+            // A ROOM EVENT IS A HANDFUL OF READS AND ONE ACTION; THE NOTIFICATION SERVICE'S
+            // DOORS READ THE ALERT INDEX AND RUN IDEMPOTENT COMMANDS, EACH BOUNDED.
+            | K::Room(_)
+            | K::Notify(_)
             // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).
             | K::Phrase(_)
             // EIGHT OF THE BACKUP PLANE'S DOORS ARE BOUNDED (#1080).

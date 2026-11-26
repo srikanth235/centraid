@@ -364,3 +364,24 @@ impl ScreenCtx for HandleState {
         });
     }
 }
+
+impl crate::rooms::RoomCtx for HandleState {
+    fn now_ms(&self) -> i64 {
+        ScreenCtx::now_ms(self).unwrap_or_default()
+    }
+
+    fn command(
+        &self,
+        name: &str,
+        input: &serde_json::Value,
+        invoke_key: &str,
+    ) -> Result<centraid_vault::commands::CommandOutcome> {
+        HandleState::command(self, name, input, invoke_key)
+    }
+
+    fn push(&self, shown: wire::RoomShown) {
+        self.events().push(wire::Event {
+            kind: Some(wire::event::Kind::Room(Box::new(shown))),
+        });
+    }
+}

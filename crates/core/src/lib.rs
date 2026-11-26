@@ -63,6 +63,7 @@ pub mod example;
 pub mod handle;
 pub mod identity;
 pub mod load;
+pub mod notify;
 /// THE ORIGINALS ON THIS PHONE, AND THE ALBUMS WHOSE ORIGINALS STAY (#1029,
 /// the photos port). See `originals.proto`.
 pub mod originals;
@@ -70,6 +71,7 @@ pub mod originals;
 /// the status the shell draws, and the doors beside the pass. See
 /// `phone.proto`.
 pub mod phone;
+pub mod rooms;
 pub mod screens;
 /// THE SHELL'S OWN CATALOGUE (#1135): the reads that are no one app's, named in
 /// one manifest beside the eight apps' and served by `load` the same way.
