@@ -11,7 +11,7 @@ A mobile screen is one of seven rooms, and nothing else. The room owns the heade
 | `HomeRoom` | the vault lockup, a search key at its trailing edge (every app), the appearance key, widgets and app tiles, one status line, one trailing verb (Settings) | Home |
 | `AppPlace` | **the title in the top row**: the app's name large at the leading edge on the same row as at most two trailing keys (iOS 26 Photos' "Library"), the scope line (`HeaderSubtitle`) directly under it, no empty band and no row of chips under it, the app band floating at the foot | Photos grid, Calendar, Reminders |
 | `PushedPage` | `PlaceHeader` with **the title inline in the same row as the back chevron** (Contacts style; a list's own colour and glyph allowed), back to the named parent (computed by Rust, never a string), at most one trailing action; a "…" key that opens the platform menu counts as that action | album, contact, document, settings sub-page |
-| `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside; the event editor saves on an explicit Save and keeps a new event's draft across a kill (ruling 29) | note, document, expense, event |
+| `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside; prose autosaves; a structured form saves on an explicit Save and keeps a new item's draft across a kill (ruling 29), Locker's excepted | note, document, expense, event |
 | `SheetRoom` | grabber, title carrying the noun, at most one ink button, status line hosted inside | confirm delete, pick date, add to album |
 | `SystemPlace` | `PlaceHeader` and section or row blocks only; a place root draws the Home band, a sub-page keeps its back key | Settings, Backup |
 | `StageRoom` | full-bleed media ground, no header and no band, the caller's own floating chrome, one close act reached by a control and by a swipe down | photo lightbox, slideshow, video |
@@ -36,13 +36,30 @@ Six rulings sit behind the rooms and are not re-decided per screen: trash, casin
 | Band, trailing | the search key, id `band-search` on both shells; tapped, the field takes the band's place at the foot, focused and just over the keyboard, with a ✕ that closes search and brings the band back. An app with no search draws no key | a bar under the title, a More row, a header glyph, a place in the plate |
 | Band, zoom | a view of the same things (Photos' Years · Months · All) is a segmented control in the band; away while selecting | a chip, a toggle in More, a second floating bar |
 | Band, places | two to four places, then More | a filter |
-| More | Trash, Import, Export, alternate views, "What X may read" (every app that reads other apps' items, first): machine rows | Search, Sort, a filter |
+| More | one order in every app: following (with the phone's permission state), Import and Export, Trash; then alternate views: machine rows | Search, Sort, a filter |
 
-An app has one home. Agenda was two homes of one app until round 10; Calendar (Calendar · Calendars · Invites) and Reminders (Reminders · More) are two apps with a home each, and Tasks is not an app of its own: the tasks are Reminders'.
+An app has one home. Calendar (`Calendar · Calendars · More`, "Needs reply" a filter) and Reminders (`Reminders · More`) are two apps with a home each, and Tasks is not an app of its own: the tasks are Reminders'. Every band ends with More; a one-shot tool is never a band tab.
+
+## Muscle memory
+
+One set of rules, the same in every app (owner, 2026-11-25). Values and words are in the mockups and the kit; these are the behaviours.
+
+- **Long-press** a row opens the platform menu of what can be done to it (the same verbs as its detail page). It is the only place a verb needs no screen of its own.
+- **A trailing swipe moves a row to the trash** with no confirm; the status line's Undo and the trash cover it.
+- **Select** is one mode with one bar. Any verb the bar offers acts on one item or a hundred as **one commit with one Undo**. The band hides while selecting.
+- **Here.** `+` inside a notebook, folder, album, list, task list, account or day files the new item there; `+` from a person's page links that person. The place is pre-filled and can be changed.
+- **Capture in two seconds.** `+` opens with its primary input focused. Money opens a keypad with the last-used account; Reminders turns a typed date into a chip that can be removed; People logs a catch-up in one tap; Docs offers Scan and Choose file.
+- **Keep my place.** Back restores the scroll position, the search term and the filter of the page below. An app root remembers its view (Day or Week, the photo zoom level) across launches; a cold start anchors time views to Today. The ✕ on search clears the term; Back does not.
+- **Star** is the one mark of importance (Docs, People, Locker, Photos, Reminders). Notes keeps Pin, which is about position. Archive hides without trashing.
+- **Prose autosaves; a form has Cancel and Save** and the one "Discard changes?" sheet when dismissed with changes.
+- **Mentions, guests and places** join both sides on their own and show apart from hand-made links; **a photo or scan taken inside another app** is filed with that item.
+- **Phone-sourced values** show "Phone says" or "Statement says" on the detail screen only.
+
+What each is made of, in rooms and blocks, is in the app plane page **(target)**.
 
 ## Reminders on a Calendar day, and Overdue
 
-Calendar follows Apple's: a dated reminder is a row of its day, and the day is where it can be ticked (owner, 2026-11-09, "follow Apple"). The write is always **Reminders' own**: Calendar holds no task write and no complete or uncomplete permission, so a tick is the `complete-task` or `reopen-task` Reminders registered, sent by the screen under Reminders' name.
+Calendar follows Apple's: a dated reminder is a row of its day, and the day is where it can be ticked (owner, 2026-11-09, "follow Apple"). The tick is the task's own action, `task.complete` or its reopen: actions belong to kinds, not apps, so Calendar runs the same one Reminders does and holds no write of its own.
 
 | Moment | Draws | Never |
 | --- | --- | --- |
@@ -67,13 +84,14 @@ A screen's load is a skeleton (`ReadStateView` in Compose, `PageReadStateView` i
 
 ## Trash
 
-**One rule in every app (#1185).** Every item can be moved to trash, restored and deleted forever, and every trash can be emptied. No app offers restore only, and none promises a destruction it cannot perform: the vault's shared verbs (`entity.trash`, `entity.restore`, `entity.purge`, `entity.empty_trash`) do all four for every kind. The `promises` rule in `cargo xtask rules` holds the register of which app keeps it. The words are the kit's (`strings/shared.rs`, `kit/trash.rs`); an app passes only its noun (item, note, person, task, document, photo, event, workout, transaction) and, where something goes with the record, the first sentence of the purge confirm.
+**One rule in every app (#1185).** Every item can be moved to trash, restored and deleted forever, and every trash can be emptied. No app offers restore only, and none promises a destruction it cannot perform: the vault's shared verbs (`entity.trash`, `entity.restore`, `entity.purge`, `entity.empty_trash`) do all four for every kind. The kind registry holds, per kind, its trash noun and inverse **(target)**. The words are the kit's (`strings/shared.rs`, `kit/trash.rs`); an app passes only its noun (item, note, person, task, document, photo, event, workout, transaction) and, where something goes with the record, the first sentence of the purge confirm.
 
 - **Verb and line.** "Move to trash", asking nothing (Undo and the trash restore it). Then the status line "{title} moved to trash" with Undo; a restore says "{title} restored" with Undo.
 - **Entry.** "Trash", secondary "30 days, then erased", in the app's More sheet. The page header is "Trash · {n}".
-- **Row.** "Deleted {day date} · Erased {day date}", actions "Restore" and "Delete forever".
+- **Row.** "Deleted {day date} · Erased {day date}", actions "Restore" and "Delete forever". Trash lists only what was trashed on its own: what went with a holder or an item comes back with it, never alone.
+- **A holder's confirm names how many.** Trashing a notebook, folder, task list or account that holds items says the count, and one Restore brings everything back. A list and an album never take their members.
 - **Confirms** (outlined, destructive). One row: "Delete this {noun} forever?" / "It leaves this vault for good. This cannot be undone." / "Delete forever". The whole trash: "Empty trash?" / "Everything in trash leaves this vault for good. This cannot be undone." / "Empty trash". An app may replace the first sentence with what goes with the record; the last is always "This cannot be undone."
-- **Photos' trash is a grid.** A photograph is recognised by its thumbnail and picked many at a time, so Photos keeps its Trash as a shelf of thumbnails instead of the kit's list of rows. It is declared in the register (`GRID_TRASH` in `crates/xtask/src/promises.rs`) and held to the same four verbs and the kit's words; "Empty trash" is the shared verb, and purges exactly what the member saw if something was trashed since.
+- **Photos' trash is a grid.** A photograph is recognised by its thumbnail and picked many at a time, so Photos keeps its Trash as a shelf of thumbnails instead of the kit's list of rows. It is held to the same four verbs and the kit's words; "Empty trash" is the shared verb, and purges exactly what the member saw if something was trashed since.
 - **A photo no backup device holds whole carries a warning (owner, 2026-11-23, #1209).** Before "Delete forever" on one photo, on a selection, and before "Empty trash" over photos, the confirm adds one amber line above its body: "This photo isn’t backed up yet. No backup device can bring it back." (a count form for several: "3 of these photos aren’t backed up yet. No backup device can bring them back."). The member can still delete, the button and the rest of the confirm are unchanged, and a photo that is backed up gets no line. "Backed up" here is the Backup screen's own test for Photos and files: every chunk of the original confirmed at a backup device. Boards: `TrashPhotosConfirm`, `TrashPhotosConfirmMany`, `TrashPhotosEmpty`.
 - **A trashed record is gone from every surface**: the grid, the agenda, search, notifications. A repeating event or a holder is trashed whole. A followed record the member trashed stays trashed when the source sends it again.
 

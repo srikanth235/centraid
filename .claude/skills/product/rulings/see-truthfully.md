@@ -4,7 +4,11 @@ Page states, permissions, units and performance at scale.
 
 ## Page states
 
-A read that failed, a refusal, a partial read and a check not run each say so ([principle 7](../SKILL.md#governing-principles)). The states and their words are the kit's: [status line and controls](../../design/behaviour.md#status-line), [how a screen reads](../../change/screen.md).
+A screen's state is `Loading`, `Ready` or `Failed`, and nothing else: there is no `Denied`, because apps are not principals (Locker's wall is Locker's own state). A read that failed, a refusal by the phone, a partial read and a check not run each say so inside the state they belong to, in a sentence ([principle 7](../SKILL.md#governing-principles)); emptiness is never the word for a failure, and 0 is never the word for unknown. The states and their words are the kit's: [status line and controls](../../design/behaviour.md#status-line), [how a screen reads](../../change/screen.md).
+
+## What the source said
+
+A figure or line that came from a source and was corrected by the member shows both. A followed Health day or reading says "Phone says X"; a statement line says "Statement says X". One tap takes the source's value back. The line appears on the detail screen only, is worked out each time it is shown, and clearing the correction brings the source's figure back without a new read.
 
 ## Units and amounts
 
