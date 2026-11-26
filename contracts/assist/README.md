@@ -1,6 +1,6 @@
 # `contracts/assist/`
 
-The conversation surface's contracts, all derived from or checked against the app manifests (`crates/apps/<app>/manifest.json`), which are the one catalog ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
+The conversation surface's contracts, all derived from or checked against the app manifests (the declarations in `crates/domain`), which are the one catalog ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
 
 | File | What it is | Written by |
 | --- | --- | --- |

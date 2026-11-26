@@ -33,29 +33,13 @@ A stall that happens with the queue full of change events is **reported late**, 
 
 `api.rs` holds eight verbs and the honest state of each. A stub is a **typed refusal**, never an empty answer: an empty page reads as "no data" and the truth is "this build cannot answer yet".
 
-`page` `invoke` `describe` `parked` are live. `search`, `resolve` and `content` are typed `NotYetAvailable` refusals in this module (content addresses are minted by `content_urls` instead). There is no `reveal` verb: a Locker reveal, and a one-time code, run in `locker::phone` behind the unlock, each after `locker.mark_used` or `locker.totp_code` has stamped the item as used.
+`page` `invoke` `describe` `parked` are live. `search`, `resolve` and `content` are typed `NotYetAvailable` refusals in this module (content addresses are minted by `content_urls` instead). There is no `reveal` verb: a Locker reveal runs in the vault's Locker commands, after `locker.mark_used` has stamped the item as used.
 
 ## App queries
 
-`Request::AppQuery` runs a registered app query in the core and answers a typed message ([#1046](https://github.com/srikanth235/centraid/issues/1046), [#1047](https://github.com/srikanth235/centraid/issues/1047)). The request and the answer are oneofs in `app_query.proto`, one arm per query at the **same number in both**, each app in its own range; each answer message is in the app's own `<app>.proto`:
+`Request::AppQuery` runs a registered query in the core and answers a typed message. The request and the answer are oneofs in `app_query.proto`, one arm per query at the **same number in both**. Today only the shell's own arms exist: `chat_threads`, `chat_thread` and `chat_card` at 70–72 (`app_query/chat.rs`), and the answers `shell_backup_status` and `holdings`. Every per-app range left with the old app plane and its numbers are not reused; the new app plane's reads arrive as arms declared in `crates/domain` **(target)**.
 
-| Range | App | Arms | Where |
-| --- | --- | --- | --- |
-| 1–5 | Agenda's events | `upcoming`, `day_context`, `parties`, `search`, `event` | `app_query.rs` |
-| 6–9, 17–19 | Agenda's tasks | `board`, `task`, `projects`, `search`, `catch_up`, `trash`, `reminders` | `app_query/agenda_task.rs` |
-| 10–14, 16 | — | reserved: the `tasks_*` arms before Tasks folded into Agenda, never reused |  |
-| 15 | — | `denied`, in the answer only; no query takes it |  |
-| 20–29 | People | `roster`, `touch`, `person`, `search`, `trash` | `app_query/people.rs` |
-| 30–39 | Docs | `drive`, `search`, `document`, `activity` | `app_query/docs.rs` |
-| 40–49 | Notes | `library`, `notebooks`, `journal`, `search`, `trash`, `history`, `link_targets`, `note` | `app_query/notes.rs` |
-| 50–59 | — | reserved: the ten Tally arms left with the app ([#1099](https://github.com/srikanth235/centraid/issues/1099)) and the numbers are never reused |  |
-| 60–69 | Locker | `items`, `item`, `search`, `review` — metadata only; a sealed cell answers its presence | `app_query/locker.rs` |
-
-A new query is a new arm inside its app's range, appended.
-
-`Request::Locker` (`locker.proto`, [#1047](https://github.com/srikanth235/centraid/issues/1047), D-5) is Locker's session, `crate::locker::phone`: `unlock` — sent by the shell after the phone's biometric or passcode prompt succeeded — puts `K` in the session — the seed's `locker'` leaf, derived at open into the `Keyring` and never written down, so a restore from the 24 words reopens sealed secrets; a core opened without the seed refuses as `Unavailable` — and receipts the unlock; `relock` zeroes the session's copy; `state` answers whether idle has ended it; `reveal` receipts one sealed item cell and answers its plaintext with a thirty-second life, or a typed refusal (`LOCKED` never prompts). Every write of `locker.add_item` / `locker.edit_item` — an `act`, the chat's confirmed card, `Handle::command` — passes through `seal_command` first: every typed secret is sealed under the live generation against the item's id and `password_rotated` is decided by opening the stored password; a secret-bearing write while locked is refused.
-
-`app_query.rs` holds the door (`VaultDoor`, the app kit's `PageDoor` over `Vault::keyset_page` — the page door's own call — plus the kit's grammar), the dispatch, and Agenda's conversion; each other app's module converts its crate's rows to its answer. `app_query/docs.rs` also adds the size phrase, whether the head's bytes are on this device and, when they are and may be drawn inline, the file's path for the media stage (`Vault::content_location`). Agenda's `search` names each repeating hit's next occurrence and `event` carries the event's calendar row. A denial is an arm of the answer; a vault failure the door saw is answered as itself and never as a denial; a read that reaches its own stated ceiling is `CoreError::ReadBoundReached` (`ERROR_CODE_READ_BOUND_REACHED`). Search arms reach `crates/search`'s FTS door over `Vault::read`'s connection, so the core writes no SQL for them. Each query answers its civil readings — an occurrence's local wall clock and days, today, now, a row's local day — in the request's `tz`, else the vault's own zone (`Vault::time_zone`), else refuses with `InvalidRequest`; never the host's clock and never UTC by default. Where the readings only decorate the answer (People's search and trash, Notes' search and editor note) a request with no zone on a vault that names none answers them EMPTY rather than refusing (`zone_if_any`); an unknown zone is still refused. A page read asks for local days through `PageQuery.local_day_columns` + `tz`, one appended `YYYY-MM-DD` column per named instant after every other computed column.
+`app_query.rs` holds the door (`VaultDoor`, over `Vault::keyset_page`, with the grammar from `crates/domain`) and the dispatch. A denial is an arm of the answer; a vault failure the door saw is answered as itself and never as a denial; a read that reaches its own stated ceiling is `CoreError::ReadBoundReached` (`ERROR_CODE_READ_BOUND_REACHED`).
 
 ## The backup plane (`phone`)
 
