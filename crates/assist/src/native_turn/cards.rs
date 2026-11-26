@@ -219,34 +219,9 @@ fn birthday_fact(day: &str, today: Date) -> Option<String> {
     }
 }
 
-/// The stored card of one proposed step, so a thread reopened later can draw the proposal's row
-/// (title and when) inert. A step whose kind belongs to no app has none.
+/// The entity a stored proposal's step card carried before cards kept no words (a thread reads it
+/// as no rows).
 pub const PROPOSAL_STEP: &str = "proposal_step";
-
-/// The step cards of a parked write, in order: `qualifier` is the verb, `meta` the kind, `title`
-/// the row's name and `subtitle` when it is.
-#[must_use]
-pub fn step_cards(steps: &[crate::native_turn::CardStep]) -> Vec<Card> {
-    steps
-        .iter()
-        .enumerate()
-        .filter_map(|(at, step)| {
-            let kind = Kind::ALL
-                .into_iter()
-                .find(|kind| kind.name() == step.kind)?;
-            let mut card = Card::new(
-                app_of(kind)?,
-                PROPOSAL_STEP,
-                (at + 1).to_string(),
-                step.title.clone(),
-            )
-            .subtitle(step.when.clone())
-            .meta(step.kind.clone());
-            card.qualifier.clone_from(&step.verb);
-            Some(card)
-        })
-        .collect()
-}
 
 /// A card's day in the member's words (the board's "Today · 11:15"): today, tomorrow and
 /// yesterday by name, any other day as `Fri 6 Nov` (with the year when it is not this one), then
@@ -400,31 +375,6 @@ mod tests {
         row.fields.clear();
         row.extra.insert("birthday", "11-08".to_owned());
         assert_eq!(card_of(&row, today).unwrap().subtitle, "birthday today");
-    }
-
-    #[test]
-    fn a_proposed_step_is_stored_as_a_card_a_reopened_thread_can_draw() {
-        let step = crate::native_turn::CardStep {
-            verb: "create".to_owned(),
-            kind: "task".to_owned(),
-            title: "Bring Ana a birthday card".to_owned(),
-            summary: String::new(),
-            when: "today 10:45".to_owned(),
-            changes: String::new(),
-            destructive: false,
-        };
-        let cards = step_cards(&[step]);
-        assert_eq!(cards.len(), 1);
-        let card = &cards[0];
-        assert_eq!((card.app, card.entity), (App::Reminders, PROPOSAL_STEP));
-        assert_eq!(
-            (
-                card.qualifier.as_str(),
-                card.meta.as_str(),
-                card.subtitle.as_str()
-            ),
-            ("create", "task", "today 10:45")
-        );
     }
 
     #[test]

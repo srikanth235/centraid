@@ -9,9 +9,10 @@
 //! offered and never a value.
 //!
 //! The action rides a chat card of the Locker item (`app` locker, `entity` `locker_item`) with the
-//! action in the card's `qualifier`, `<action>:<column>`, so a stored thread keeps it as a snapshot
-//! with no value (`message.cards`) and a shell parses one grammar. The shape carries `export` (no
-//! item, no column) without a change.
+//! action in the card's `qualifier`, `<action>:<column>`, so a shell parses one grammar. A stored
+//! thread keeps it as the closed code `<action>_<column>` of a `message_card` row, with no value
+//! ([`MemberAction::code`], [`qualifier_of_code`]). The shape carries `export` (no item, no column)
+//! without a change.
 
 use centraid_vault::commands::locker::{SEALED_ITEM_CELLS, SEALED_PLACEHOLDER};
 use serde_json::{Value, json};
@@ -68,6 +69,16 @@ impl MemberAction {
         format!("{}:{}", self.kind.word(), self.column)
     }
 
+    /// The closed code a stored card keeps for the action: `reveal_password`, or `export`.
+    #[must_use]
+    pub fn code(&self) -> String {
+        if self.column.is_empty() {
+            self.kind.word().to_owned()
+        } else {
+            format!("{}_{}", self.kind.word(), self.column)
+        }
+    }
+
     /// The action a card qualifier names, with the item the card is of. `None` for a plain card.
     #[must_use]
     pub fn from_card(item_id: &str, qualifier: &str) -> Option<Self> {
@@ -94,6 +105,27 @@ impl MemberAction {
             column: value["field"].as_str()?.to_owned(),
         })
     }
+}
+
+/// The qualifier a stored code reads back as (`reveal_password` is `reveal:password`), or `None`
+/// for a code that is not a member action's.
+#[must_use]
+pub fn qualifier_of_code(code: &str) -> Option<String> {
+    [
+        ActionKind::Reveal,
+        ActionKind::Code,
+        ActionKind::EditSecret,
+        ActionKind::Export,
+    ]
+    .into_iter()
+    .find_map(|kind| {
+        let rest = code.strip_prefix(kind.word())?;
+        match rest.strip_prefix('_') {
+            Some(column) if !column.is_empty() => Some(format!("{}:{column}", kind.word())),
+            None if rest.is_empty() => Some(format!("{}:", kind.word())),
+            _ => None,
+        }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +190,33 @@ pub fn redact(text: &str, secrets: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stored_code_is_a_closed_word_and_reads_back_as_the_qualifier() {
+        for (kind, column) in [
+            (ActionKind::Reveal, "password"),
+            (ActionKind::Code, "otp_seed"),
+            (ActionKind::EditSecret, "card_number"),
+            (ActionKind::Export, ""),
+        ] {
+            let action = MemberAction {
+                kind,
+                item_id: "i1".to_owned(),
+                column: column.to_owned(),
+            };
+            let code = action.code();
+            assert!(
+                code.len() <= 24
+                    && code.starts_with(|c: char| c.is_ascii_lowercase())
+                    && code.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+                "{code}"
+            );
+            assert_eq!(qualifier_of_code(&code), Some(action.qualifier()));
+        }
+        for plain in ["", "due", "update", "reveal_", "peek_password"] {
+            assert_eq!(qualifier_of_code(plain), None, "{plain}");
+        }
+    }
 
     #[test]
     fn a_qualifier_round_trips_and_a_plain_card_has_none() {

@@ -41,8 +41,7 @@
 
 use crate::model::MEDIA_MARKER;
 use crate::prompt::{
-    ASSISTANT_TURN, Budget, HISTORY_TURNS, Recorded, Turn, data_message, estimate_tokens, message,
-    question,
+    ASSISTANT_TURN, Budget, HISTORY_TURNS, Turn, data_message, estimate_tokens, message, question,
 };
 
 /// The longest edge, in pixels, an image is scaled to before it reaches the
@@ -211,28 +210,50 @@ pub fn label(text: &str) -> String {
         .to_owned()
 }
 
+/// What a marker names a photograph or a document by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Named<'a> {
+    /// Its name now (empty when it has none).
+    As(&'a str),
+    /// It is deleted: the marker says so and names nothing.
+    Deleted,
+}
+
 /// The marker a turn's user line starts with: `[Photo: Truckee river bend]`,
-/// `[Document: Tahoe packing list]`, both when both ride.
+/// `[Document: Tahoe packing list]`, both when both ride; `[A deleted photo]` for one that is gone.
 #[must_use]
-pub fn marker(attachments: &Attachments) -> String {
+pub fn marker_of(photo: Option<Named<'_>>, document: Option<Named<'_>>) -> String {
     let mut parts = Vec::new();
-    if let Some(image) = &attachments.image {
-        let name = label(&image.label);
-        parts.push(if name.is_empty() {
-            "[Photo]".to_owned()
-        } else {
-            format!("[Photo: {name}]")
-        });
-    }
-    if let Some(doc) = &attachments.doc {
-        let name = label(&doc.name);
-        parts.push(if name.is_empty() {
-            "[Document]".to_owned()
-        } else {
-            format!("[Document: {name}]")
+    for (named, word, gone) in [
+        (photo, "Photo", "A deleted photo"),
+        (document, "Document", "A deleted document"),
+    ] {
+        let Some(named) = named else { continue };
+        parts.push(match named {
+            Named::Deleted => format!("[{gone}]"),
+            Named::As(text) => {
+                let name = label(text);
+                if name.is_empty() {
+                    format!("[{word}]")
+                } else {
+                    format!("[{word}: {name}]")
+                }
+            }
         });
     }
     parts.join(" ")
+}
+
+/// The marker of the attachments a turn carried.
+#[must_use]
+pub fn marker(attachments: &Attachments) -> String {
+    marker_of(
+        attachments
+            .image
+            .as_ref()
+            .map(|image| Named::As(&image.label)),
+        attachments.doc.as_ref().map(|doc| Named::As(&doc.name)),
+    )
 }
 
 /// The longest prefix of `text` whose [`estimate_tokens`] is within
@@ -304,7 +325,7 @@ pub fn attach_prompt(
     let user = question(&defang(user));
     let shown: Vec<&Turn> = history
         .iter()
-        .filter(|turn| turn.record != Recorded::NoTool)
+        .filter(|turn| !turn.said.is_empty())
         .collect();
     let mut history = &shown[shown.len().saturating_sub(HISTORY_TURNS)..];
     let image_tokens = attachments
@@ -316,12 +337,7 @@ pub fn attach_prompt(
         let mut out = message("system", ATTACH_SYSTEM);
         for turn in history {
             out.push_str(&data_message("user", &turn.user));
-            let said = match &turn.record {
-                Recorded::Tool { answer, .. } => answer.as_str(),
-                Recorded::Answer(text) | Recorded::Attachment(text) => text.as_str(),
-                Recorded::NoTool => continue,
-            };
-            out.push_str(&data_message("assistant", said));
+            out.push_str(&data_message("assistant", &turn.said));
         }
         let mut content = String::new();
         if let (Some(source), Some((text, truncated))) = (&attachments.doc, doc) {
@@ -551,7 +567,7 @@ mod tests {
     fn history_rides_under_its_marker_and_is_dropped_before_the_document() {
         let turn = |n: usize| Turn {
             user: format!("[Photo: p{n}] What is it?"),
-            record: Recorded::Attachment(format!("Answer number {n}.")),
+            said: format!("Answer number {n}."),
         };
         let history = [turn(1), turn(2), turn(3)];
         let prompt = attach_prompt(&history, &photo(), "And now?", Budget::DEFAULT);
