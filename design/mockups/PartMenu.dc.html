@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Menu</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Menu</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">Sections of items: the More sheet, a ... menu, a long-press menu.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">THE MORE SHEET</div>
+  <div>
+    <!-- variant:more -->
+    <div style="margin-top: 4px;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--surface-border);">
+        <span style="width: 30px; height: 30px; border-radius: 8px; background: var(--app-locker-fill); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"></path></svg></span>
+        <div style="flex-grow: 1;"><div data-slot="t0" style="font-size: 16px; color: var(--text-ink); font-weight: 400;">Import</div><div data-slot="t1" style="font-size: 13px; color: var(--text-meta);">From a password manager</div></div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--line-8e897f)" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </div>
+      <a href="Trash.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--surface-border);">
+        <span style="width: 30px; height: 30px; border-radius: 8px; background: var(--app-locker-fill); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></span>
+        <div style="flex-grow: 1;"><div data-slot="t2" style="font-size: 16px; color: var(--text-ink); font-weight: 400;">Trash</div><div data-slot="t3" style="font-size: 13px; color: var(--text-meta);">30 days, then erased</div></div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--line-8e897f)" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--surface-border);">
+        <span style="width: 30px; height: 30px; border-radius: 8px; background: var(--app-locker-fill); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 12v8h14v-8"></path></svg></span>
+        <div style="flex-grow: 1;"><div data-slot="t4" style="font-size: 16px; color: var(--text-ink); font-weight: 400;">Export</div><div data-slot="t5" style="font-size: 13px; color: var(--text-meta);">Unencrypted file</div></div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--line-8e897f)" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--surface-border);">
+        <span style="width: 30px; height: 30px; border-radius: 8px; background: var(--fill-6e6b66); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7.5v.01"></path></svg></span>
+        <div style="flex-grow: 1;"><div data-slot="t6" style="font-size: 16px; color: var(--text-ink); font-weight: 400;">What Locker keeps</div><div data-slot="t7" style="font-size: 13px; color: var(--text-meta);">What's encrypted, what isn't</div></div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--line-8e897f)" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0;">
+        <span style="width: 30px; height: 30px; border-radius: 8px; background: var(--fill-6e6b66); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg></span>
+        <div style="flex-grow: 1;"><div data-slot="t8" style="font-size: 16px; color: var(--app-locker); font-weight: 600;">Lock</div><div data-slot="t9" style="font-size: 13px; color: var(--text-meta);">Cover every item now</div></div>
+        
+      </div>
+    </div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">A LONG-PRESS ITEM</div>
+  <div>
+    <!-- variant:long -->
+    <div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 48px; border-bottom: 1px solid var(--surface-line);"><span style="width: 30px; height: 30px; border-radius: 8px; background: var(--app-notes-fill); display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3H7l3-3zM12 12v8"></path></svg></span><span data-slot="t0" style="flex-grow: 1; font-size: 16px; color: var(--text-ink);">Unpin</span></div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

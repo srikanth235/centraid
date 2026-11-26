@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Section</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Section</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">A heading with its count; the blocks follow.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">HEADING WITH A COUNT</div>
+  <div>
+    <!-- variant:count -->
+    <div aria-label="Photos, 1 result" style="display: flex; align-items: baseline; justify-content: space-between; padding: 8px 0 6px;">
+      <span data-slot="t0" style="font-size: 15px; font-weight: 600; color: var(--app-photos);">Photos</span>
+      <span data-slot="t1" style="font-size: 13px; color: var(--text-meta);">1</span>
+    </div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">HEADING OVER ROWS</div>
+  <div>
+    <!-- variant:overdue -->
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0 4px;">
+      <span data-slot="t0" style="font-size: 15px; font-weight: 600; color: var(--state-red);">Overdue</span>
+      <button data-slot="t1" style="border: none; background: none; color: var(--app-calendar); font-size: 14px; font-weight: 600; padding: 6px 0;">Catch up</button>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

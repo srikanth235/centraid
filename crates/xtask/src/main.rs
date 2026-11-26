@@ -20,11 +20,10 @@ mod artifact;
 mod ci;
 mod data_pin;
 mod ddl_rules;
+mod design_boards;
 #[cfg(test)]
 mod design_checks;
-mod design_dark;
 mod design_emit;
-mod design_glance;
 mod design_icon;
 mod design_site;
 mod design_words;

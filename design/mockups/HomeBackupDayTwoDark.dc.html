@@ -6,9 +6,9 @@
 <script src="./support.js"></script>
 </head>
 <body>
-<!-- One Home at every stage (owner, 2026-11-17): the widget layout of HomeWidgets, filling in. An empty widget teaches with its own state and one quiet text action. Backup has one seat, the line under the vault name: empty on day zero and day one, "Not backed up yet · Pair" about a day after the first item. The bottom bar carries only passing notes. Locker reads "Set up Locker" until it has been set up. Day one ends at the first thing the member adds or imports; the starter note does not end it. The one backup mention is in the line under the vault name, with Pair as its action. There is no bottom bar. -->
 <x-dc>
 <helmet>
+<link rel="stylesheet" href="./tokens.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@500&amp;display=swap" rel="stylesheet">
 <style>
@@ -16,57 +16,57 @@ body{margin:0}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+<div data-theme="dark" style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink);">
   <div style="display: flex; align-items: center; gap: 10px; padding: 56px 20px 12px;">
-    <span style="width: 36px; height: 36px; border-radius: 10px; background: #1F1E1C; display: flex; align-items: center; justify-content: center; font-weight: 600;">M</span>
-    <div style="flex-grow: 1;"><div style="font-size: 17px; font-weight: 600;">My vault</div><div style="font-size: 13px; color: #A39E95; display: flex; align-items: center; gap: 6px;"><span style="width: 7px; height: 7px; border-radius: 4px; background: #964C04;"></span>Not backed up yet · <button style="padding: 0; border: none; background: none; font-size: 13px; font-weight: 600; color: #7FC4B8;">Pair</button></div></div>
-    <button aria-label="Search everything" style="width: 40px; height: 40px; border-radius: 20px; border: 1px solid rgba(44,42,39,0.9); background: rgba(44,42,39,0.72); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button><button aria-label="Settings" style="width: 40px; height: 40px; border-radius: 20px; border: 1px solid rgba(44,42,39,0.9); background: rgba(44,42,39,0.72); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    <span style="width: 36px; height: 36px; border-radius: 10px; background: var(--surface-card); display: flex; align-items: center; justify-content: center; font-weight: 600;">M</span>
+    <div style="flex-grow: 1;"><div style="font-size: 17px; font-weight: 600;">My vault</div><div style="font-size: 13px; color: var(--text-meta); display: flex; align-items: center; gap: 6px;"><span style="width: 7px; height: 7px; border-radius: 4px; background: var(--state-amber-fill);"></span>Not backed up yet · <button style="padding: 0; border: none; background: none; font-size: 13px; font-weight: 600; color: var(--shell);">Pair</button></div></div>
+    <button aria-label="Search everything" style="width: 40px; height: 40px; border-radius: 20px; border: 1px solid var(--glass-90); background: var(--glass-70); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg></button><button aria-label="Settings" style="width: 40px; height: 40px; border-radius: 20px; border: 1px solid var(--glass-90); background: var(--glass-70); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg></button>
   </div>
   <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 74px; gap: 14px; padding: 4px 20px 0;">
-    <div style="grid-column: span 2; grid-row: span 2; border-radius: 22px; background: #1F1E1C; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column;">
-      <div style="font-size: 11px; font-weight: 700; color: #569EF7; letter-spacing: 0.4px;">WEDNESDAY</div>
+    <div style="grid-column: span 2; grid-row: span 2; border-radius: 22px; background: var(--surface-card); padding: 12px; box-sizing: border-box; display: flex; flex-direction: column;">
+      <div style="font-size: 11px; font-weight: 700; color: var(--app-calendar); letter-spacing: 0.4px;">WEDNESDAY</div>
       <div style="font-size: 30px; font-weight: 600; line-height: 1;">4</div>
-      <div style="margin-top: 8px; border-left: 3px solid #569EF7; padding-left: 6px;"><div style="font-size: 12px; font-weight: 600;">Team standup</div><div style="font-size: 11px; color: #A39E95;">09:30</div></div>
-      <div style="margin-top: auto; font-size: 11px; color: #A39E95;">Calendar · 11 more</div>
+      <div style="margin-top: 8px; border-left: 3px solid var(--app-calendar); padding-left: 6px;"><div style="font-size: 12px; font-weight: 600;">Team standup</div><div style="font-size: 11px; color: var(--text-meta);">09:30</div></div>
+      <div style="margin-top: auto; font-size: 11px; color: var(--text-meta);">Calendar · 11 more</div>
     </div>
-    <div style="grid-column: span 2; grid-row: span 2; border-radius: 22px; background: #1F1E1C; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column;">
-      <div style="font-size: 13px; font-weight: 700; color: #4FD1BE;">Reminders</div>
-      <div style="margin-top: auto;"><span style="font-size: 13px; font-weight: 600; color: #4FD1BE; line-height: 1.25;">Import your reminders</span></div>
+    <div style="grid-column: span 2; grid-row: span 2; border-radius: 22px; background: var(--surface-card); padding: 12px; box-sizing: border-box; display: flex; flex-direction: column;">
+      <div style="font-size: 13px; font-weight: 700; color: var(--app-reminders);">Reminders</div>
+      <div style="margin-top: auto;"><span style="font-size: 13px; font-weight: 600; color: var(--app-reminders); line-height: 1.25;">Import your reminders</span></div>
     </div>
-    <div style="grid-column: span 4; border-radius: 22px; background: #1F1E1C; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; grid-row: span 2;">
-      <div style="font-size: 13px; font-weight: 700; color: #E573C3;">Photos</div>
-      <div style="margin: auto 0; display: flex; align-items: center; justify-content: center; gap: 8px;"><span style="font-size: 14px; font-weight: 600; color: #E573C3; line-height: 1.25;">Import your camera roll</span></div>
+    <div style="grid-column: span 4; border-radius: 22px; background: var(--surface-card); padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; grid-row: span 2;">
+      <div style="font-size: 13px; font-weight: 700; color: var(--app-photos);">Photos</div>
+      <div style="margin: auto 0; display: flex; align-items: center; justify-content: center; gap: 8px;"><span style="font-size: 14px; font-weight: 600; color: var(--app-photos); line-height: 1.25;">Import your camera roll</span></div>
     </div>
-    <div style="border-radius: 18px; background: #1F1E1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7C97F4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.5 2.5-1.5s2.5.6 2.5 1.7c0 2.5-5 1.3-5 3.8 0 1.1 1 1.5 2.5 1.5s2.5-.5 2.5-1.5"/></svg>
-      <span style="font-size: 11px; font-weight: 600; color: #7C97F4; line-height: 1.15; text-align: center; padding: 0 4px;">Import a statement</span>
+    <div style="border-radius: 18px; background: var(--surface-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--app-money)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v10M9.5 9.5c0-1 1-1.5 2.5-1.5s2.5.6 2.5 1.7c0 2.5-5 1.3-5 3.8 0 1.1 1 1.5 2.5 1.5s2.5-.5 2.5-1.5"></path></svg>
+      <span style="font-size: 11px; font-weight: 600; color: var(--app-money); line-height: 1.15; text-align: center; padding: 0 4px;">Import a statement</span>
     </div>
-    <div style="border-radius: 18px; background: #1F1E1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F76E8E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 20c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3zM16 13c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3z"/></svg>
-      <span style="font-size: 11px; font-weight: 600; color: #F76E8E; line-height: 1.15; text-align: center; padding: 0 4px;">Connect Apple Health</span>
+    <div style="border-radius: 18px; background: var(--surface-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--app-health)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 20c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3zM16 13c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3z"></path></svg>
+      <span style="font-size: 11px; font-weight: 600; color: var(--app-health); line-height: 1.15; text-align: center; padding: 0 4px;">Connect Apple Health</span>
     </div>
-    <div style="border-radius: 18px; background: #1F1E1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#BA82F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/></svg>
-      <span style="font-size: 12px; font-weight: 600;">6</span><span style="font-size: 10px; color: #A39E95;">people</span>
+    <div style="border-radius: 18px; background: var(--surface-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--app-people)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c0-3 3-5 6-5s6 2 6 5"></path></svg>
+      <span style="font-size: 12px; font-weight: 600;">6</span><span style="font-size: 10px; color: var(--text-meta);">people</span>
     </div>
-    <div style="border-radius: 18px; background: #1F1E1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#939DA8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
-      <span style="font-size: 11px; font-weight: 600; color: #939DA8; line-height: 1.15; text-align: center; padding: 0 4px;">Set up Locker</span>
+    <div style="border-radius: 18px; background: var(--surface-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--app-locker)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 018 0v3"></path></svg>
+      <span style="font-size: 11px; font-weight: 600; color: var(--app-locker); line-height: 1.15; text-align: center; padding: 0 4px;">Set up Locker</span>
     </div>
-    <div style="grid-column: span 2; border-radius: 18px; background: #1F1E1C; padding: 10px 12px; box-sizing: border-box;">
-      <div style="font-size: 12px; font-weight: 700; color: #BF9738;">Notes</div>
+    <div style="grid-column: span 2; border-radius: 18px; background: var(--surface-card); padding: 10px 12px; box-sizing: border-box;">
+      <div style="font-size: 12px; font-weight: 700; color: var(--app-notes);">Notes</div>
       <div style="font-size: 12px; margin-top: 4px;">This note is yours</div>
-      <div style="font-size: 11px; color: #A39E95;">Edited today</div>
+      <div style="font-size: 11px; color: var(--text-meta);">Edited today</div>
     </div>
-    <div style="grid-column: span 2; border-radius: 18px; background: #1F1E1C; padding: 10px 12px; box-sizing: border-box;">
-      <div style="font-size: 12px; font-weight: 700; color: #30A9C6;">Docs</div>
-      <div style="margin-top: 4px;"><span style="font-size: 12px; font-weight: 600; color: #30A9C6; line-height: 1.25;">Add a document</span></div>
+    <div style="grid-column: span 2; border-radius: 18px; background: var(--surface-card); padding: 10px 12px; box-sizing: border-box;">
+      <div style="font-size: 12px; font-weight: 700; color: var(--app-docs);">Docs</div>
+      <div style="margin-top: 4px;"><span style="font-size: 12px; font-weight: 600; color: var(--app-docs); line-height: 1.25;">Add a document</span></div>
     </div>
   </div>
-  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; height: 56px; border-radius: 28px; border: 1px solid rgba(44,42,39,0.72); background: rgba(44,42,39,0.72); box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
-    <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #F2EFEA; font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg>Home</span>
-    <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #A39E95;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>Chat</span>
-    <a href="Backup.dc.html" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #A39E95;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 12a8 8 0 10-3 6.2M20 6v6h-6"/></svg>Backup</a>
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; height: 56px; border-radius: 28px; border: 1px solid var(--glass-70); background: var(--glass-72); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
+    <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-ink); font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg>Home</span>
+    <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-meta);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path></svg>Chat</span>
+    <a href="Backup.dc.html" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-meta);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 12a8 8 0 10-3 6.2M20 6v6h-6"></path></svg>Backup</a>
   </div>
 </div>
 </x-dc>

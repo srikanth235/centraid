@@ -8,6 +8,7 @@
 <body>
 <x-dc>
 <helmet>
+<link rel="stylesheet" href="./tokens.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
 <style>
@@ -15,36 +16,36 @@ body{margin:0}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #FBFAF8; font-family: Geist, system-ui, sans-serif; color: #1C1B19;">
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--surface-plain-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink);">
   <div style="display: flex; align-items: center; gap: 12px; padding: 56px 20px 8px;">
-    <button aria-label="Back" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: 1px solid #E4E0D8; background: rgba(255,255,255,0.85); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+    <button aria-label="Back" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: 1px solid var(--surface-border); background: var(--glass-85); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
     <span style="font-size: 22px; font-weight: 600; line-height: 1.2;">Steps</span>
   </div>
   <div style="position: absolute; left: 0; right: 0; top: 120px; bottom: 0; overflow: hidden;">
-    <div style="margin: 8px 20px 0; min-height: 52px; border-radius: 12px; background: #EEEBE5; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; padding: 3px; box-sizing: border-box; font-size: 20px; font-weight: 600;">
-      <span style="display: flex; align-items: center; justify-content: center; border-radius: 9px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 6px 4px;">Week</span>
-      <span style="display: flex; align-items: center; justify-content: center; color: #6F6B64; padding: 6px 4px;">Month</span>
-      <span style="display: flex; align-items: center; justify-content: center; color: #6F6B64; padding: 6px 4px;">6 months</span>
-      <span style="display: flex; align-items: center; justify-content: center; color: #6F6B64; padding: 6px 4px;">Year</span>
+    <div style="margin: 8px 20px 0; min-height: 52px; border-radius: 12px; background: var(--surface-line); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; padding: 3px; box-sizing: border-box; font-size: 20px; font-weight: 600;">
+      <span style="display: flex; align-items: center; justify-content: center; border-radius: 9px; background: var(--surface-card); box-shadow: 0 1px 3px var(--shadow-8); padding: 6px 4px;">Week</span>
+      <span style="display: flex; align-items: center; justify-content: center; color: var(--text-meta); padding: 6px 4px;">Month</span>
+      <span style="display: flex; align-items: center; justify-content: center; color: var(--text-meta); padding: 6px 4px;">6 months</span>
+      <span style="display: flex; align-items: center; justify-content: center; color: var(--text-meta); padding: 6px 4px;">Year</span>
     </div>
     <div style="margin: 18px 20px 0;">
-      <div style="font-size: 18px; font-weight: 600; letter-spacing: 0.5px; color: #6F6B64; line-height: 1.2;">DAILY AVERAGE</div>
-      <div style="margin-top: 2px; line-height: 1.1;"><span style="font-size: 48px; font-weight: 700;">8,432</span> <span style="font-size: 22px; color: #6F6B64;">steps</span></div>
-      <div style="font-size: 20px; color: #6F6B64; line-height: 1.25;">27 Oct – 2 Nov 2026</div>
+      <div style="font-size: 18px; font-weight: 600; letter-spacing: 0.5px; color: var(--text-meta); line-height: 1.2;">DAILY AVERAGE</div>
+      <div style="margin-top: 2px; line-height: 1.1;"><span style="font-size: 48px; font-weight: 700;">8,432</span> <span style="font-size: 22px; color: var(--text-meta);">steps</span></div>
+      <div style="font-size: 20px; color: var(--text-meta); line-height: 1.25;">27 Oct – 2 Nov 2026</div>
     </div>
     <div style="position: relative; margin: 18px 20px 0; height: 230px;">
-      <div style="position: absolute; left: 0; right: 0; top: 96px; border-top: 1.5px dashed #BB365C;"></div>
-      <span style="position: absolute; right: 0; top: 66px; font-size: 18px; color: #BB365C; background: #FBFAF8; padding: 0 4px;">typical</span>
-      <div style="position: absolute; left: 0; right: 0; bottom: 22px; top: 0; display: flex; align-items: flex-end; justify-content: space-between;"><span style="width: 30px; height: 120px; border-radius: 6px; background: #F0C3CF;"></span><span style="width: 30px; height: 150px; border-radius: 6px; background: #F0C3CF;"></span><span style="width: 30px; height: 96px; border-radius: 6px; background: #F0C3CF;"></span><span style="width: 30px; height: 180px; border-radius: 6px; background: #BB365C;"></span><span style="width: 30px; height: 132px; border-radius: 6px; background: #F0C3CF;"></span><span style="width: 30px; height: 104px; border-radius: 6px; background: #F0C3CF;"></span><span style="width: 30px; height: 140px; border-radius: 6px; background: #F0C3CF;"></span></div>
+      <div style="position: absolute; left: 0; right: 0; top: 96px; border-top: 1.5px dashed var(--app-health);"></div>
+      <span style="position: absolute; right: 0; top: 66px; font-size: 18px; color: var(--app-health); background: var(--surface-plain-page); padding: 0 4px;">typical</span>
+      <div style="position: absolute; left: 0; right: 0; bottom: 22px; top: 0; display: flex; align-items: flex-end; justify-content: space-between;"><span style="width: 30px; height: 120px; border-radius: 6px; background: var(--fill-f0c3cf);"></span><span style="width: 30px; height: 150px; border-radius: 6px; background: var(--fill-f0c3cf);"></span><span style="width: 30px; height: 96px; border-radius: 6px; background: var(--fill-f0c3cf);"></span><span style="width: 30px; height: 180px; border-radius: 6px; background: var(--app-health-fill);"></span><span style="width: 30px; height: 132px; border-radius: 6px; background: var(--fill-f0c3cf);"></span><span style="width: 30px; height: 104px; border-radius: 6px; background: var(--fill-f0c3cf);"></span><span style="width: 30px; height: 140px; border-radius: 6px; background: var(--fill-f0c3cf);"></span></div>
     </div>
   </div>
   <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; display: flex; align-items: center; gap: 8px;">
-    <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: rgba(255,255,255,0.72); border: 1px solid #E4E0D8; box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg></button>
-    <div style="flex-grow: 1; height: 56px; border-radius: 28px; background: rgba(255,255,255,0.72); border: 1px solid #E4E0D8; box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
-      <span aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #1C1B19; font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Summary</span>
-      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #6F6B64;"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>More</span>
+    <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg></button>
+    <div style="flex-grow: 1; height: 56px; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
+      <span aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-ink); font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Summary</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-meta);"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>More</span>
       </div>
-    <button aria-label="Search" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: rgba(255,255,255,0.72); border: 1px solid #E4E0D8; box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg></button>
+    <button aria-label="Search" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg></button>
   </div>
 </div>
 </x-dc>

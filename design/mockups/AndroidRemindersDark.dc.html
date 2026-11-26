@@ -1,6 +1,3 @@
-<!-- After notification permission or channel settings change outside Centraid, returning to the app reconciles the whole desired notification set even when reminder data is unchanged. A denied permission remains quiet; a newly granted permission arms eligible timed reminders without editing them. -->
-<!-- A notification action's receipt keeps its task and Undo across a process/session restart for the remainder of its original ten-minute lifetime. Restart never extends that lifetime; expired, replaced or other-vault receipts cannot act. Undo retains the existing per-field conflict checks. -->
-<!-- An unreadable device-store receipt is a failed read, not an absent receipt. A failed durable write never advertises an Undo that cannot be recovered. -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,122 +8,122 @@
 <body>
 <x-dc>
 <helmet>
+<link rel="stylesheet" href="./tokens.css">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
 <style>
 body{margin:0}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 412px; height: 915px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: 'Roboto Flex', Roboto, system-ui, sans-serif; color: #F2EFEA;">
+<div data-theme="dark" style="width: 412px; height: 915px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--surface-plain-page); font-family: 'Roboto Flex', Roboto, system-ui, sans-serif; color: var(--text-ink);">
   <div style="height: 40px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 500;">
     <span>9:30</span>
     <span style="display: flex; align-items: center; gap: 6px;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><path d="M12 20l-10-12a16 16 0 0120 0z"/></svg>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><path d="M3 21h18V3z"/></svg>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><rect x="8" y="3" width="8" height="18" rx="2"/><rect x="10" y="1.5" width="4" height="2" rx="1"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--text-ink)" aria-hidden="true"><path d="M12 20l-10-12a16 16 0 0120 0z"></path></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--text-ink)" aria-hidden="true"><path d="M3 21h18V3z"></path></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--text-ink)" aria-hidden="true"><rect x="8" y="3" width="8" height="18" rx="2"></rect><rect x="10" y="1.5" width="4" height="2" rx="1"></rect></svg>
     </span>
   </div>
 
   <div style="display: flex; align-items: center; gap: 4px; height: 64px; padding: 0 8px 0 16px;">
-    <span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 9px; background: #12806F; display: flex; align-items: center; justify-content: center; margin-right: 8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12h.01M4 6h.01M4 18h.01M9 6h11M9 12h11M9 18h11"/></svg></span>
+    <span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 9px; background: var(--app-reminders-fill); display: flex; align-items: center; justify-content: center; margin-right: 8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12h.01M4 6h.01M4 18h.01M9 6h11M9 12h11M9 18h11"></path></svg></span>
     <h1 style="flex-grow: 1; margin: 0; font-size: 28px; font-weight: 500; line-height: 36px;">Reminders</h1>
     <button aria-label="Filter and sort" style="width: 48px; height: 48px; border-radius: 24px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"></path></svg>
     </button>
-    <button aria-label="New reminder" style="width: 48px; height: 48px; border-radius: 16px; border: none; background: #12806F; display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    <button aria-label="New reminder" style="width: 48px; height: 48px; border-radius: 16px; border: none; background: var(--app-reminders-fill); display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
     </button>
   </div>
 
   <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px 16px 0;">
-    <a href="TodayDark.dc.html" style="text-decoration: none; color: #FFFFFF; background: #1E72DC; border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <a href="TodayDark.dc.html" style="text-decoration: none; color: var(--on-fill); background: var(--list-blue); border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18"/></svg>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18"></path></svg>
         <span style="font-size: 28px; font-weight: 500; line-height: 32px;">5</span>
       </div>
       <span style="font-size: 16px; font-weight: 500;">Today</span>
     </a>
-    <div style="color: #FFFFFF; background: #CC4268; border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="color: var(--on-fill); background: var(--list-raspberry); border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01"/></svg>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01"></path></svg>
         <span style="font-size: 28px; font-weight: 500; line-height: 32px;">14</span>
       </div>
       <span style="font-size: 16px; font-weight: 500;">Scheduled</span>
     </div>
-    <div style="color: #FFFFFF; background: #3A3733; border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="color: var(--on-fill); background: var(--fill-4a4741); border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 2h6l1-2h5"/></svg>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"></path><path d="M3 13h5l1 2h6l1-2h5"></path></svg>
         <span style="font-size: 28px; font-weight: 500; line-height: 32px;">31</span>
       </div>
       <span style="font-size: 16px; font-weight: 500;">All</span>
     </div>
-    <div style="color: #FFFFFF; background: #964C04; border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="color: var(--on-fill); background: var(--state-amber-fill); border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" aria-hidden="true"><path d="M5 21V4h11l-2 4 2 4H5"/></svg>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2" aria-hidden="true"><path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"></path></svg>
         <span style="font-size: 28px; font-weight: 500; line-height: 32px;">3</span>
       </div>
-      <span style="font-size: 16px; font-weight: 500;">Flagged</span>
+      <span style="font-size: 16px; font-weight: 500;">Starred</span>
     </div>
-    <div style="grid-column: span 2; color: #FFFFFF; background: #5F5B55; border-radius: 24px; padding: 0 16px; height: 64px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;">
+    <div style="grid-column: span 2; color: var(--on-fill); background: var(--fill-6e6b66); border-radius: 24px; padding: 0 16px; height: 64px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;">
       <div style="display: flex; align-items: center; gap: 12px;">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
         <span style="font-size: 16px; font-weight: 500;">Completed</span>
       </div>
       <span style="font-size: 14px; font-weight: 500; opacity: 0.85;">Logbook</span>
     </div>
   </div>
 
-  <h2 style="margin: 24px 32px 8px; font-size: 14px; font-weight: 600; letter-spacing: 0.1px; color: #4FD1BE;">My Lists</h2>
+  <h2 style="margin: 24px 32px 8px; font-size: 14px; font-weight: 600; letter-spacing: 0.1px; color: var(--app-reminders);">My Lists</h2>
   <div style="margin: 0 16px; display: flex; flex-direction: column; gap: 2px;">
-    <a href="ListDark.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 16px; background: #2A2826; border-radius: 20px 20px 4px 4px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: #12806F; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12h.01M4 6h.01M4 18h.01M9 6h11M9 12h11M9 18h11"/></svg></span>
+    <a href="ListDark.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 16px; background: var(--surface-fill); border-radius: 20px 20px 4px 4px;">
+      <span style="width: 40px; height: 40px; border-radius: 20px; background: var(--app-reminders-fill); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12h.01M4 6h.01M4 18h.01M9 6h11M9 12h11M9 18h11"></path></svg></span>
       <span style="flex-grow: 1; font-size: 16px;">Inbox</span>
-      <span style="font-size: 12px; font-weight: 500; color: #A39E95;">7</span>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9C4BA" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      <span style="font-size: 12px; font-weight: 500; color: var(--text-meta);">7</span>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-body)" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </a>
-    <a href="ListDark.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 16px; background: #2A2826; border-radius: 4px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: #964C04; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6h15l-2 9H8L6 3H3"/><path d="M9 20h.01M18 20h.01"/></svg></span>
+    <a href="ListDark.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 16px; background: var(--surface-fill); border-radius: 4px;">
+      <span style="width: 40px; height: 40px; border-radius: 20px; background: var(--state-amber-fill); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6h15l-2 9H8L6 3H3"></path><path d="M9 20h.01M18 20h.01"></path></svg></span>
       <span style="flex-grow: 1; font-size: 16px;">Errands</span>
-      <span style="font-size: 12px; font-weight: 500; color: #A39E95;">5</span>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9C4BA" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      <span style="font-size: 12px; font-weight: 500; color: var(--text-meta);">5</span>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-body)" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </a>
-    <a href="ListDark.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 16px; background: #2A2826; border-radius: 4px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: #935BCB; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"/></svg></span>
+    <a href="ListDark.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 16px; background: var(--surface-fill); border-radius: 4px;">
+      <span style="width: 40px; height: 40px; border-radius: 20px; background: var(--app-people-fill); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg></span>
       <span style="flex-grow: 1; font-size: 16px;">Home</span>
-      <span style="font-size: 12px; font-weight: 500; color: #A39E95;">9</span>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9C4BA" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      <span style="font-size: 12px; font-weight: 500; color: var(--text-meta);">9</span>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-body)" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </a>
-    <a href="ListDark.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 16px; background: #2A2826; border-radius: 4px 4px 20px 20px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: #1E72DC; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5h8v2"/></svg></span>
+    <a href="ListDark.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 16px; background: var(--surface-fill); border-radius: 4px 4px 20px 20px;">
+      <span style="width: 40px; height: 40px; border-radius: 20px; background: var(--list-blue); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7V5h8v2"></path></svg></span>
       <span style="flex-grow: 1; font-size: 16px;">Work</span>
-      <span style="font-size: 12px; font-weight: 500; color: #A39E95;">10</span>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9C4BA" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      <span style="font-size: 12px; font-weight: 500; color: var(--text-meta);">10</span>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-body)" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </a>
   </div>
-  <button style="margin: 12px 16px 0; height: 40px; padding: 0 16px 0 12px; border: none; border-radius: 20px; background: none; color: #4FD1BE; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px;">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4FD1BE" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add List
+  <button style="margin: 12px 16px 0; height: 40px; padding: 0 16px 0 12px; border: none; border-radius: 20px; background: none; color: var(--app-reminders); font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--app-reminders)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add List
   </button>
 
   <div style="position: absolute; left: 18px; right: 18px; bottom: 21px; height: 54px; display: flex; align-items: center; gap: 8px;">
-    <button aria-label="Home" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: #2A2826; box-shadow: 0 3px 10px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C9C4BA" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg>
+    <button aria-label="Home" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: var(--surface-fill); box-shadow: 0 3px 10px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-body)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg>
     </button>
-    <div style="flex-grow: 1; height: 54px; box-sizing: border-box; padding: 4px; position: relative; border-radius: 27px; background: #2A2826; box-shadow: 0 3px 10px rgba(0,0,0,0.5); display: flex; align-items: stretch; font-size: 11px; line-height: 15px;">
-      <span aria-hidden="true" style="position: absolute; top: 5px; left: 84px; width: 22px; height: 2px; border-radius: 1px; background: #3A3733;"></span>
-      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: #F2EFEA; font-weight: 600;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="7" r="2"/><circle cx="5" cy="17" r="2"/><path d="M10 7h11M10 17h11"/></svg>Reminders</span>
-      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: #C9C4BA;"><svg width="22" height="22" viewBox="0 0 24 24" fill="#A39E95" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>More</span>
+    <div style="flex-grow: 1; height: 54px; box-sizing: border-box; padding: 4px; position: relative; border-radius: 27px; background: var(--surface-fill); box-shadow: 0 3px 10px var(--shadow-8); display: flex; align-items: stretch; font-size: 11px; line-height: 15px;">
+      <span aria-hidden="true" style="position: absolute; top: 5px; left: 84px; width: 22px; height: 2px; border-radius: 1px; background: var(--fill-1c1b19);"></span>
+      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--text-ink); font-weight: 600;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="7" r="2"></circle><circle cx="5" cy="17" r="2"></circle><path d="M10 7h11M10 17h11"></path></svg>Reminders</span>
+      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--text-body);"><svg width="22" height="22" viewBox="0 0 24 24" fill="var(--text-meta)" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>More</span>
     </div>
-    <button aria-label="Search" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: #2A2826; box-shadow: 0 3px 10px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C9C4BA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <button aria-label="Search" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: var(--surface-fill); box-shadow: 0 3px 10px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-body)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
     </button>
   </div>
-  <!-- Focused quick-add state: TalkBack gets the destination label and the visible typed title remains editable text. -->
-  <div role="group" aria-label="Quick add" style="position: absolute; left: 16px; right: 16px; bottom: 80px; min-height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 4px 14px; border: 1px solid #3A3733; border-radius: 26px; background: #0E0D0C;">
-    <span aria-hidden="true" style="font-size: 20px; color: #A39E95;">+</span>
-    <input id="agenda-quick-add" type="text" role="textbox" aria-label="Add to Inbox" value="Water the plants" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: #F2EFEA; font: 16px 'Roboto Flex', Roboto, system-ui, sans-serif;">
-    <button aria-label="Add reminder" style="height: 40px; padding: 0 14px; border: none; border-radius: 20px; background: #12806F; color: #FFFFFF; font: 600 14px 'Roboto Flex', Roboto, system-ui, sans-serif;">Add</button>
+  <div role="group" aria-label="Quick add" style="position: absolute; left: 16px; right: 16px; bottom: 80px; min-height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 4px 14px; border: 1px solid var(--surface-border); border-radius: 26px; background: var(--surface-plain-page);">
+    <span aria-hidden="true" style="font-size: 20px; color: var(--text-meta);">+</span>
+    <input id="agenda-quick-add" type="text" role="textbox" aria-label="Add to Inbox" value="Water the plants" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--text-ink); font: 16px 'Roboto Flex', Roboto, system-ui, sans-serif;">
+    <button aria-label="Add reminder" style="height: 40px; padding: 0 14px; border: none; border-radius: 20px; background: var(--app-reminders-fill); color: var(--on-fill); font: 600 14px 'Roboto Flex', Roboto, system-ui, sans-serif;">Add</button>
   </div>
-  <div aria-hidden="true" style="position: absolute; left: 152px; bottom: 6px; width: 108px; height: 4px; border-radius: 2px; background: #3A3733;"></div>
+  <div aria-hidden="true" style="position: absolute; left: 152px; bottom: 6px; width: 108px; height: 4px; border-radius: 2px; background: var(--fill-1c1b19);"></div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
