@@ -63,8 +63,8 @@ struct RoomView: View {
             scrolled: { anchor, fraction in
                 store.scrolled(instance: shown.instance, anchorSelectorID: anchor, anchorFractionMilli: fraction)
             },
-            canvas: { selector, kind in
-                store.canvas(instance: shown.instance, selectorID: selector, kind: kind)
+            canvas: { event in
+                store.sendCanvas(instance: shown.instance, event: event)
             }
         )
     }

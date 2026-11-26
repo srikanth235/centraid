@@ -100,12 +100,16 @@ final class RoomStore: ObservableObject {
         send(instance: instance, event: .scrolled(scrolled))
     }
 
+    func sendCanvas(instance: UInt64, event: Centraid_Core_V1_RoomCanvasEvent) {
+        guard !event.selectorID.isEmpty else { return }
+        send(instance: instance, event: .canvas(event))
+    }
+
     func canvas(instance: UInt64, selectorID: String, kind: Centraid_Core_V1_RoomCanvasEvent.OneOf_Kind) {
-        guard !selectorID.isEmpty else { return }
         var canvasEvent = Centraid_Core_V1_RoomCanvasEvent()
         canvasEvent.selectorID = selectorID
         canvasEvent.kind = kind
-        send(instance: instance, event: .canvas(canvasEvent))
+        sendCanvas(instance: instance, event: canvasEvent)
     }
 
     func dismissSheet() {

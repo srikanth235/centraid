@@ -4,7 +4,7 @@ struct RoomCallbacks {
     let tap: (String) -> Void
     let change: (String, UInt64, Centraid_Core_V1_RoomChange.OneOf_Value) -> Void
     let scrolled: (String, UInt32) -> Void
-    let canvas: (String, Centraid_Core_V1_RoomCanvasEvent.OneOf_Kind) -> Void
+    let canvas: (Centraid_Core_V1_RoomCanvasEvent) -> Void
 }
 
 enum RoomToneStyle {
@@ -80,13 +80,13 @@ struct RoomBlockView: View {
         case .origin(let origin)?:
             RoomOriginBlock(origin: origin, onTap: callbacks.tap)
         case .calendarGrid(let grid)?:
-            RoomCanvasPlaceholder(title: grid.anchorDay, selectorID: grid.createSelectorID)
+            CalendarGridCanvasView(grid: grid, onTap: callbacks.tap, onCanvas: callbacks.canvas)
         case .photoGrid(let grid)?:
             RoomCanvasPlaceholder(title: grid.sections.first?.heading ?? "", selectorID: grid.nextPageSelectorID)
         case .noteEditor(let editor)?:
-            RoomCanvasPlaceholder(title: editor.title, selectorID: editor.selectorID)
+            NoteEditorCanvasView(editor: editor, onTap: callbacks.tap, onCanvas: callbacks.canvas)
         case .chart(let chart)?:
-            RoomCanvasPlaceholder(title: chart.summary.isEmpty ? chart.emptySentence : chart.summary, selectorID: chart.selectorID)
+            ChartCanvasView(chart: chart, onCanvas: callbacks.canvas)
         case nil:
             EmptyView()
         }
