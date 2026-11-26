@@ -6,6 +6,7 @@
 mod common;
 
 use centraid_vault::commands::follow::write_day_totals;
+use centraid_vault::commands::measurement::{self, Units};
 use common::follow::Follow;
 use serde_json::json;
 
@@ -89,7 +90,98 @@ fn only_a_followed_health_store_writes_totals_and_the_table_refuses_the_rest() {
     // why the writer above is the one rule that a health store wrote it.
     let person: String = f.one("SELECT self_id FROM vault", &[]);
     f.raw(&format!(
-        "INSERT INTO measurement (person_id, day, metric, value, origin_id)
-         VALUES ('{person}', '{DAY}', 'steps', 1, '{roll}')"
+        "INSERT INTO measurement (person_id, day, metric, value, origin_id, stated)
+         VALUES ('{person}', '{DAY}', 'steps', 1, '{roll}', 1)"
     ));
+}
+
+fn figure(f: &Follow) -> (f64, Option<f64>, Option<String>) {
+    let row = |column: &str| format!("SELECT {column} FROM measurement WHERE metric = 'steps'");
+    (
+        f.one(&row("value"), &[]),
+        f.one(&row("stated"), &[]),
+        f.one(&row("origin_id"), &[]),
+    )
+}
+
+#[test]
+fn a_figure_the_member_overrode_survives_the_next_read_and_clear_gives_the_store_back() {
+    let f = Follow::new("totals_override");
+    let health = origin(&f, "health", "Health");
+    assert_eq!(write(&f, &health, &[("steps", 4000.0)]), Ok(1));
+    f.ok(
+        "measurement.log",
+        json!({ "day": DAY, "metric": "steps", "value": 4500 }),
+    );
+    assert_eq!(
+        figure(&f),
+        (4500.0, Some(4000.0), Some(health.clone())),
+        "typing over a followed day is allowed and the statement stays beside it"
+    );
+    let says = |f: &Follow| {
+        let me: String = f.one("SELECT self_id FROM vault", &[]);
+        f.vault()
+            .read(|c| measurement::totals_on(c, &me, DAY, Units::Metric))
+            .expect("a day")
+            .remove(0)
+            .stated
+    };
+    assert_eq!(says(&f).as_deref(), Some("4000"), "Phone says");
+    assert_eq!(write(&f, &health, &[("steps", 4100.0)]), Ok(1));
+    assert_eq!(
+        figure(&f),
+        (4500.0, Some(4100.0), Some(health.clone())),
+        "the store states again, the override stays"
+    );
+    f.ok(
+        "measurement.clear",
+        json!({ "day": DAY, "metric": "steps" }),
+    );
+    assert_eq!(
+        figure(&f),
+        (4100.0, Some(4100.0), Some(health.clone())),
+        "clear gives the store's figure back without a re-read"
+    );
+    assert_eq!(write(&f, &health, &[("steps", 4200.0)]), Ok(1));
+    assert_eq!(
+        figure(&f).0,
+        4200.0,
+        "no override: the store's figure follows"
+    );
+    assert_eq!(says(&f), None, "nothing differs, nothing to say");
+}
+
+#[test]
+fn a_hand_figure_typed_before_the_store_states_the_day_becomes_an_override() {
+    let f = Follow::new("totals_hand_first");
+    f.ok(
+        "measurement.log",
+        json!({ "day": DAY, "metric": "steps", "value": 3000 }),
+    );
+    assert_eq!(figure(&f), (3000.0, None, None));
+    let health = origin(&f, "health", "Health");
+    assert_eq!(write(&f, &health, &[("steps", 4000.0)]), Ok(1));
+    assert_eq!(figure(&f), (3000.0, Some(4000.0), Some(health)));
+    f.ok(
+        "measurement.clear",
+        json!({ "day": DAY, "metric": "steps" }),
+    );
+    assert_eq!(figure(&f).0, 4000.0);
+
+    f.ok(
+        "measurement.log",
+        json!({ "day": "2026-03-03", "metric": "steps", "value": 10 }),
+    );
+    f.ok(
+        "measurement.clear",
+        json!({ "day": "2026-03-03", "metric": "steps" }),
+    );
+    assert_eq!(
+        f.count(
+            "SELECT COUNT(*) FROM measurement WHERE day = '2026-03-03'",
+            &[]
+        ),
+        0,
+        "a hand-only figure is deleted"
+    );
 }

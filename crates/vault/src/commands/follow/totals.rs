@@ -1,7 +1,8 @@
 //! A day's totals from a health store: the one writer of `measurement.origin_id`.
 //!
 //! A day's total is not an item (no trash, no title): one figure per person, day and metric, a
-//! correction overwrites it, and `origin_id` says which store it came from (F1, A12). The column
+//! correction by the store overwrites it unless the member overrode it, and `origin_id` says which
+//! store it came from (F1, A12). The column
 //! is a plain foreign key into `origin` (amendment 7), so **that the origin is a health store is
 //! this writer's rule**, and it reads it from the file: a health store is an origin whose system
 //! yields readings (`source_shape`), not one the code names.
@@ -11,8 +12,10 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::error::{Result, VaultError};
 
 /// Write one person's totals for `day` as read from the health store `origin`: each
-/// `(metric, value)` replaces the figure the person has for that day and metric, and names the
-/// origin. Answers how many figures were written. Nothing is written when any one is refused.
+/// `(metric, value)` is what the store states for that day and metric, and names the origin. The
+/// figure itself is replaced only when the day is new or the member has not overridden it (its
+/// `value` is still what the store last stated); a hand figure or an override stays and the
+/// statement is kept beside it in `stated`. Answers how many figures were written. Nothing is written when any one is refused.
 ///
 /// A metric the file does not know, one whose cadence is not a daily total (a reading), and a
 /// value below zero or a day that is not a date are refused by the table's own keys; what only
@@ -61,10 +64,13 @@ pub fn write_day_totals(
         ));
     }
     let mut statement = connection.prepare_cached(
-        "INSERT INTO measurement (person_id, day, metric, value, origin_id)
-         VALUES (?1, ?2, ?3, ?4, ?5)
+        "INSERT INTO measurement (person_id, day, metric, value, origin_id, stated)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?4)
          ON CONFLICT (person_id, day, metric) DO UPDATE
-            SET value = excluded.value, origin_id = excluded.origin_id",
+            SET value = CASE WHEN measurement.origin_id IS NOT NULL
+                                  AND measurement.value IS measurement.stated
+                             THEN excluded.value ELSE measurement.value END,
+                stated = excluded.stated, origin_id = excluded.origin_id",
     )?;
     let mut written = 0;
     for (metric, value) in totals {

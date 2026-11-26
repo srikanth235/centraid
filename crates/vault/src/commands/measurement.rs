@@ -14,14 +14,16 @@
 //! figure and the unit it is kept in. No list of metrics, and no match on one, decides a shape here;
 //! the table's own key refuses a metric that is not a daily total.
 //!
-//! - **Written by hand** (`measurement.log`, `measurement.clear`): refused while a health store is
-//!   followed (it states the day again at its next read, so a figure typed over it would not last);
-//!   once the store is stopped its figures are the member's to correct or take back.
+//! - **Written by hand** (`measurement.log`, `measurement.clear`): allowed while a health store is
+//!   followed. A figure typed over a store's day is an override: `value` differs from `stated`,
+//!   what the store last said, and the next read keeps it. `measurement.clear` on a store's day
+//!   puts `value` back to `stated`; on a hand-only figure it deletes the row.
 //! - **Written by a health store** ([`record`]): `follow::write_day_totals` is the one writer of
-//!   `measurement.origin_id`. A batch is one commit, the store's cursor rides with the days it
-//!   covers, a value the vault already holds is not written (reading the same week twice changes
-//!   nothing), a changed one is replaced, a new one added. A day the store states is never
-//!   deleted: a sum the store now reports nothing for is sent as `0` by the follower.
+//!   `measurement.origin_id` and `measurement.stated`. A batch is one commit, the store's cursor
+//!   rides with the days it covers, a statement the vault already holds is not written (reading
+//!   the same week twice changes nothing), a changed one is stated again, a new one added. A day
+//!   the store states is never deleted: a sum the store now reports nothing for is sent as `0` by
+//!   the follower.
 //!
 //! The reads a Health screen calls are [`trend`] (one metric across days) and [`totals_on`] (one
 //! day's figures), each a bounded walk of an index, formatted in the member's [`Units`].
@@ -314,18 +316,19 @@ fn record(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         None => subject(ctx)?,
     };
     let mut held = connection.prepare_cached(
-        "SELECT value, origin_id FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
+        "SELECT stated, origin_id FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
     )?;
     let (mut changed, mut unchanged) = (0_u64, 0_u64);
     let mut by_day: BTreeMap<String, Vec<(String, f64)>> = BTreeMap::new();
     for entry in input.days {
-        let was: Option<(f64, Option<String>)> = held
+        let was: Option<(Option<f64>, Option<String>)> = held
             .query_row(rusqlite::params![person, entry.day, entry.metric], |row| {
                 Ok((row.get(0)?, row.get(1)?))
             })
             .optional()?;
-        if was.is_some_and(|(value, by)| {
-            value.to_bits() == entry.value.to_bits() && by.as_deref() == Some(origin.as_str())
+        if was.is_some_and(|(stated, by)| {
+            stated.is_some_and(|stated| stated.to_bits() == entry.value.to_bits())
+                && by.as_deref() == Some(origin.as_str())
         }) {
             unchanged += 1;
         } else {
@@ -354,22 +357,6 @@ fn record(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 // written by hand
 // ---------------------------------------------------------------------------------------------
 
-/// The health store whose figures are stated again at its next read, when the vault follows one:
-/// a live origin whose system yields readings (`source_shape`), whatever it is called.
-fn followed_by(connection: &rusqlite::Connection) -> Result<Option<String>> {
-    Ok(connection
-        .query_row(
-            "SELECT o.label FROM origin o
-              WHERE o.retired_at IS NULL
-                AND EXISTS (SELECT 1 FROM source_shape s
-                             WHERE s.system = o.system AND s.entity_kind = 'reading')
-              ORDER BY o.created_at LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
-        .optional()?)
-}
-
 /// The `(day, metric)` a command names: `day` and `metric`, or the `id` chat reads a figure's row
 /// by, `<day>:<metric>`.
 fn named(ctx: &CommandCtx<'_, '_>) -> Option<(String, String)> {
@@ -392,11 +379,6 @@ fn named_parts(
     Some((day.to_owned(), metric.to_owned()))
 }
 
-fn store_refusal(connection: &rusqlite::Connection) -> Result<Option<String>> {
-    Ok(followed_by(connection)?
-        .map(|store| format!("These figures come from {store}; change them there, not here.")))
-}
-
 fn pre_log(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let connection = ctx.connection();
     let Some((day, metric)) = named(ctx) else {
@@ -411,7 +393,7 @@ fn pre_log(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if !is_live_person(connection, &subject(ctx)?)? {
         return Ok(Some("There is no such person.".to_owned()));
     }
-    store_refusal(connection)
+    Ok(None)
 }
 
 #[derive(serde::Deserialize)]
@@ -423,7 +405,8 @@ struct LogMeasurementInput {
     value: f64,
 }
 
-/// A figure typed by hand: it overwrites the day's figure of the metric, and its origin is none.
+/// A figure typed by hand: it is the day's figure of the metric. Over a store's day it becomes an
+/// override and the store's statement stays beside it; a hand-only day keeps no origin.
 fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: LogMeasurementInput = ctx.parse_input()?;
     let (day, metric) = named_parts(
@@ -447,8 +430,7 @@ fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     connection.execute(
         "INSERT INTO measurement (person_id, day, metric, value, origin_id)
          VALUES (?1, ?2, ?3, ?4, NULL)
-         ON CONFLICT (person_id, day, metric) DO UPDATE
-            SET value = excluded.value, origin_id = NULL",
+         ON CONFLICT (person_id, day, metric) DO UPDATE SET value = excluded.value",
         rusqlite::params![person, day, metric, input.value],
     )?;
     ctx.touch(&person)?;
@@ -465,9 +447,6 @@ fn pre_clear(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some((day, metric)) = named(ctx) else {
         return Ok(Some("Name the day and the metric.".to_owned()));
     };
-    if let Some(sentence) = store_refusal(connection)? {
-        return Ok(Some(sentence));
-    }
     let held: bool = connection.query_row(
         "SELECT EXISTS (SELECT 1 FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3)",
         rusqlite::params![subject(ctx)?, day, metric],
@@ -484,7 +463,8 @@ struct ClearMeasurementInput {
     metric: Option<String>,
 }
 
-/// Take back a figure: the row goes, and nothing else.
+/// Take back a figure: a store's day is the store's again (`value` is `stated`), a hand-only
+/// figure goes.
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: ClearMeasurementInput = ctx.parse_input()?;
     let (day, metric) = named_parts(
@@ -505,9 +485,16 @@ fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             |row| row.get(0),
         )
         .optional()?;
+    let key = rusqlite::params![person, day, metric];
     ctx.connection().execute(
-        "DELETE FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
-        rusqlite::params![person, day, metric],
+        "UPDATE measurement SET value = stated
+          WHERE person_id = ?1 AND day = ?2 AND metric = ?3 AND origin_id IS NOT NULL",
+        key,
+    )?;
+    ctx.connection().execute(
+        "DELETE FROM measurement
+          WHERE person_id = ?1 AND day = ?2 AND metric = ?3 AND origin_id IS NULL",
+        key,
     )?;
     ctx.touch(&person)?;
     // The figure that went, so taking the clearing back logs it again.
@@ -530,11 +517,14 @@ pub struct Point {
     pub shown: String,
     /// The store it came from, none when it was typed by hand.
     pub origin_id: Option<String>,
+    /// What the store last said, spelled in the member's units: "Phone says". Set only when the
+    /// member's figure differs from it.
+    pub stated: Option<String>,
 }
 
 /// One metric of one person across `[from, to]` (days), oldest first: a walk of
 /// `measurement_by_metric` (or the key), stopping at the limit.
-pub const TREND_SQL: &str = "SELECT m.day, m.metric, m.value, h.unit, m.origin_id
+pub const TREND_SQL: &str = "SELECT m.day, m.metric, m.value, h.unit, m.origin_id, m.stated
        FROM measurement m JOIN health_metric h ON h.code = m.metric
       WHERE m.metric = ?1 AND m.person_id = ?2 AND m.day >= ?3 AND m.day <= ?4
       ORDER BY m.day
@@ -564,6 +554,10 @@ pub fn trend(
                 value,
                 shown: units.show(&unit, value, None),
                 origin_id: row.get(4)?,
+                stated: row
+                    .get::<_, Option<f64>>(5)?
+                    .filter(|stated| stated.to_bits() != value.to_bits())
+                    .map(|stated| units.show(&unit, stated, None)),
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -571,7 +565,7 @@ pub fn trend(
 }
 
 /// Every figure of one person's day (at most one per metric): a walk of the key's prefix.
-pub const TOTALS_ON_SQL: &str = "SELECT m.day, m.metric, m.value, h.unit, m.origin_id
+pub const TOTALS_ON_SQL: &str = "SELECT m.day, m.metric, m.value, h.unit, m.origin_id, m.stated
        FROM measurement m JOIN health_metric h ON h.code = m.metric
       WHERE m.person_id = ?1 AND m.day = ?2
       ORDER BY m.metric";
@@ -597,6 +591,10 @@ pub fn totals_on(
                 value,
                 shown: units.show(&unit, value, None),
                 origin_id: row.get(4)?,
+                stated: row
+                    .get::<_, Option<f64>>(5)?
+                    .filter(|stated| stated.to_bits() != value.to_bits())
+                    .map(|stated| units.show(&unit, stated, None)),
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -606,11 +604,11 @@ pub fn totals_on(
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     const CLEAR: &[CommandCondition] = &[CommandCondition {
-        predicate: "a_figure_the_member_logged_and_no_store_states",
+        predicate: "a_figure_the_member_or_a_store_holds",
         check: pre_clear,
     }];
     const LOG: &[CommandCondition] = &[CommandCondition {
-        predicate: "a_figure_names_a_day_and_a_daily_metric_and_no_store_states_it",
+        predicate: "a_figure_names_a_day_and_a_daily_metric",
         check: pre_log,
     }];
     const RECORD: &[CommandCondition] = &[CommandCondition {
