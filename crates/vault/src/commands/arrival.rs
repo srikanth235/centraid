@@ -1,12 +1,15 @@
 //! How an item **arrived**: the one mechanism for "this did not come from typing".
 //!
 //! A command that can bring an item in from outside (a photo from the picker, a vCard, a
-//! Markdown file, a Locker CSV, a scan or an upload) takes two optional inputs, `arrived_via`
+//! Markdown file, a Locker CSV, a scan, an upload, an `.ics` file or something shared in from another
+//! app) takes two optional inputs, `arrived_via`
 //! (`"vcard"`) and `arrived_label` (`"contacts.vcf"`). The command calls [`record`] for each item
 //! it adds, and this module writes the two columns of the `entity` row, **both or neither**
 //! (A10): `arrived_via` (a key of the `arrival_via` lookup) and `arrived_label`. Nothing else: no
 //! `origin`, no `source`. An item with no `arrived_via` was typed by the member; absence is the
-//! signal, nothing says "typed".
+//! signal, nothing says "typed". A shared file is named by its format when one exists: a shared
+//! `.vcf` arrives as `vcard`, a shared `.csv` as `csv`, a shared `.ics` as `ics`; `share` is for the
+//! rest (a document, a photo, a note).
 //!
 //! This is not following. A one-time arrival is a fact about one row, and a followed store (the
 //! camera roll, the phone's contacts and calendars) is an `origin` with `source` rows the engine
@@ -30,7 +33,7 @@ macro_rules! arrived_property {
     () => {
         r#""arrived_via": {
           "type": "string",
-          "enum": ["picker", "vcard", "markdown", "csv", "scan", "upload"],
+          "enum": ["picker", "vcard", "markdown", "csv", "scan", "upload", "share", "ics"],
           "description": "How the item came in when the member did not type it. Omit it for a typed item."
         },
         "arrived_label": {

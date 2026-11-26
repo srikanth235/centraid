@@ -1285,10 +1285,12 @@ fn the_flags_the_arrivals_and_the_colours_are_what_the_founded_file_holds() {
     // The macro every command's schema takes lists exactly them; which kind each brings in is
     // `arrival_via_kind`, which `arrival::record` reads and `entity`'s own key holds.
     let via = words("SELECT code FROM arrival_via");
-    let offered: BTreeSet<String> = ["picker", "vcard", "markdown", "csv", "scan", "upload"]
-        .iter()
-        .map(|name| (*name).to_owned())
-        .collect();
+    let offered: BTreeSet<String> = [
+        "picker", "vcard", "markdown", "csv", "scan", "upload", "share", "ics",
+    ]
+    .iter()
+    .map(|name| (*name).to_owned())
+    .collect();
     assert_eq!(offered, via);
     // Every colour a command offers or reads is a key of the palette.
     let palette = words("SELECT key FROM palette");

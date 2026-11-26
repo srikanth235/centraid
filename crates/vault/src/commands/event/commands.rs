@@ -297,6 +297,7 @@ fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             busy: input.busy,
         },
     )?;
+    crate::commands::arrival::record(ctx, &id, Kind::Event)?;
     let invited = input.guests.unwrap_or_default();
     guests::set_guests(ctx, &id, &invited)?;
     Ok(json!({ "id": id, "guests": invited.len() }))
@@ -616,7 +617,10 @@ const PROPOSE_SCHEMA: &str = concat!(
     guests_schema!(),
     r#",
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
-    "busy": { "type": "boolean" }
+    "busy": { "type": "boolean" },
+    "#,
+    crate::commands::arrival::arrived_property!(),
+    r#"
   }
 }"#
 );
