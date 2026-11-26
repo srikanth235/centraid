@@ -336,6 +336,7 @@ impl Follow {
         for definition in entity::definitions()
             .into_iter()
             .chain(definitions_for::<TestMaps>())
+            .chain(centraid_vault::commands::measurement::definitions())
         {
             registry.register(definition).expect("a definition");
         }

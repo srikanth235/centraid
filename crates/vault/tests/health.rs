@@ -570,7 +570,7 @@ fn record(w: &World, device: &str, cursor: Option<&str>, days: Json) -> Json {
 }
 
 #[test]
-fn a_health_store_writes_totals_once_and_a_hand_figure_waits_for_the_store_to_stop() {
+fn a_health_store_writes_totals_once_and_a_hand_figure_over_it_is_an_override() {
     let w = World::new("health_record");
     let days = json!([
         {"day": "2026-03-01", "metric": "steps", "value": 8000},
@@ -636,17 +636,34 @@ fn a_health_store_writes_totals_once_and_a_hand_figure_waits_for_the_store_to_st
         w.refused("measurement.record", nobody)
             .contains("no such person")
     );
-    // while the store is followed its figures are not typed over; once stopped they are the member's
-    assert_eq!(
-        w.refused(
-            "measurement.log",
-            json!({"day": "2026-03-05", "metric": "steps", "value": 9000})
-        ),
-        format!(
-            "These figures come from {}; change them there, not here.",
-            "store:apple-health"
+    // while the store is followed a figure typed over it is an override the next read keeps
+    let held = |day: &str| {
+        w.count_where(
+            &format!("SELECT CAST(value AS INTEGER) FROM measurement WHERE day = '{day}' AND metric = 'steps'"),
+            "",
         )
+    };
+    w.ok(
+        "measurement.log",
+        json!({"day": "2026-03-02", "metric": "steps", "value": 9000}),
     );
+    let reread = record(
+        &w,
+        "phone-a",
+        None,
+        json!([{"day": "2026-03-02", "metric": "steps", "value": 4321}]),
+    );
+    assert_eq!(reread["written"], 1);
+    assert_eq!(held("2026-03-02"), 9000);
+    assert_eq!(
+        w.count_where(
+            "SELECT CAST(stated AS INTEGER) FROM measurement WHERE day = '2026-03-02' AND metric = 'steps'",
+            ""
+        ),
+        4321
+    );
+    w.ok("measurement.clear", json!({"id": "2026-03-02:steps"}));
+    assert_eq!(held("2026-03-02"), 4321);
     w.ok(
         "follow.stop",
         json!({"system": "health", "ref": "store:apple-health"}),
@@ -655,14 +672,7 @@ fn a_health_store_writes_totals_once_and_a_hand_figure_waits_for_the_store_to_st
         "measurement.log",
         json!({"day": "2026-03-01", "metric": "steps", "value": 1234}),
     );
-    assert_eq!(
-        w.maybe::<String>(
-            "SELECT origin_id FROM measurement WHERE day = '2026-03-01' AND metric = 'steps'",
-            &[]
-        ),
-        None
-    );
-    w.ok("measurement.clear", json!({"id": "2026-03-02:steps"}));
+    assert_eq!(held("2026-03-01"), 1234);
 }
 
 // ---------------------------------------------------------------------------------------------
