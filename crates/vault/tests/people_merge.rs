@@ -579,36 +579,56 @@ fn contact_points_are_kept_once_by_normalized_value_and_the_survivors_preference
 // ---------------------------------------------------------------------------------------------
 
 #[test]
-fn an_invitation_names_the_survivor_after_the_merge() {
+fn an_invitation_names_the_survivor_and_an_event_with_both_keeps_the_survivors_row() {
     let w = World::new("merge_guests");
     let (ada, bea) = (add(&w, "Ada"), add(&w, "Bea"));
-    let event = w.mint();
-    w.commit(|tx| {
-        tx.insert_entity_in(&event, Kind::Event, "Dinner", Some("calendar:default"), AT)?;
-        tx.connection().execute(
-            "INSERT INTO event (id, starts, timing) VALUES (?1, '2030-03-02T19:00', 'floating')",
-            [&event],
-        )?;
-        for (address, person) in [("bea@example.com", &bea), ("ada@example.com", &ada)] {
+    let event_with = |title: &str, guests: &[(&str, Option<&str>, &str, &str)]| {
+        let event = w.mint();
+        w.commit(|tx| {
+            tx.insert_entity_in(&event, Kind::Event, title, Some("calendar:default"), AT)?;
             tx.connection().execute(
-                "INSERT INTO event_guest (event_id, address, person_id) VALUES (?1, ?2, ?3)",
-                [event.as_str(), address, person.as_str()],
+                "INSERT INTO event (id, starts, timing) VALUES (?1, '2030-03-02T19:00', 'floating')",
+                [&event],
             )?;
-        }
-        Ok(())
-    });
+            for (id, address, person, status) in guests {
+                tx.connection().execute(
+                    "INSERT INTO event_guest (id, event_id, address, person_id, status)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    rusqlite::params![id, event, address, person, status],
+                )?;
+            }
+            Ok(())
+        });
+        event
+    };
+    let both = event_with(
+        "Dinner",
+        &[
+            ("g-bea", Some("bea@example.com"), &bea, "accepted"),
+            ("g-ada", None, &ada, "declined"),
+        ],
+    );
+    let only_bea = event_with("Lunch", &[("g-bea2", None, &bea, "tentative")]);
     merge(&w, &bea, &ada);
     assert_eq!(
         w.strings(
-            "SELECT address FROM event_guest WHERE person_id = ?1 ORDER BY address",
-            &[&ada]
+            "SELECT id || '|' || status FROM event_guest WHERE event_id = ?1",
+            &[&both]
         ),
-        ["ada@example.com", "bea@example.com"],
-        "both invitations are the survivor's"
+        ["g-ada|declined"],
+        "one row, and the survivor's answer"
+    );
+    assert_eq!(
+        w.strings(
+            "SELECT id || '|' || person_id FROM event_guest WHERE event_id = ?1",
+            &[&only_bea]
+        ),
+        [format!("g-bea2|{ada}")],
+        "the invitation is the survivor's"
     );
     assert_eq!(
         w.one::<i64>(
-            "SELECT COUNT(*) FROM event_guest WHERE person_id IS NULL",
+            "SELECT COUNT(*) FROM event_guest WHERE person_id IS NULL AND address IS NULL",
             &[]
         ),
         0,

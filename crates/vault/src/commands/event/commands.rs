@@ -175,12 +175,31 @@ fn pre_respond(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if row_of(ctx.connection(), id)?.status == "cancelled" {
         return Ok(Some("That event is cancelled.".to_owned()));
     }
+    let (address, person) = (ctx.optional_str("address"), ctx.optional_str("person_id"));
+    if address.is_none() && person.is_none() {
+        return Ok(Some(
+            "say which guest answers: a person or an address".to_owned(),
+        ));
+    }
     let invited: bool = ctx.connection().query_row(
-        "SELECT EXISTS (SELECT 1 FROM event_guest WHERE event_id = ?1 AND address = ?2)",
-        [id, &guests::address_key(ctx.required_str("address")?)],
+        "SELECT EXISTS (SELECT 1 FROM event_guest
+                         WHERE event_id = ?1
+                           AND ((?2 IS NOT NULL AND address = ?2) OR (?3 IS NOT NULL AND person_id = ?3)))",
+        rusqlite::params![id, address.map(guests::address_key), person],
         |row| row.get(0),
     )?;
-    Ok((!invited).then(|| "That address is not invited to this event.".to_owned()))
+    Ok((!invited).then(|| "That guest is not invited to this event.".to_owned()))
+}
+
+fn pre_add_guest(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if let Err(sentence) = live_event(ctx, "id")? {
+        return Ok(Some(sentence));
+    }
+    if row_of(ctx.connection(), ctx.required_str("id")?)?.status == "cancelled" {
+        return Ok(Some("That event is cancelled.".to_owned()));
+    }
+    let guest: GuestIn = ctx.parse_input()?;
+    guests::refusal(ctx.connection(), &[guest])
 }
 
 fn pre_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -444,14 +463,34 @@ fn cancel(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 #[derive(serde::Deserialize)]
 struct RespondInput {
     id: String,
-    address: String,
+    address: Option<String>,
+    person_id: Option<String>,
     status: String,
 }
 
 fn respond(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: RespondInput = ctx.parse_input()?;
-    guests::respond(ctx, &input.id, &input.address, &input.status)?;
+    guests::respond(
+        ctx,
+        &input.id,
+        input.address.as_deref(),
+        input.person_id.as_deref(),
+        &input.status,
+    )?;
     Ok(json!({ "id": input.id, "status": input.status }))
+}
+
+#[derive(serde::Deserialize)]
+struct AddGuestInput {
+    id: String,
+    #[serde(flatten)]
+    guest: GuestIn,
+}
+
+fn add_guest(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: AddGuestInput = ctx.parse_input()?;
+    let added = guests::add_guest(ctx, &input.id, input.guest)?;
+    Ok(json!({ "id": input.id, "added": added }))
 }
 
 #[derive(serde::Deserialize)]
@@ -525,11 +564,22 @@ fn edit_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 // The catalogue
 // ---------------------------------------------------------------------------
 
+const ADD_GUEST_SCHEMA: &str = r#"{ "type": "object", "required": ["id"], "additionalProperties": false,
+  "description": "One guest is a person or an address: a person with no email is a guest too.",
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "address": { "type": "string", "minLength": 1 },
+    "person_id": { "type": "string", "minLength": 1 },
+    "name": { "type": ["string", "null"] },
+    "role": { "type": "string", "enum": ["required", "optional", "non-participant"] },
+    "status": { "type": "string", "enum": ["needs-action", "accepted", "declined", "tentative"] },
+    "organizer": { "type": "boolean" } } }"#;
+
 macro_rules! guests_schema {
     () => {
         r#"{ "type": ["array", "null"],
-      "description": "The whole list: a guest left out is taken off, one already invited keeps their answer unless this states it.",
-      "items": { "type": "object", "required": ["address"], "additionalProperties": false,
+      "description": "The whole list: a guest left out is taken off, one already invited keeps their answer unless this states it. A guest is a person or an address.",
+      "items": { "type": "object", "additionalProperties": false,
         "properties": {
           "address": { "type": "string", "minLength": 1, "description": "An email address: a guest's identity on the event, in People or not." },
           "name": { "type": ["string", "null"] },
@@ -666,6 +716,10 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "guest_is_invited_and_event_is_not_cancelled",
         check: pre_respond,
     }];
+    const ADD_GUEST: &[CommandCondition] = &[CommandCondition {
+        predicate: "event_is_live_and_the_guest_is_a_person_or_an_address",
+        check: pre_add_guest,
+    }];
     const OCCURRENCE: &[CommandCondition] = &[
         STALE_GUARD[0],
         STALE_GUARD[1],
@@ -717,14 +771,23 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "event.respond",
             "event",
-            r#"{ "type": "object", "required": ["id", "address", "status"], "additionalProperties": false,
+            r#"{ "type": "object", "required": ["id", "status"], "additionalProperties": false,
                  "properties": {
                    "id": { "type": "string", "minLength": 1 },
                    "address": { "type": "string", "minLength": 1 },
+                   "person_id": { "type": "string", "minLength": 1 },
                    "status": { "type": "string", "enum": ["accepted", "declined", "tentative"] } } }"#,
             Idempotency::Idempotent,
             RESPOND,
             respond,
+        ),
+        CommandDefinition::plain(
+            "event.add_guest",
+            "event",
+            ADD_GUEST_SCHEMA,
+            Idempotency::Idempotent,
+            ADD_GUEST,
+            add_guest,
         ),
         medium(CommandDefinition::plain(
             "event.edit_occurrence",

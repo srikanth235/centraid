@@ -234,6 +234,11 @@ pub const TABLES: &[(&str, Role)] = &[
 /// A host's `id` and a child's `via` column are the entity's id and are never state; they are
 /// not listed.
 pub const OMITTED: &[(&str, &str, &str)] = &[
+    (
+        "event_guest",
+        "starts",
+        "a copy of `event.starts`, kept by triggers; the event's own start is the state",
+    ),
     ("entity", "n", "row order"),
     ("entity", "id", "identity"),
     ("entity", "kind", "identity"),
@@ -376,8 +381,14 @@ pub fn blob_slot(table: &str, column: &str) -> Option<&'static BlobSlot> {
 /// from [`OMITTED`] (what the history does not keep): an immutable or bank-stated column the
 /// history leaves out is still a change to the entity when a command moves it (a purge detaching a
 /// derived photo's `edited_from`, `txn.account_id` feeding the account's text).
-pub const NEVER_TOUCHES: &[(&str, &str, &str)] =
-    &[("locker_item", "last_used_at", "a use is not an edit")];
+pub const NEVER_TOUCHES: &[(&str, &str, &str)] = &[
+    ("locker_item", "last_used_at", "a use is not an edit"),
+    (
+        "event_guest",
+        "starts",
+        "a copy of `event.starts`, kept by triggers for a person's timeline",
+    ),
+];
 
 fn never_touches(table: &str, column: &str) -> bool {
     NEVER_TOUCHES

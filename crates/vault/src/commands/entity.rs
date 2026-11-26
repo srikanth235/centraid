@@ -657,6 +657,21 @@ pub(crate) fn purge_one(
             PurgeRule::Refuse => {}
         }
     }
+    // A guest that is only this person has nothing left to be but a row with no address and no
+    // person, which the table refuses: those go before the person does, the others let go.
+    if found.kind == Kind::Person {
+        for event in ids(
+            connection,
+            "SELECT DISTINCT event_id FROM event_guest WHERE person_id = ?1 AND address IS NULL",
+            id,
+        )? {
+            connection.execute(
+                "DELETE FROM event_guest WHERE event_id = ?1 AND person_id = ?2 AND address IS NULL",
+                [event.as_str(), id],
+            )?;
+            ctx.touch(&event)?;
+        }
+    }
     // An album's cover is a photograph's bytes: once those are purged the cover
     // goes, so the bytes are not held by a picture of something that is gone.
     if found.kind == Kind::Photo {
