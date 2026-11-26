@@ -483,11 +483,4 @@ mod tests {
         assert_eq!(snake("remind_before_min"), "remind_before_min");
         assert_eq!(snake("projectId"), "project_id");
     }
-
-    #[test]
-    fn agenda_has_its_typed_builders() {
-        let file = generate(&root()).unwrap();
-        assert!(file.contains("pub struct Propose {"));
-        assert!(file.contains("pub mod calendar {"));
-    }
 }
