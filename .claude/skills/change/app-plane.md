@@ -34,7 +34,7 @@ A read is a `const` declaration in the app's module of `crates/domain` **(target
 
 **Authorizer.** Every prepared statement runs under SQLite's authorizer: read-only, a function allowlist, and denial of `locker_item_field.value_sealed`, `locker_item_field.value_blob` and `locker_item_passkey.private_key` for **every** module, Locker's included; only `core::locker` reads them. A statement touching a table not in `reads ∪ across` fails to prepare.
 
-**Plan gate.** Each read passes `EXPLAIN QUERY PLAN` at test time; a plan outside its shape fails, and the only exceptions are rows in the query-plan allowlist (a count that only shrinks; today in [`crates/core/tests/query_plans.rs`](../../../crates/core/tests/query_plans.rs)).
+**Plan gate.** Each read passes `EXPLAIN QUERY PLAN` at test time; a plan outside its shape fails, and the only exceptions are rows in the query-plan allowlist (a count that only shrinks, [`contracts/ledgers/query-plans.json`](../../../contracts/ledgers/query-plans.json)); the gate itself is **(target)**, lane A's.
 
 | Shape | Plan rules |
 | --- | --- |
@@ -293,7 +293,7 @@ The shell reports scroll as `RoomScrolled{anchor_selector_id, anchor_fraction_mi
 | `Handoff(Reveal)` | `locker.totp_code`, any reveal of a Locker secret | The card opens Locker behind its wall; no secret enters a prompt |
 | `Handoff(Destructive)` | `entity.purge`, `entity.empty_trash`, every `merge`, a currency change | The card opens the confirm sheet, filled |
 
-The **census** (a test, today [`crates/nativetools/tests/catalog.rs`](../../../crates/nativetools/tests/catalog.rs) and [`catalog-census.csv`](../../../contracts/assist/catalog-census.csv), regenerated **(target)** from `ACTIONS`) counts both surfaces as reachable and fails a build that adds an action neither covers. The export in [`contracts/assist/export/`](../../../contracts/assist/export) is generated from the catalogue; each action maps to at most one chat verb of [`verbs.json`](../../../contracts/assist/verbs.json). `cargo xtask model-pin` runs **once**, at the end of lane A, and again only when a catalogue change moves the prompt ([contract](../assistant/contract.md)).
+The **census** (a test generated from `ACTIONS`, **(target)**) counts both surfaces as reachable and fails a build that adds an action neither covers. The export in [`contracts/assist/export/`](../../../contracts/assist/export) is generated from the catalogue; each action maps to at most one chat verb of [`verbs.json`](../../../contracts/assist/verbs.json). `cargo xtask model-pin` runs **once**, at the end of lane A, and again only when a catalogue change moves the prompt ([contract](../assistant/contract.md)).
 
 A chat card holds no words of the item: it names an entity id and a short `qualifier` code (`due`, `balance`); a thread resolves titles when it opens, and a purged item draws "An item you deleted" (S1, S2).
 
