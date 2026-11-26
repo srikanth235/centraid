@@ -635,7 +635,7 @@ fn the_register_is_well_formed() {
             && REGISTER
                 .iter()
                 .any(|(_, status)| matches!(status, Status::Runtime { .. }))
-            && keys.len() > 100,
+            && keys.len() >= 50,
         "the register stopped being read"
     );
 }

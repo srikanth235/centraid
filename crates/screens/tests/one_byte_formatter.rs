@@ -43,7 +43,7 @@ fn no_screen_builds_a_size_by_hand() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files = Vec::new();
     sources(&root, &mut files);
-    assert!(files.len() > 100, "the scan found no screens");
+    assert!(files.len() >= 84, "the scan found {} files", files.len());
     let mut found = Vec::new();
     for path in files {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");

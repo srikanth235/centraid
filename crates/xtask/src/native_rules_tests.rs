@@ -421,12 +421,12 @@ fn a_first_launch_view_that_asks_or_types_app_ids_is_caught() {
     write(
         &root,
         "mobile/iosApp/Sources/FirstLaunchView.swift",
-        "let apps = [\"photos\", \"docs\"]\nfunc go() { store.requestAuthorization(toShare: [], read: []) }\n",
+        "let apps = [\"tasks\", \"docs\"]\nfunc go() { store.requestAuthorization(toShare: [], read: []) }\n",
     );
     let report = first_launch_asks_nothing(&root);
     let text = findings(&report);
     assert_eq!(report.findings.len(), 2, "{text}");
-    assert!(text.contains("requestAuthorization") && text.contains("\"photos\""));
+    assert!(text.contains("requestAuthorization") && text.contains("\"tasks\""));
 }
 
 #[test]
