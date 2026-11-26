@@ -9,7 +9,7 @@
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::alerts::{self, Alert, KEEP_PAST_MS, Notice, Timing};
 use centraid_vault::clock::format_iso_ms;
-use centraid_vault::rusqlite::{Connection, OptionalExtension};
+use centraid_vault::rusqlite::Connection;
 use centraid_vault::time::recurrence::parse_instant_ms;
 use centraid_vault::time::zone::{FireZone, parse_wall_iso, wall_epoch, wall_from_epoch};
 
@@ -148,19 +148,18 @@ pub fn fire_key_of(id: &str) -> Option<&str> {
 
 fn targets_of(
     connection: &Connection,
+    entity_id: &str,
     reminder_id: &str,
 ) -> Result<(Option<String>, Option<String>)> {
-    connection
-        .query_row(
-            "SELECT date_id, field_id FROM reminder WHERE id = ?1",
-            [reminder_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()
-        .map(Option::unwrap_or_default)
-        .map_err(|error| CoreError::Invariant {
+    let held =
+        alerts::reminders_of(connection, entity_id).map_err(|error| CoreError::Invariant {
             context: format!("a reminder's target will not read: {error}"),
-        })
+        })?;
+    Ok(held
+        .into_iter()
+        .find(|reminder| reminder.id == reminder_id)
+        .map(|reminder| (reminder.date_id, reminder.field_id))
+        .unwrap_or_default())
 }
 
 fn pending_of(
@@ -177,7 +176,7 @@ fn pending_of(
     else {
         return Ok(None);
     };
-    let (date_id, field_id) = targets_of(connection, &alert.reminder_id)?;
+    let (date_id, field_id) = targets_of(connection, &notice.entity_id, &alert.reminder_id)?;
     let (title, body) = if notice.kind == "locker_item" {
         inputs.words.locker()
     } else if inputs.details {

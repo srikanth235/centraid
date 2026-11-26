@@ -193,29 +193,20 @@ fn the_core_pushes_the_notification_set_when_a_commit_reaches_the_alert_index() 
         "nothing is due in a new vault"
     );
 
-    let event = "01900000-0000-7000-8000-000000000001";
-    handle
-        .with_vault(|vault| {
-            vault.commit(|tx| {
-                tx.connection().execute_batch(&format!(
-                    "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
-                       VALUES ('{event}', 'event', 'Dentist', 'calendar:default', 'calendar',
-                               '2026-11-01T00:00:00.000Z', '2026-11-01T00:00:00.000Z');
-                     INSERT INTO event (id, starts, timing, zone)
-                       VALUES ('{event}', '2026-11-27T15:00:00.000Z', 'zoned', 'UTC');"
-                ))?;
-                Ok(())
-            })?;
-            Ok(())
-        })
-        .unwrap();
     handle
         .command(
-            "reminder.add",
-            &json!({ "entity_id": event, "offset_min": 30 }),
+            "event.propose",
+            &json!({
+                "id": "01900000-0000-7000-8000-000000000001",
+                "title": "Dentist",
+                "starts": "2026-11-27T15:00:00.000Z",
+                "timing": "zoned",
+                "zone": "UTC",
+                "reminders": [30]
+            }),
             "k1",
         )
-        .expect("the reminder is added");
+        .expect("the event is proposed");
 
     let mut pushed = None;
     for _ in 0..20 {
@@ -239,11 +230,11 @@ fn the_core_pushes_the_notification_set_when_a_commit_reaches_the_alert_index() 
     assert!(set.retain_delivered);
 }
 
-fn count(handle: &Handle, sql: &str) -> i64 {
+fn notes(handle: &Handle) -> Vec<String> {
     handle
         .with_vault(|vault| {
             vault
-                .read(|c| Ok(c.query_row(sql, [], |row| row.get::<_, i64>(0))?))
+                .read(|c| Ok(centraid_vault::testdoor::note_titles(c)))
                 .map_err(Into::into)
         })
         .unwrap()
@@ -276,13 +267,7 @@ fn the_share_in_drain_files_a_text_as_a_note_with_its_arrival_and_empties_the_in
     assert_eq!(first.len(), 1);
     assert_eq!(first[0].fate, wire::ShareInFate::Filed as i32);
     assert_eq!(first[0].detail, "note");
-    assert_eq!(
-        count(
-            &handle,
-            "SELECT COUNT(*) FROM entity WHERE kind = 'note' AND arrived_via = 'share'"
-        ),
-        1
-    );
+    assert_eq!(notes(&handle), ["Flour, eggs and butter"]);
     assert!(!item.exists());
     assert!(
         drain().is_empty(),

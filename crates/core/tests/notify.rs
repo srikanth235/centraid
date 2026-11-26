@@ -92,34 +92,25 @@ impl World {
         Self { handle, _dir: dir }
     }
 
-    fn sql(&self, sql: &str) {
-        self.handle
-            .with_vault(|vault| {
-                vault.commit(|tx| {
-                    tx.connection().execute_batch(sql)?;
-                    Ok(())
-                })?;
-                Ok(())
-            })
-            .unwrap_or_else(|error| panic!("{sql}\n{error}"));
+    fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
+        common::command(&self.handle, name, &input, &format!("seed-{name}-{input}"))
     }
 
     fn event(&self, n: u64, starts: &str) -> String {
         let e = id(n);
-        self.sql(&format!(
-            "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
-               VALUES ('{e}', 'event', 'Dentist', 'calendar:default', 'calendar', '{AT}', '{AT}');
-             INSERT INTO event (id, starts, timing, zone) VALUES ('{e}', '{starts}', 'zoned', 'UTC');"
-        ));
+        self.run(
+            "event.propose",
+            json!({ "id": e, "title": "Dentist", "starts": starts, "timing": "zoned", "zone": "UTC" }),
+        );
         e
     }
 
     fn task(&self, n: u64, due: &str) -> String {
         let t = id(n);
-        self.sql(&format!(
-            "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{t}', 'task', 'Call mum', '{AT}', '{AT}');
-             INSERT INTO task (id, due, due_timing, zone) VALUES ('{t}', '{due}', 'zoned', 'UTC');"
-        ));
+        self.run(
+            "task.add",
+            json!({ "id": t, "title": "Call mum", "due": due, "zone": "UTC" }),
+        );
         t
     }
 
@@ -190,12 +181,15 @@ fn done_is_on_a_task_alert_only_and_snooze_is_on_every_kind() {
 #[test]
 fn a_snoozed_birthday_is_held_again_at_its_snooze() {
     let world = World::new();
-    let (person, date) = (id(10), id(11));
-    world.sql(&format!(
-        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{person}', 'person', 'Ana', '{AT}', '{AT}');
-         INSERT INTO person (id) VALUES ('{person}');
-         INSERT INTO person_date (id, person_id, kind, single, date) VALUES ('{date}', '{person}', 'birthday', 1, '--11-27');"
-    ));
+    let person = id(10);
+    world.run("person.add", json!({ "id": person, "title": "Ana" }));
+    let date = world.run(
+        "person.add_date",
+        json!({ "id": person, "date": "--11-27", "kind": "birthday" }),
+    )["date_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let reminder = common::command(
         &world.handle,
         "reminder.add",
@@ -281,13 +275,18 @@ fn a_trashed_event_has_its_pending_and_delivered_entries_cancelled() {
 #[test]
 fn a_locker_expiry_says_only_that_something_expires_and_names_nothing() {
     let world = World::new();
-    let (item, field) = (id(20), id(21));
-    world.sql(&format!(
-        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{item}', 'locker_item', 'Passport', '{AT}', '{AT}');
-         INSERT INTO locker_item (id, type) VALUES ('{item}', 'login');
-         INSERT INTO locker_item_field (id, item_id, label, kind, value_text, created_at, updated_at)
-           VALUES ('{field}', '{item}', 'Expiry', 'date', '2026-12-10', '{AT}', '{AT}');"
-    ));
+    let item = id(20);
+    let added = world.run(
+        "locker.add_item",
+        json!({
+            "item_id": item, "type": "passport", "title": "Passport",
+            "fields": [{ "label": "Expiry", "kind": "date", "value": "2026-12-10" }]
+        }),
+    );
+    let first = &added["fields"][0];
+    let field = first
+        .as_str()
+        .map_or_else(|| first["id"].as_str().unwrap().to_owned(), str::to_owned);
     common::command(
         &world.handle,
         "reminder.add",
@@ -413,17 +412,6 @@ fn press(id: &str, verb: wire::NotificationVerb, entity: &str, at_ms: i64) -> wi
     }
 }
 
-fn count(world: &World, sql: &str) -> i64 {
-    world
-        .handle
-        .with_vault(|vault| {
-            vault
-                .read(|c| Ok(c.query_row(sql, [], |row| row.get::<_, i64>(0))?))
-                .map_err(Into::into)
-        })
-        .unwrap()
-}
-
 fn outcomes(results: &[wire::NotifyPressResult]) -> Vec<i32> {
     results.iter().map(|each| each.outcome).collect()
 }
@@ -433,7 +421,6 @@ fn replaying_the_outbox_is_idempotent() {
     use wire::NotifyPressOutcome as O;
     let world = World::new();
     let task = world.task(50, "2026-11-27T09:00:00.000Z");
-    world.remind(&task, 0);
     let event = world.event(51, "2026-11-28T09:00:00.000Z");
     world.remind(&event, 0);
     let presses = vec![
@@ -443,13 +430,20 @@ fn replaying_the_outbox_is_idempotent() {
     let ledger = MemoryLedger::default();
     let runner = Real(&world.handle);
 
+    let scheduler = Scheduler::new();
+    let before = world.set(&scheduler, NOW);
+    assert_eq!(before.all.len(), 2, "the task's alert and the event's");
+
     let first = replay(&presses, NOW + 1000, &runner, &ledger);
     assert_eq!(outcomes(&first), [O::Applied as i32, O::Applied as i32]);
+    let held = world.set(&scheduler, NOW + 1000);
+    assert_eq!(held.all.len(), 1, "a done task has no alert left");
+    assert_eq!(held.all[0].entity_id, event);
     assert_eq!(
-        count(&world, "SELECT COUNT(*) FROM task WHERE status = 'done'"),
-        1
+        held.all[0].fire_at_ms,
+        NOW + HOUR,
+        "the event's alert moved an hour on"
     );
-    assert_eq!(count(&world, "SELECT COUNT(*) FROM snooze"), 1);
 
     let second = replay(&presses, NOW + 2000, &runner, &ledger);
     assert_eq!(outcomes(&second), [O::Already as i32, O::Already as i32]);
@@ -460,11 +454,11 @@ fn replaying_the_outbox_is_idempotent() {
         [O::Applied as i32, O::Applied as i32],
         "a lost ledger runs the commands again under their keys"
     );
-    assert_eq!(
-        count(&world, "SELECT COUNT(*) FROM task WHERE status = 'done'"),
-        1
+    let after = world.again(&scheduler, NOW + 3000);
+    assert!(
+        after.is_none(),
+        "running the presses again under their keys changed nothing: {after:?}"
     );
-    assert_eq!(count(&world, "SELECT COUNT(*) FROM snooze"), 1);
     assert!(ledger.has("p1"));
 }
 

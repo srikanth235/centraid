@@ -475,14 +475,7 @@ impl Filer for CoreFiler<'_> {
         self.0
             .with_vault(|vault| {
                 vault
-                    .read(|connection| {
-                        let held: i64 = connection.query_row(
-                            "SELECT COUNT(*) FROM entity WHERE id = ?1",
-                            [id],
-                            |row| row.get(0),
-                        )?;
-                        Ok(held > 0)
-                    })
+                    .read(|connection| Ok(centraid_domain::glance::entity_held(connection, id)?))
                     .map_err(Into::into)
             })
             .map_err(|error| error.to_string())

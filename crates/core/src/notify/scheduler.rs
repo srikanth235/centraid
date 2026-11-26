@@ -50,7 +50,7 @@ struct State {
     last: Option<Pushed>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 struct Pushed {
     all: Vec<wire::PendingNotification>,
     live: Vec<String>,
@@ -222,7 +222,10 @@ impl Scheduler {
             cancel: cancel.into_iter().collect(),
             ask,
         };
-        if state.last.as_ref() == Some(&pushed) {
+        let same = state.last.as_ref().is_some_and(|last| {
+            last.all == pushed.all && last.live == pushed.live && last.ask == pushed.ask
+        });
+        if same && pushed.cancel.is_empty() {
             return Ok(None);
         }
         let schedule = wire::ScheduleNotifications {

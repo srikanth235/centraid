@@ -26,12 +26,6 @@ pub trait Words {
     fn counts(&self, events: u64, tasks: u64) -> String;
 }
 
-struct Item {
-    id: String,
-    kind: &'static str,
-    title: String,
-}
-
 fn day_parts(zone: &FireZone, now_ms: i64) -> (String, i64, i64) {
     let wall = zone.zoned_parts(now_ms);
     let day = format!("{:04}-{:02}-{:02}", wall.year, wall.month, wall.day);
@@ -47,29 +41,6 @@ fn day_parts(zone: &FireZone, now_ms: i64) -> (String, i64, i64) {
     )
     .unwrap_or(now_ms);
     (day, from, from + 86_400_000)
-}
-
-fn read(
-    connection: &Connection,
-    sql: &str,
-    params: &[&dyn centraid_vault::rusqlite::ToSql],
-    kind: &'static str,
-) -> Result<Vec<Item>> {
-    let fail = |error: centraid_vault::rusqlite::Error| CoreError::Invariant {
-        context: format!("the widget's read failed: {error}"),
-    };
-    let mut statement = connection.prepare(sql).map_err(fail)?;
-    let rows = statement
-        .query_map(params, |row| {
-            Ok(Item {
-                id: row.get(0)?,
-                kind,
-                title: row.get(1)?,
-            })
-        })
-        .map_err(fail)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(fail)
 }
 
 /// Today's snapshot, as the JSON the widget reads.
@@ -92,33 +63,26 @@ pub fn today(
     let to_text = centraid_vault::clock::format_iso_ms(to);
     let floating_from = format!("{day}T00:00");
     let floating_to = format!("{day}T23:59");
-    let mut events = read(
+    let held = centraid_domain::glance::today(
         connection,
-        "SELECT e.id, n.title FROM event e JOIN entity n ON n.id = e.id
-          WHERE n.deleted_at IS NULL AND e.status <> 'cancelled' AND e.rule IS NULL AND (
-                (e.timing = 'zoned' AND e.starts >= ?1 AND e.starts < ?2)
-             OR (e.timing = 'floating' AND e.starts >= ?3 AND e.starts <= ?4)
-             OR (e.timing = 'all-day' AND e.starts <= ?5 AND ifnull(e.ends, e.starts) >= ?5))
-          ORDER BY e.starts, e.id",
-        &[&from_text, &to_text, &floating_from, &floating_to, &day],
-        "event",
-    )?;
-    let mut tasks = read(
-        connection,
-        "SELECT t.id, n.title FROM task t JOIN entity n ON n.id = t.id
-          WHERE n.deleted_at IS NULL AND t.status = 'open' AND (
-                (t.due_timing = 'zoned' AND t.due >= ?1 AND t.due < ?2)
-             OR (t.due_timing = 'floating' AND t.due >= ?3 AND t.due <= ?4)
-             OR (t.due_timing = 'all-day' AND t.due = ?5)
-             OR t.scheduled_on = ?5)
-          ORDER BY t.due, t.id",
-        &[&from_text, &to_text, &floating_from, &floating_to, &day],
-        "task",
-    )?;
-    let (event_count, task_count) = (events.len() as u64, tasks.len() as u64);
-    let mut lines: Vec<Item> = Vec::new();
-    lines.append(&mut events);
-    lines.append(&mut tasks);
+        &centraid_domain::glance::Day {
+            day: &day,
+            from: &from_text,
+            to: &to_text,
+            floating_from: &floating_from,
+            floating_to: &floating_to,
+        },
+    )
+    .map_err(|error| CoreError::Invariant {
+        context: format!("the widget's read failed: {error}"),
+    })?;
+    let (event_count, task_count) = (held.events.len() as u64, held.tasks.len() as u64);
+    let mut lines: Vec<(&'static str, centraid_domain::glance::Item)> = held
+        .events
+        .into_iter()
+        .map(|item| ("event", item))
+        .chain(held.tasks.into_iter().map(|item| ("task", item)))
+        .collect();
     lines.truncate(MOST);
     let summary = if lines.is_empty() {
         words.empty()
@@ -132,10 +96,10 @@ pub fn today(
         "summary": summary,
         "lines": lines
             .iter()
-            .map(|item| json!({
+            .map(|(kind, item)| json!({
                 "text": item.title,
-                "url": open_url::link(item.kind, &item.id),
-                "kind": item.kind,
+                "url": open_url::link(kind, &item.id),
+                "kind": kind,
             }))
             .collect::<Vec<_>>(),
     }))

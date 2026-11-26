@@ -46,6 +46,7 @@ pub mod chat;
 pub mod civil;
 pub mod denial;
 pub mod error;
+pub mod glance;
 pub mod grammar;
 pub mod kind;
 pub mod manifest;
