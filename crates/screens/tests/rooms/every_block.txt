@@ -1,14 +1,14 @@
 room app_place key="everything"
   header title="Everything" subtitle="Scope"
     back "Home" #back
-    key add icon="plus" "New" #key/add
+    key add sym="plus" "New" #key/add
   band home=#band/home
-    tab "A" icon="a" selected #tab/a
-    tab "B" icon="b" #tab/b
+    tab "A" sym="a" selected #tab/a
+    tab "B" sym="b" #tab/b
   ready
     hero "Bread" noun="note" mark=glyph:note chips="Pinned":accent
       line "Edited today"
-      primary "Catch up" icon="check" #hero/catch-up
+      primary "Catch up" sym="check" #hero/catch-up
     section #section/a "Recent" count="2 of 9" next=#section/a/next
       trailing "Show all" #section/a/all
       row #row/1 "Banana bread" meta="Yesterday" trailing="$4.20":warning chips="Shared":net mark=glyph:note a11y="Banana bread, yesterday" swipe="Move to trash" #row/1/trash
@@ -34,7 +34,7 @@ room app_place key="everything"
       repeat "Guests" #guests
         group #guest/1 remove=#guest/1/remove
           text #field/guest-1 "Name" "Ana" rev=0
-        add "Add a guest" icon="plus" #guests/add
+        add "Add a guest" sym="plus" #guests/add
       explicit save="Save"#form/save cancel="Cancel"#form/cancel dirty
     form
       autosave conflict "Changed elsewhere" refused reload="Reload"#autosave/reload
@@ -48,7 +48,7 @@ room app_place key="everything"
     progress "Exporting" done=3 total=10 count="3 of 10"
       cancel "Cancel" #progress/cancel
     empty glyph="note" "No notes" body="Make one."
-      action "New note" icon="plus" #empty/add
+      action "New note" sym="plus" #empty/add
     wall "Locker is locked" body="Unlock with Face ID."
       unlock "Unlock" #wall/unlock
     tiles

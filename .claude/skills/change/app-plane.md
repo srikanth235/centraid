@@ -2,7 +2,7 @@
 
 The one interface between the vault, the core, the assistant and both shells. A read is registered SQL. A write is a typed action. A screen is a **room** holding **blocks** and at most one of four **canvases**; Rust decides which blocks, in what order, with what words and data; SwiftUI and Compose draw each block once. Everything here is stated as meaning, never layout. The wire is [`room.proto`](../../../crates/api-proto/proto/centraid/core/v1/room.proto); field names below are its field names.
 
-**Built and not built.** The vault below this plane is built: [`crates/vault`](../../../crates/vault), [`001_baseline.sql`](../../../contracts/migrations/001_baseline.sql), [`vault-commands.txt`](../../../contracts/schema/vault-commands.txt). So is the declaration layer, [`crates/domain`](../../../crates/domain): the read registry (sections 2 and 3), the action catalogue (section 4) and the kind registry (section 8), held by the registry test. Everything else on this page is **(target)** until its lane lands: the room builders, the blocks and canvases in both shells, the device-store registry and the notification scheduler. `room.proto` compiles and is wired to nothing yet.
+**Built and not built.** The vault below this plane is built: [`crates/vault`](../../../crates/vault), [`001_baseline.sql`](../../../contracts/migrations/001_baseline.sql), [`vault-commands.txt`](../../../contracts/schema/vault-commands.txt). So is the declaration layer, [`crates/domain`](../../../crates/domain): the read registry (sections 2 and 3), the action catalogue (section 4) and the kind registry (section 8), held by the registry test. The room builders, the room runtime, the device store with its key registry and the notification scheduler are built too (below); the shell frame (Home placeholder, Settings, Backup) is built on rooms. What is still **(target)**: the blocks and canvases in both shells, every app's rooms, and the census.
 
 ## 1. Who owns what
 
@@ -11,7 +11,7 @@ The one interface between the vault, the core, the assistant and both shells. A 
 | Vault ([`crates/vault`](../../../crates/vault)) | Schema, typed commands `<kind>.<verb>`, commit guard, history, trash, purge rules |
 | `crates/domain` | One module per app (`apps/`): its kinds and reads; the one action table (`catalogue.rs`); pure helpers. No proto. The SQL authorizer, not crate walls, keeps a module to its tables |
 | Core | Runs reads and actions, the draft service, the notification scheduler, followers |
-| Room builders **(target)** | Turn typed read results into a `Room`; hold selection, search, form and keep-my-place state; map each `selector_id` to a handler |
+| Room builders ([`crates/screens/src/room`](../../../crates/screens/src/room)) | Turn typed read results into a `Room`; hold selection, search, form and keep-my-place state; map each `selector_id` to a handler. `blocks`, `form` and `frame` build every block and slot; `Sel` claims selectors and refuses a repeat; `Rooms` holds a stack per tab and routes `RoomEvent`s; `snapshot` renders a room as text (`tests/rooms/*.txt`, `CENTRAID_BLESS=1` writes them) |
 | Shells | Draw rooms and blocks, send `RoomEvent`s, perform effects and the hand-written native list (section 5.4) |
 | Assistant | Catalogue and export generated from `ACTIONS` alone, so a screen change never moves `tools_hash` ([contract](../assistant/contract.md)) |
 
@@ -316,11 +316,11 @@ Each kind declares in `crates/domain` one `KINDS` row ([`kind.rs`](../../../crat
 | Footers it takes (`attachments`, `linked`, `mentioned_in`, `origin`; `says` where followed) | P8, P3 |
 | Trash read | P9 |
 
-The charter is [promises](../product/promises.md). The registry tests also fail: a read with a full scan or a temp B-tree outside the allowlist; a read touching a sealed column; a `PagedList` with no cursor; an action with no inverse and no `outlined`/`owner` class; an action neither `Direct` nor `Handoff`; a screen-only action; a room whose selectors repeat (**(target)**: it needs the room builders).
+The charter is [promises](../product/promises.md). The registry tests also fail: a read with a full scan or a temp B-tree outside the allowlist; a read touching a sealed column; a `PagedList` with no cursor; an action with no inverse and no `outlined`/`owner` class; an action neither `Direct` nor `Handoff`; a screen-only action; a room whose selectors repeat (held by `Sel::finish`, which refuses the room; a walk over every registered room lands with the app rooms).
 
 ## 9. Notifications
 
-One scheduler in core **(target)** reads `reminder` ⋈ its owner (task, event, `person_date`, Locker date field) minus `snooze`, and registers OS notifications. A commit touching `reminder`, `snooze`, a due or start, or an item's trash reschedules.
+One scheduler in core ([`crates/core/src/notify`](../../../crates/core/src/notify)) reads the vault's alert index (`reminder` ⋈ its owner minus `snooze`, kept by `centraid_vault::alerts`) and registers OS notifications. It pushes the whole desired set as `Event.notify` (`ScheduleNotifications`, `retain_delivered`); a shell applies it and answers with `NotifyRequest` (`launched`, `scheduled`, `presses`, `ask_permission`). A commit touching `reminder`, `snooze`, a due or start, or an item's trash reschedules.
 
 | Rule | Detail |
 | --- | --- |
@@ -337,7 +337,7 @@ One scheduler in core **(target)** reads `reminder` ⋈ its owner (task, event, 
 
 ## 10. Device store (D1–D12)
 
-Persisted outside the vault, so frozen: every key a shell or the core writes is listed once in the **device-key registry (D5) (target)** with its version, and a test fails on an unlisted key or a JSON value without `"v"`.
+Persisted outside the vault, so frozen: every key a shell or the core writes is listed once in the **device-key registry (D5)** ([`crates/core/src/device/registry.rs`](../../../crates/core/src/device/registry.rs)) with its version, and a test fails on an unlisted key or a JSON value without `"v"`.
 
 | # | Shape | Version and notes |
 | --- | --- | --- |
@@ -353,6 +353,8 @@ Persisted outside the vault, so frozen: every key a shell or the core writes is 
 | D10 | **Locker clipboard lease** (vault id, item marker, digest, expiry; never the secret) | Listed in D5 |
 | D11 | **The backup plane's state file** (`plane.state_path()`) | Owned by the backup plane, out of this plane's changes; listed in D5 so the registry is complete |
 | D12 | **Portable files:** the "Export everything" manifest, each kind's portable JSON/CSV header, Locker's export, the index file's version header | Each states a format version; one export test per kind |
+
+**Where D1–D12 live.** [`crates/core/src/device`](../../../crates/core/src/device): `registry.rs` (D5), `store.rs` (a file per key beside the vault, written through the registry), `draft.rs` (D1), `inbox.rs` (D2, the drain), `open_url.rs` (D4), `widget.rs` (D6: `widget.today`, rewritten on every commit that touches `event`, `task` or `entity`; the Health glance waits for Health's room). A shell reads and writes device keys through `DeviceRequest`, so its keys are checked by the same registry. The `.ics` and Money-CSV share-ins stay in the inbox until Calendar and Money have their importers.
 
 **Share-in mapping (D2, N8).** The inbox item's type decides the route; the route is named by format when one exists, and sets `arrived_via` (a pair the file refuses if not in `arrival_via_kind`):
 
@@ -409,12 +411,24 @@ Where the plan left a choice, the safest was taken. Reverse by editing this page
 | Calendar | No drag to move an event in v0 |
 | Events from the shell | `RoomEvent` carries only member events; appeared, left, timers, data changes and effect results stay on the envelope's `ScreenEvent` |
 | `account.remember_layout`, `thread.settle_proposal`, `locker.counts` | System: called by the import flow, the assistant's turn and reads |
+| Room selectors | A caller-chosen stable label (`row/<id>`, `back`, `filter/clear`), claimed once per room; a snapshot prints it as `#label` |
+| Room events a screen owns | A `Handler::Tag` (the screen's own), a field's change, a canvas event; local state (search, selection, filters, lens, scroll) is the runtime's |
+| Undo from a room | The status line offers it for actions whose inverse is a `Pair`; a `Restore` inverse waits for `history.restore_many` |
+| Settings keys | Appearance, units and details are core-owned device keys (`settings.*`, `{"v":1,"value":…}`); the shell reads `settings.appearance` at launch through `DeviceRequest` |
+| Notifications, ids and window | `alert|<reminder id>|<fire key>`; a delivered banner stays 2 days past its moment (`alerts::KEEP_PAST_MS`) unless its item is trashed, purged, finished or moved, then it is named in `cancel_delivered_ids` |
+| Notification presses | `Done` runs `task.complete`; `Snooze` runs `alert.snooze` an hour from the press, and a press whose snooze is already over is `EXPIRED`; each press is run once per its id (`notify.applied`) |
+| Backup room | Reads the status and draws the line, the waiting rows and the devices; "Back up now" and pairing stay with the shells' passes until their rooms land |
+| Share-in `.ics` and Money `.csv` | Kept in the inbox: the events importer and Money's column mapping are the apps' |
 | Chat kinds | Two tables: `KINDS` says what a vault entity kind owes a member (section 8), and `chat::KINDS` says what the model may call things and which fields a question can name (18 kinds, the nine apps'). A `Say` names chat kinds, so `budget`, `rule` and `daily figure`, which are tables and not entities, are sayable |
 | Qualifiers | `flag.set` and `flag.clear` are three actions each (`starred`, `pinned`, `archived`); `account.edit/currency`, `txn.add/csv`, `event.propose/ics`, `edge.add/contains`, `edge.remove/contains`, `task.edit/reschedule` and `person.edit/cadence` tell a second intent of one command apart |
 | `Restore` | The vault has `history.restore_version` for one `(entity, seq)` and no `restore_many`; the core runs it over the pairs a commit wrote |
 | `follow.stop`, `thread.clear` | `outlined`: no Undo exists (a stopped follow is the follow service's to resume) |
 
-## 14. Adding to the plane
+## 14. The wire a shell speaks
+
+Requests, answered inside `centraid_call`; no symbol was added. `RoomRequest` (`open{key, tab, root}`, `send{instance, event}`) answers with the `RoomShown`s that changed (none for a scroll report or a stale selector); the same `RoomShown` is pushed as `Event.room` when a commit reaches a room's reads. `NotifyRequest` and `Event.notify` are section 9's. `DeviceRequest` (`get`, `put`, `delete`), `FollowRequest` (`pass`, `stop` of a followed store, run as `follow.<system>`) and `ShareInRequest` (drain the inbox) are bounded or, for the drain, cancellable. `AssistRequest.plan`, `.finished` and `.opened` decide the chat model's files (what to fetch, load and delete; a reload held back by a running turn): the transfer is the shell's, the rules are [`core/src/assist/files.rs`](../../../crates/core/src/assist/files.rs).
+
+## 15. Adding to the plane
 
 | You are adding | Do, in order |
 | --- | --- |

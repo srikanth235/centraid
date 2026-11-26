@@ -11,6 +11,26 @@ struct Out {
     text: String,
 }
 
+/// The mark of an element that carries one, under a name the icon scan does not take for a key.
+trait Marked {
+    fn symbol(&self) -> String;
+}
+
+macro_rules! marked {
+    ($($ty:ty),*) => {$(impl Marked for $ty {
+        fn symbol(&self) -> String {
+            self.icon.clone()
+        }
+    })*};
+}
+
+marked!(
+    wire::RoomKey,
+    wire::RoomTab,
+    wire::RoomMenuItem,
+    wire::RoomAction
+);
+
 impl Out {
     fn line(&mut self, depth: usize, head: &str, parts: &[(&str, String)]) {
         let mut line = format!("{}{head}", "  ".repeat(depth));
@@ -205,7 +225,7 @@ fn header_of(out: &mut Out, header: &wire::RoomHeader) {
             2,
             &format!("key {role}"),
             &[
-                ("icon", q(&key.icon)),
+                ("sym", q(&key.symbol())),
                 ("", q(&key.label)),
                 ("", sel(&key.selector_id)),
                 ("disabled", flag(!key.enabled)),
@@ -247,7 +267,7 @@ fn band_of(out: &mut Out, band: &wire::RoomBand) {
             "tab",
             &[
                 ("", q(&tab.label)),
-                ("icon", q(&tab.icon)),
+                ("sym", q(&tab.symbol())),
                 ("selected", flag(tab.selected)),
                 ("", sel(&tab.selector_id)),
             ],
@@ -275,7 +295,7 @@ fn menu_item_of(out: &mut Out, depth: usize, item: &wire::RoomMenuItem) {
         &[
             ("", q(&item.label)),
             ("secondary", q(&item.secondary)),
-            ("icon", q(&item.icon)),
+            ("sym", q(&item.symbol())),
             ("destructive", flag(item.destructive)),
             ("checked", flag(item.checked)),
             ("disabled", flag(!item.enabled && item.submenu.is_empty())),
@@ -293,7 +313,7 @@ fn action_of(out: &mut Out, depth: usize, name: &str, action: &wire::RoomAction)
         name,
         &[
             ("", q(&action.label)),
-            ("icon", q(&action.icon)),
+            ("sym", q(&action.symbol())),
             ("destructive", flag(action.destructive)),
             ("disabled", flag(!action.enabled)),
             ("", sel(&action.selector_id)),

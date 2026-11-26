@@ -1,8 +1,8 @@
 room home key="home"
   header title="Centraid"
   band
-    tab "Home" icon="Home" selected #tab/home
-    tab "Backup" icon="Backup" #tab/backup
+    tab "Home" sym="Home" selected #tab/home
+    tab "Backup" sym="Backup" #tab/backup
   ready
     tiles
       tile "Backup" subtitle="Backed up 5 min ago" glyph="Backup" #tile/backup

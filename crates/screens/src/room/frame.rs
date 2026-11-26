@@ -82,7 +82,7 @@ impl Frame {
         self.header().keys.push(wire::RoomKey {
             selector_id: sel.anchor(id),
             role: wire::RoomKeyRole::Menu as i32,
-            icon: "ellipsis".to_owned(),
+            icon: "MoreHoriz".to_owned(),
             label: label.to_owned(),
             enabled: true,
             menu: Some(menu),
