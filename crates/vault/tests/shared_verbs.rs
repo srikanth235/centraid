@@ -491,17 +491,24 @@ fn an_account_a_person_and_a_task_hold_what_belongs_to_them() {
     assert!(!w.trashed(&line) && w.trashed(&account));
     w.ok("entity.restore", json!({"id": &account}));
     assert!(!w.trashed(&account));
-    // A person holds what was written about them alone, and nothing else.
+    // A person holds the touches with them alone, and nothing else: their notes stay.
     let person = w.mint();
     w.commit(|tx| common::add_person(tx, &person, "Ada", AT));
-    let alone = w.note("About Ada", None);
-    let shared = w.note("About Ada and a task", None);
-    let other = w.task(None);
+    let note = w.note("About Ada", None);
+    let alone = w.bare(Kind::Touch, "", None);
+    let shared = w.bare(Kind::Touch, "", None);
+    let other = w.mint();
+    w.commit(|tx| common::add_person(tx, &other, "Bea", AT));
     w.commit(|tx| {
-        for (from, to) in [(&alone, &person), (&shared, &person), (&shared, &other)] {
+        for (from, rel, to) in [
+            (&note, "about", &person),
+            (&alone, "with", &person),
+            (&shared, "with", &person),
+            (&shared, "with", &other),
+        ] {
             tx.connection().execute(
-                "INSERT INTO edge (from_id, rel, to_id, created_at) VALUES (?1, 'about', ?2, ?3)",
-                rusqlite::params![from, to, AT],
+                "INSERT INTO edge (from_id, rel, to_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![from, rel, to, AT],
             )?;
         }
         Ok(())
@@ -510,8 +517,9 @@ fn an_account_a_person_and_a_task_hold_what_belongs_to_them() {
     assert_eq!(w.trashed_by(&alone), Some(person.clone()));
     assert!(
         !w.trashed(&shared),
-        "a note about two things is the member's own"
+        "a touch with two people is the member's own"
     );
+    assert!(!w.trashed(&note), "a note about them stays");
 }
 
 #[test]
@@ -1414,5 +1422,37 @@ fn a_line_split_across_categories_keeps_a_sum_when_one_is_purged() {
     assert_eq!(
         w.one::<i64>("SELECT amount_minor FROM txn WHERE id = ?1", &[&pets]),
         -500
+    );
+}
+
+#[test]
+fn a_holders_confirm_names_how_many_go_with_it() {
+    let w = World::new();
+    let held = |id: &str| {
+        w.vault()
+            .read(|c| centraid_vault::commands::entity::held_count(c, id))
+            .expect("a count")
+    };
+    let book = w.container("notebook", "Recipes", None);
+    assert_eq!(held(&book), 0);
+    w.note("Soup", Some(&book));
+    w.note("Stew", Some(&book));
+    let inner = w.container("notebook", "Drinks", Some(&book));
+    w.note("Tea", Some(&inner));
+    assert_eq!(
+        held(&book),
+        4,
+        "two notes, the notebook inside and its note"
+    );
+    let list = w.container("task_list", "Errands", None);
+    let task = w.task(Some(&list));
+    w.task(Some(&task));
+    assert_eq!(held(&list), 2);
+    let trashed = w.note("Gone", Some(&book));
+    w.ok("entity.trash", json!({"id": &trashed}));
+    assert_eq!(
+        held(&book),
+        4,
+        "a row already in the trash is not counted again"
     );
 }
