@@ -3,54 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "description": "Centraid — a personal, local-first superapp. The phone is the vault (#1029).",
-  "workspaces": {
-    "packages": [
-      "packages/*"
-    ],
-    "catalog": {
-      "typescript": "5.9.3"
-    }
-  },
   "type": "module",
   "scripts": {
-    "build": "bun run --filter '*' build",
-    "check": "bun run format:check && bun run lint && bun run lint:product && bun run typecheck && bun run test && bun run scripts:test && bun run check:skills",
-    "check:skills": "bun run scripts/check-skills.ts && bun test scripts/check-skills.test.ts",
     "docs:build": "node scripts/docs-site/build.mjs",
     "docs:bundle": "DOCS_SITE_BASE_PATH=/docs node scripts/docs-site/build.mjs && node scripts/docs-site/assemble.mjs",
     "docs:serve": "python3 -m http.server 4173 --bind 127.0.0.1 -d dist/docs-site",
-    "docs:smoke": "node scripts/docs-site/smoke.mjs",
-    "format": "oxfmt -c oxfmt.config.ts --disable-nested-config --write .",
-    "format:check": "oxfmt -c oxfmt.config.ts --disable-nested-config --check .",
-    "gateway:install": "bash scripts/install-gateway.sh",
-    "lint": "oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .",
-    "lint:fix": "oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings --fix .",
-    "lint:product": "node scripts/lint-copy.mjs && node scripts/lint-journey-ledger.mjs",
-    "release:classify": "node scripts/release/classify.mjs",
-    "release:matrix": "node scripts/release/matrix.mjs",
-    "release:prepare": "node scripts/release/prepare.mjs",
-    "release:publish": "node scripts/release/publish.mjs",
-    "release:restamp": "node scripts/release/restamp-rollout.mjs",
-    "release:sync-versions": "node scripts/release/sync-versions.mjs",
-    "release:verify-secrets": "node scripts/release/verify-secrets.mjs",
-    "scripts:test": "node node_modules/vitest/vitest.mjs run --config scripts/release/vitest.config.ts && node --test scripts/release/surfaces.test.mjs scripts/ci/*.test.mjs scripts/lint-*.test.mjs",
-    "test": "bun run --filter '*' test",
-    "typecheck": "bun run --filter '*' typecheck && tsc -p tsconfig.tooling.json"
+    "docs:smoke": "node scripts/docs-site/smoke.mjs"
   },
   "devDependencies": {
     "astro": "^7.3.5",
     "jsdom": "30.0.0",
-    "oxfmt": "0.61.0",
-    "oxlint": "1.76.0",
-    "pagefind": "^1.5.2",
-    "typescript": "catalog:",
-    "ultracite": "7.9.4",
-    "vitest": "4.1.12"
+    "pagefind": "^1.5.2"
   },
   "overrides": {
     "shell-quote": "1.8.4",
-    "tar": "7.5.22",
-    "tinypool": "2.1.2"
+    "tar": "7.5.22"
   },
   "engines": {
     "node": "24.4.1"

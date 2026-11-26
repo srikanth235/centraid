@@ -6,7 +6,7 @@ All repository-root commands below assume the current directory is the repositor
 
 | Environment | Supported evidence | Requirements and limits |
 | --- | --- | --- |
-| Linux JVM | Rust tests, `cargo xtask rules`, the ABI's JNA JVM round trip, `mobile-jvm` gate, TypeScript checks | Cargo, Bun, JDK 21, and Gradle distribution access. No Apple toolchain. |
+| Linux JVM | Rust tests, `cargo xtask rules`, the ABI's JNA JVM round trip, `mobile-jvm` gate | Cargo, JDK 21, and Gradle distribution access. No Apple toolchain. |
 | Linux Compose build | Compile the Android app | Android SDK (`ANDROID_HOME`) and JDK 21. A generic Linux environment without the SDK cannot compile Compose. An emulator/device requires a separate runtime. |
 | macOS Apple | SwiftUI app and iOS simulator tests | Xcode, XcodeGen, and the required Apple SDKs. iOS core cross-builds use the scripts below. |
 | Physical Android or iOS device | Device flows and measurements | A connected, named device and the platform toolchain. Emulator/simulator results are not physical-device performance evidence. |
@@ -17,15 +17,13 @@ Choose checks that cover the changed layer; this is a menu, not a requirement to
 
 ```sh
 cargo test -p centraid-screens
-cargo xtask rules
+cargo xtask rules                     # includes copy, journeys, skills
 cargo xtask screens-catalog --check   # only when a manifest changed
-bun run lint:product                  # copy, journey ledger
 cargo xtask design --check            # generated design outputs are current (cargo xtask design writes them)
 buf lint                              # and buf breaking against the PR base, when installed
 cargo xtask gate --profile pr
 cargo build -p centraid-core-ffi
 cargo xtask gate --profile mobile-jvm # JDK 21; JVM ABI round trip and artifact drift check
-bun run check
 ```
 
 The JVM gate builds the cdylib without `--features llama`, runs `:core:jvmTest` against the real library, then regenerates and checks emitted design artifacts. It does not compile Compose or SwiftUI and does not run a simulator, emulator, or device. For a faster binding iteration after building the cdylib, run from `mobile/`:

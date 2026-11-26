@@ -5,7 +5,7 @@ name: gate
 # required check that never reports blocks the PR forever (#557).
 #
 #   gate               `cargo xtask gate --profile pr` — every step a PR must
-#                      pass, Rust, protobuf, TypeScript and CI policy alike
+#                      pass, Rust, protobuf, sites and CI policy alike
 #                      (crates/xtask/README.md). Its cargo cache is saved from
 #                      pull requests too, so a PR's second push starts warm
 #                      (.github/actions/setup, `cargo-cache-save-pr`).
@@ -42,7 +42,6 @@ jobs:
         run: bash mobile/scripts/select-xcode.sh
       - uses: ./.github/actions/setup
         with:
-          bun: "false"
           rust: "true"
           rust-targets: aarch64-apple-ios-sim
           cargo-cache: ios-simulator
@@ -86,6 +85,7 @@ jobs:
       - run: git show-ref --verify --quiet refs/heads/main || git branch main origin/main
       - uses: ./.github/actions/setup
         with:
+          bun: "true"
           rust: "true"
           cargo-cache: gate
           # A cold compile is what made PR runs take 50 to 70 minutes against
@@ -96,6 +96,8 @@ jobs:
       # The profile's external tools, pinned in the action and nowhere else.
       # Under CI each step FAILS rather than skips when its binary is missing.
       - uses: ./.github/actions/gate-tools
+      - name: Pre-commit hygiene over tracked files
+        run: sh .githooks/pre-commit --all
       - run: cargo xtask gate --profile pr
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
@@ -149,7 +151,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
-          bun: "false"
           rust: "true"
           # Its own key: an engine-flavoured `target/` restored into `gate`
           # would be a cold release build inside the `pr` job.

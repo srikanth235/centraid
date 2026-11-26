@@ -15,9 +15,11 @@ Read `centraid.md` first for each language: it holds this repo's constraints and
 | `.rs`, Cargo | [rust/centraid.md](rust/centraid.md) | `cargo xtask gate --profile local` |
 | `.swift`, `mobile/iosApp` | [swift/centraid.md](swift/centraid.md) | `xcodebuild … test` (macOS) |
 | `.kt`, Compose, Gradle | [kotlin/centraid.md](kotlin/centraid.md) | `cargo xtask gate --profile mobile-jvm` |
-| `.ts`, `.mjs`, scripts | [typescript/centraid.md](typescript/centraid.md) | `bun run check` |
+| `.ts`, `.mjs`, sites | [typescript/centraid.md](typescript/centraid.md) | `bun run docs:build && bun run docs:smoke` |
 | SQL, schema, queries | [sqlite/centraid.md](sqlite/centraid.md) | `cargo test -p centraid-vault` |
 | `.py` (the trainer) | [python/centraid.md](python/centraid.md) | `python3 experiments/adapter-train/run_tests.py` |
+| Chosen libraries and pinned versions | [libraries.md](libraries.md) | `cargo xtask gate --profile pr` |
+| Tooling choices and what was removed | [toolchain.md](toolchain.md) | `cargo xtask gate --profile pr` |
 | A security review: a Rust change at the trust boundary, a new dependency, an API or wire design, `.github/workflows/`, a property test | [security/centraid.md](security/centraid.md), then the skill for the job in [security/general/INDEX.md](security/general/INDEX.md) | the check of the language; `python3 .claude/skills/stack/security/sync.py --check` after a sync |
 
 Which gate profile to run, and how to report it: [land](../land/SKILL.md).

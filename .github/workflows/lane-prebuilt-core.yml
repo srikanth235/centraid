@@ -87,7 +87,6 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
       - uses: ./.github/actions/setup
         with:
-          bun: "false"
           rust: "true"
           rust-targets: ${{ matrix.triple }}
           cargo-cache: prebuilt-${{ matrix.triple }}
@@ -178,7 +177,6 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
       - uses: ./.github/actions/setup
         with:
-          bun: "false"
           rust: "true"
           rust-targets: aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
           cargo-cache: prebuilt-android
@@ -227,7 +225,6 @@ jobs:
         run: bash mobile/scripts/select-xcode.sh
       - uses: ./.github/actions/setup
         with:
-          bun: "false"
           rust: "true"
           rust-targets: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
           cargo-cache: prebuilt-ios

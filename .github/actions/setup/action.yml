@@ -6,7 +6,7 @@ inputs:
   bun:
     description: Install Node and Bun and run `bun install --frozen-lockfile`.
     required: false
-    default: "true"
+    default: "false"
   rust:
     description: Install the toolchain `rust-toolchain.toml` pins (channel and components).
     required: false

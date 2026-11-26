@@ -1,8 +1,8 @@
 # Manual skill selection and behavior evaluations
 
-These cases are a small human/model review set for whether the assistant selects the right skill and follows its guidance. They are not run by `check:skills`, and passing a static frontmatter or link check does not establish that a model behaves correctly.
+These cases are a small human/model review set for whether the assistant selects the right skill and follows its guidance. They are not run by `cargo xtask rules skills`, and passing a static frontmatter, link, or router-table check does not establish that a model behaves correctly.
 
-`check:skills` runs the Bun YAML frontmatter validator and its fixtures. Relative Markdown links are covered separately by the existing `cargo xtask doc-links` repository gate; this check does not add a Rust toolchain prerequisite to the TypeScript check.
+`cargo xtask rules skills` validates every `.claude/skills/*/SKILL.md` frontmatter mapping, relative links, and router table; repository-wide relative Markdown links are also covered by `cargo xtask doc-links`.
 
 For each case, provide the prompt to the model with the repository available. Record the selected skill(s), the material constraints it applies, and whether the response follows the expected behavior. Evaluate the skill choice and the resulting answer separately. No model invocation or external service is part of the repository checks.
 

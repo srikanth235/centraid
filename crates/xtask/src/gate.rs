@@ -149,7 +149,7 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("deny", run_deny),
         step("ci-policy", run_ci_policy),
         step("release-build", run_release_build),
-        step("ts-static", run_ts_static),
+        step("sites", run_sites),
         // THE GENERATED TREES NO `changes` FILTER CLAIMED (#1020, close pass,
         // D-1020-CL7). The shells' design tables (Tokens, Catalog, Theme, the kit's
         // words, the colour sets and Android resources), the two sites' token
@@ -1284,10 +1284,82 @@ fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
     )
 }
 
-/// The TypeScript workspace (`packages/test-kit`), the docs and home sites and
-/// the release scripts: format, lint, typecheck and tests, through `bun run check`.
-fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
-    process(ctx, "ts-static", "bun", &["run", "check"])
+fn is_site_path(path: &str) -> bool {
+    if path.starts_with("docs/") || path.starts_with("contracts/schema/") {
+        return true;
+    }
+    if let Some(rest) = path.strip_prefix("scripts/") {
+        let first = rest.split('/').next().unwrap_or("");
+        if first.ends_with("-site") {
+            return true;
+        }
+    }
+    false
+}
+
+fn sites_changed(root: &Path) -> Option<bool> {
+    let base = ["origin/main", "main", "origin/master", "master"]
+        .iter()
+        .find_map(|candidate| {
+            let out = Command::new("git")
+                .args(["merge-base", "HEAD", candidate])
+                .current_dir(root)
+                .output()
+                .ok()?;
+            if !out.status.success() {
+                return None;
+            }
+            let sha = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+            (!sha.is_empty()).then_some(sha)
+        })?;
+    let diff = Command::new("git")
+        .args(["diff", "--name-only", &format!("{base}...HEAD")])
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if !diff.status.success() {
+        return None;
+    }
+    let committed = String::from_utf8_lossy(&diff.stdout);
+    if committed.lines().any(is_site_path) {
+        return Some(true);
+    }
+    let status = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if status.status.success() {
+        let dirty = String::from_utf8_lossy(&status.stdout);
+        for line in dirty.lines() {
+            if let Some(path) = line.get(3..)
+                && is_site_path(path.trim())
+            {
+                return Some(true);
+            }
+        }
+    }
+    Some(false)
+}
+
+fn run_sites(ctx: &Ctx) -> Result<Outcome> {
+    if ctx.profile == Profile::Pr
+        && ctx.lane.as_deref() != Some("sites")
+        && sites_changed(&ctx.root) == Some(false)
+    {
+        return Ok(Outcome::Skipped(
+            "no docs/**, contracts/schema/**, or scripts/*-site/** changes; run `cargo xtask gate --profile pr --lane sites` to force".to_owned(),
+        ));
+    }
+    process(
+        ctx,
+        "sites",
+        "sh",
+        &[
+            "-c",
+            "bun install --frozen-lockfile && bun run docs:build && bun run docs:smoke",
+        ],
+    )
 }
 
 /// Both lockfiles (D-1020-G3). See `crate::ci::lockfile`.

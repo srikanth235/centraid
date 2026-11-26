@@ -1,0 +1,9 @@
+# Shrink-only copy budget ledger (design/wording.md § Wording).
+# Lower a count in the same change that fixes the debt; never raise one.
+# Run `cargo xtask rules copy --print` to emit the measured counts.
+
+[copy-over-budget]
+# PHOTOS_KEEP_ORIGINALS_LABEL, OWN_LABEL: toggle and checkbox labels, and
+# ENDPOINT_LABEL, RESTORE_HELD_OWN_LABEL: field and list prompts — the
+# `_LABEL` suffix also names these, and they are not buttons.
+"crates/screens/src/strings/custody.rs" = 3

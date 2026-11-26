@@ -9,7 +9,8 @@ cargo xtask gate --profile nightly   # pr + the deep sim, the e2e runs and the d
 cargo xtask gate --profile nightly --lane <name>   # one step, or one device lane
 cargo xtask gate --profile release   # nightly + the restore drill + the VPS smoke
 cargo xtask gate --profile mobile-jvm  # the Kotlin half, on its own
-cargo xtask rules                    # the structural rules alone
+cargo xtask rules [copy|journeys|skills] # the structural rules (all, or one named rule)
+cargo xtask release <subcommand>     # classify, matrix, prepare, publish, restamp, sync-versions, verify-secrets, notes
 cargo xtask design [--check]         # every design artifact from design/tokens.toml (shells, sites, tokens.css, parts, dark mockups); --check fails on any stale file, board finding or site-lint finding
 cargo xtask doc-links                # every relative markdown link and in-repo anchor resolves
 cargo xtask test-plan                # which crates `local`'s `test` step would run, and why (--reads: the table it trusts)
@@ -19,7 +20,7 @@ cargo xtask artifact-key --triple <t>  # the prebuilt core's cache key
 
 ## The tree a run scans is **the current directory's**
 
-Every path-based rule — `sql-confinement`, `no-listening-socket`, `abi-five-symbols`, `ts-static`, `commonmain-no-platform-import` — reads files under one root, and that root is resolved when the binary RUNS: `git rev-parse --show-toplevel` from the current directory, then a walk up for the `rust-toolchain.toml` + `Cargo.toml` pair only the root carries, then the compile-time manifest path with a warning on stderr.
+Every path-based rule — `sql-confinement`, `no-listening-socket`, `abi-five-symbols`, `sites`, `commonmain-no-platform-import` — reads files under one root, and that root is resolved when the binary RUNS: `git rev-parse --show-toplevel` from the current directory, then a walk up for the `rust-toolchain.toml` + `Cargo.toml` pair only the root carries, then the compile-time manifest path with a warning on stderr.
 
 A root baked in at compile time (`env!("CARGO_MANIFEST_DIR")`) would be wrong under a shared `CARGO_TARGET_DIR`: the cached binary belongs to whichever worktree built it last, the gate scans **that** worktree, and the failure direction is _reports clean_ ([#1020](https://github.com/srikanth235/centraid/issues/1020)). `cargo xtask repo-root` prints the answer in one line, and `crates/xtask/tests/repo_root.rs` runs the compiled binary from a second checkout and asserts it reports that checkout.
 
@@ -30,7 +31,7 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 | Profile | Steps it adds | Where it runs |
 | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `registry`, `doc-links`, `ledgers` | by hand, before a push |
-| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `design`, `lockfile`, `prompt-injection`, `model-record`, `fault-door` — and its `test` step runs the **whole** workspace | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `sites`, `design`, `lockfile`, `prompt-injection`, `model-record`, `fault-door` — and its `test` step runs the **whole** workspace | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `device-lanes` | `.github/workflows/nightly.yml`, 05:30 UTC |
 | `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | the release workflows |
 | `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | `.github/workflows/nightly.yml`; on demand from `mobile/` |
@@ -114,9 +115,9 @@ Every relative link and in-repo anchor in the repository's markdown resolves —
 
 What it does not read is only the append-only record, where a finding could never be fixed. Links _into_ a frozen section are still checked, and the step's line names every skip. There is no allowlist of findings and no narration tripwire: "history is cited, never narrated" is a judgement a scanner cannot make, and one that tried would teach authors to phrase around it. The rule is the module doc of [`src/doc_links.rs`](src/doc_links.rs); `cargo xtask doc-links` runs it alone.
 
-### The `ts-static` step
+### The `sites` step
 
-`bun run check`: `oxfmt --check` and `oxlint` over the tree, then `tsc` and vitest in each workspace under `packages/` (today `packages/test-kit`), then the release scripts' tests. The pre-commit hook runs the format and lint halves over the staged files.
+`bun install --frozen-lockfile && bun run docs:build && bun run docs:smoke`. Runs unconditionally in `nightly` and `release`, and in `pr` only when `docs/**`, `contracts/schema/**`, or `scripts/*-site/**` changed (otherwise loud-skipped unless forced with `--lane sites`).
 
 ## Required checks
 

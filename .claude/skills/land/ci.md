@@ -4,7 +4,7 @@
 
 ## The jobs
 
-- **`gate`**: ubuntu, 60 minutes. Full history is fetched, because `buf breaking` compares against `main` and the released tags. It installs the gate's tools, then runs `cargo xtask gate --profile pr`. The pins (nextest with a SHA-256 check, actionlint, buf, and `cargo-deny` if absent) are in `.github/actions/gate-tools` only; `nightly.yml`'s `gate` job uses the same action. The cargo cache (key `gate`) is saved from pull requests as well as `main`; see below.
+- **`gate`**: ubuntu, 120 minutes. Full history is fetched, because `buf breaking` compares against `main` and the released tags. It installs the gate's tools, runs `sh .githooks/pre-commit --all`, then runs `cargo xtask gate --profile pr`. The pins (nextest with a SHA-256 check, actionlint, buf, and `cargo-deny` if absent) are in `.github/actions/gate-tools` only; `nightly.yml`'s `gate` job uses the same action. The cargo cache (key `gate`) is saved from pull requests as well as `main`; see below.
 - **`engine`**: the on-device chat's llama.cpp build is too slow for the `pr` profile, so this job runs `clippy` and `cargo test` over `centraid-assist-llama` and `centraid-core-ffi` with the `llama` feature on. The real-model tests are `#[ignore]`d because they need a GGUF file the repo does not carry.
 - **`ios`**: macOS, 90 minutes. It builds the simulator core with llama, compiles the Swift app, runs XCTest, then the accessibility audit UI tests (`mobile/iosApp/UITests`) on the seeded demo vault, and compiles HealthSeeder.
 - **`android`**: ubuntu, 45 minutes. It runs `compileDebugKotlin` on the runner's SDK, which type-checks the Compose shell without packaging the native libraries, and one shared-fixture unit test (`BackupCheckControlsTest`).
