@@ -1,5 +1,5 @@
 //! A task's own verbs against the v0 tables (#1214, the calendar-and-tasks lane): made, edited,
-//! completed and reopened; its home (a project, a section, a parent task) and `entity.move`; the
+//! completed and reopened; its home (a task list, a parent task) and `entity.move`; the
 //! one time vocabulary (`due`, `due_timing`, `zone`) and the planned day (`scheduled_on`); a
 //! repeating task's series, its successor and a snooze; the reminders a task holds as rows, the
 //! alerts they make and the defaults a timed due is given; the Today, Upcoming and Done reads and
@@ -98,7 +98,7 @@ fn a_task_is_made_edited_completed_reopened_and_cancelled() {
     let id = task(
         &w,
         json!({ "title": "  Call Mum ", "description": "about Sunday", "priority": 3,
-                "effort_min": 20, "url": " https://example.com/mum " }),
+                "url": " https://example.com/mum " }),
     );
     assert_eq!(
         w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
@@ -110,10 +110,6 @@ fn a_task_is_made_edited_completed_reopened_and_cancelled() {
         3
     );
     assert_eq!(
-        w.one::<i64>("SELECT effort_min FROM task WHERE id = ?1", &[&id]),
-        20
-    );
-    assert_eq!(
         w.one::<String>("SELECT url FROM task WHERE id = ?1", &[&id]),
         "https://example.com/mum"
     );
@@ -122,13 +118,13 @@ fn a_task_is_made_edited_completed_reopened_and_cancelled() {
     w.ok(
         "task.edit",
         json!({ "id": id, "title": "Call Mother", "description": null, "priority": 0,
-                "effort_min": null, "url": null }),
+                "url": null }),
     );
     assert_eq!(
         w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
         "Call Mother"
     );
-    for column in ["description", "effort_min", "url"] {
+    for column in ["description", "url"] {
         assert_eq!(
             w.one::<Option<String>>(
                 &format!("SELECT CAST({column} AS TEXT) FROM task WHERE id = ?1"),
@@ -230,43 +226,32 @@ fn a_task_is_refused_what_a_sentence_says_and_the_database_holds_too() {
 // ---------------------------------------------------------------------------------------------
 
 #[test]
-fn a_task_is_made_in_a_project_a_section_or_under_a_task_and_moved_by_entity_move() {
+fn a_task_is_made_in_a_task_list_or_under_a_task_and_moved_by_entity_move() {
     let w = World::new("task_home");
-    let errands = w.container("project", "Errands");
-    let garden = w.container("project", "Garden");
-    let section = w.ok(
-        "container.create",
-        json!({ "kind": "section", "title": "Soon", "parent": errands }),
-    )["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let errands = w.container("task_list", "Errands");
+    let garden = w.container("task_list", "Garden");
     let loose = task(&w, json!({ "title": "Loose" }));
-    let in_project = task(&w, json!({ "title": "Milk", "parent_id": errands }));
-    let in_section = task(&w, json!({ "title": "Post", "parent_id": section }));
-    let sub = task(&w, json!({ "title": "Stamps", "parent_id": in_section }));
+    let in_list = task(&w, json!({ "title": "Milk", "parent_id": errands }));
+    let in_other = task(&w, json!({ "title": "Post", "parent_id": errands }));
+    let sub = task(&w, json!({ "title": "Stamps", "parent_id": in_other }));
     assert_eq!(parent_of(&w, &loose), None);
-    for (id, home, kind) in [
-        (&in_project, &errands, "project"),
-        (&in_section, &section, "section"),
-        (&sub, &in_section, "task"),
-    ] {
+    for (id, home, kind) in [(&in_list, &errands, "task_list"), (&sub, &in_other, "task")] {
         assert_eq!(parent_of(&w, id).as_deref(), Some(home.as_str()));
         assert_eq!(
             w.one::<String>("SELECT parent_kind FROM entity WHERE id = ?1", &[id]),
             kind
         );
     }
-    // A task does not go inside a note, an event's calendar or a trashed project.
+    // A task does not go inside a note, an event's calendar or a trashed task list.
     let note = w.note("N");
     assert!(
         w.refused("task.add", json!({ "title": "x", "parent_id": note }))
             .contains("does not go inside")
     );
-    // The one verb that moves it: a task to another project, under a task, to the top level.
-    w.ok("entity.move", json!({ "id": in_project, "parent": garden }));
-    assert_eq!(parent_of(&w, &in_project).as_deref(), Some(garden.as_str()));
-    w.ok("entity.move", json!({ "id": loose, "parent": in_project }));
+    // The one verb that moves it: a task to another task list, under a task, to the top level.
+    w.ok("entity.move", json!({ "id": in_list, "parent": garden }));
+    assert_eq!(parent_of(&w, &in_list).as_deref(), Some(garden.as_str()));
+    w.ok("entity.move", json!({ "id": loose, "parent": in_list }));
     assert_eq!(
         w.one::<String>("SELECT parent_kind FROM entity WHERE id = ?1", &[&loose]),
         "task"
@@ -275,8 +260,16 @@ fn a_task_is_made_in_a_project_a_section_or_under_a_task_and_moved_by_entity_mov
     assert_eq!(parent_of(&w, &loose), None);
     // Never inside itself or below itself.
     assert!(
-        w.refused("entity.move", json!({ "id": in_section, "parent": sub }))
-            .contains("inside")
+        w.refused("entity.move", json!({ "id": in_other, "parent": sub }))
+            .contains("subtask")
+    );
+    assert!(
+        w.refused("task.add", json!({ "title": "Deeper", "parent_id": sub }))
+            .contains("subtask of its own")
+    );
+    assert!(
+        w.refused("entity.move", json!({ "id": in_other, "parent": in_list }))
+            .contains("has subtasks")
     );
     // A task cannot be moved to a note either.
     assert!(
@@ -317,9 +310,9 @@ fn trashing_a_task_takes_its_subtasks_and_a_restore_brings_them_back() {
 }
 
 #[test]
-fn a_project_trashes_its_tasks_and_a_task_is_found_by_its_project_and_a_rename_reaches_it() {
-    let w = World::new("task_project");
-    let project = w.container("project", "Garden");
+fn a_task_list_trashes_its_tasks_and_a_task_is_found_by_its_list_and_a_rename_reaches_it() {
+    let w = World::new("task_list");
+    let project = w.container("task_list", "Garden");
     let id = task(
         &w,
         json!({ "title": "Prune", "parent_id": project, "description": "roses" }),
@@ -518,7 +511,7 @@ fn the_planned_day_is_not_the_due_and_today_reads_both() {
 fn a_repeating_task_names_its_series_when_the_rule_is_first_set_and_the_successor_carries_it() {
     let w = World::new("task_series");
     let mum = w.person("Mum");
-    let project = w.container("project", "Home");
+    let project = w.container("task_list", "Home");
     let id = task(
         &w,
         json!({ "title": "Call Mum", "due": "2026-03-02", "rule": "FREQ=WEEKLY",

@@ -27,7 +27,7 @@
 //! A live entity whose kind has a search text gets its row replaced; anything else (trashed, a
 //! kind nobody searches, nothing to say) has its row deleted. The search text is [`text_of`], one
 //! function over the entity's own row and children, the titles of what labels it (its tags and
-//! flags, the lists and albums that hold it, the notebook, folder, project, calendar, category or
+//! flags, the lists and albums that hold it, the notebook, folder, task list, calendar, category or
 //! account it is filed under), and the bodies of the live notes `about` it, so a person is found by
 //! what you wrote about them. A read joins `entity` on `n` for the kind and the trash filter.
 //! A photo's or place's coordinates are one point in `geo` (`geo`). What an item said in an EARLIER
@@ -84,7 +84,7 @@ pub const OWED_BATCH: usize = INLINE_DEPENDENTS;
 /// Called with the entities a commit touched. A note's body is part of the text of everything it
 /// is `about`, so a touched note brings its targets with it; and of the people a touch it is
 /// about was `with`, so it brings those too. A title is part of the text of everything it labels
-/// ([`DEPENDENTS`]), so a touched tag, list, project or account brings what it labels: a bounded
+/// ([`DEPENDENTS`]), so a touched tag, list, task list or account brings what it labels: a bounded
 /// first piece is queued whole and the rest is owed as one row of its own (`after` is not NULL),
 /// which the idle pass walks in id order.
 ///

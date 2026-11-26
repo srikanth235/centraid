@@ -91,6 +91,7 @@ fn the_registry_carries_the_shared_verbs_and_the_plugged_modules_and_nothing_els
                 "note",
                 "thread",
                 "reminder",
+                "alert",
                 "event",
                 "task",
                 "person",

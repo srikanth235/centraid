@@ -1,7 +1,7 @@
 //! `task.*`: a task's own verbs, and the one place a task row is founded.
 //!
 //! A task is an entity of kind `task` whose state lives on its kind row. Where it sits is its home,
-//! `entity.parent_id`, like every kind's (A19, C1): a project, a section of one, or a parent task
+//! `entity.parent_id`, like every kind's (A19, C1): a task list or a parent task
 //! (`home_shape` says which). It is made in one (`parent_id` at create) and moved with the shared
 //! `entity.move`. Who or what it is about is an `about` edge (a follow-up on Mum, a note's
 //! checklist line); a tag, a star, an attachment and the trash are the shared verbs. What is here
@@ -50,11 +50,11 @@
 //! edges, so the successor of "call Mum" is still about Mum and still tagged. Cancelling ends the
 //! occurrence and spawns nothing.
 //!
-//! ## A snooze moves the alert, not the due (#1188, NA5)
+//! ## A snooze moves the alert, not the due (#1214 S9)
 //!
-//! `snoozed_until` is the instant the member asked to be reminded again. While it is set it is the
-//! task's one alert (on its smallest lead, [`crate::alerts`]); an edit of the due, the leads or the
-//! rule that states no snooze of its own ends it, and so does finishing.
+//! A snooze is a `snooze` row `alert.snooze` writes ([`crate::commands::alert`]), and this module
+//! writes none. The database ends it: a changed due or rule, a changed lead and finishing a task
+//! each delete it by trigger.
 //!
 //! ## Priority is not iCalendar's
 //!
@@ -64,7 +64,7 @@
 //! ## Followed
 //!
 //! The phone's Reminders are a followed store ([`PHONE_REMINDERS`]): each reminder is a task in
-//! the project the origin fills, and the member's own edit of a field stands.
+//! the task list the origin fills, and the member's own edit of a field stands.
 
 use rusqlite::types::Value as Sql;
 use rusqlite::{Connection, OptionalExtension};
@@ -260,10 +260,9 @@ pub struct NewTask<'a> {
     pub zone: Option<&'a str>,
     pub description: Option<&'a str>,
     pub priority: Option<i64>,
-    pub effort_min: Option<i64>,
     pub rule: Option<&'a str>,
     pub anchor: Option<&'a str>,
-    /// Its home: a project, a section or a parent task; none: the top level.
+    /// Its home: a task list or a parent task; none: the top level.
     pub parent: Option<&'a str>,
     pub position: Option<f64>,
     /// A link the task points at.
@@ -313,9 +312,9 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
     let done_at = task.done_at.map(temporal::canonical);
     ctx.connection().execute(
         "INSERT INTO task (id, due, due_timing, zone, scheduled_on, description, priority,
-                           effort_min, rule, anchor, series_id, position, url, status, done_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, 0), ?8, ?9, COALESCE(?10, 'scheduled'),
-                 ?11, ?12, ?13, CASE WHEN ?14 IS NULL THEN 'open' ELSE 'done' END, ?14)",
+                           rule, anchor, series_id, position, url, status, done_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, 0), ?8, COALESCE(?9, 'scheduled'),
+                 ?10, ?11, ?12, CASE WHEN ?13 IS NULL THEN 'open' ELSE 'done' END, ?13)",
         rusqlite::params![
             id,
             due.as_ref().map(|d| d.at.as_str()),
@@ -324,7 +323,6 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
             task.scheduled_on,
             task.description,
             task.priority,
-            task.effort_min,
             rule,
             task.anchor,
             series,
@@ -360,17 +358,15 @@ struct Held {
     series_id: Option<String>,
     scheduled_on: Option<String>,
     priority: i64,
-    effort_min: Option<i64>,
     description: Option<String>,
     url: Option<String>,
-    snoozed_until: Option<String>,
 }
 
 fn held(connection: &Connection, id: &str) -> Result<Option<Held>> {
     Ok(connection
         .query_row(
             "SELECT status, due, due_timing, zone, rule, anchor, series_id, scheduled_on, priority,
-                    effort_min, description, url, snoozed_until
+                    description, url
                FROM task WHERE id = ?1",
             [id],
             |row| {
@@ -384,10 +380,8 @@ fn held(connection: &Connection, id: &str) -> Result<Option<Held>> {
                     series_id: row.get(6)?,
                     scheduled_on: row.get(7)?,
                     priority: row.get(8)?,
-                    effort_min: row.get(9)?,
-                    description: row.get(10)?,
-                    url: row.get(11)?,
-                    snoozed_until: row.get(12)?,
+                    description: row.get(9)?,
+                    url: row.get(10)?,
                 })
             },
         )
@@ -506,18 +500,6 @@ fn model_refusal(ctx: &CommandCtx<'_, '_>, held: Option<&Held>) -> Result<Option
     {
         return Ok(Some(sentence));
     }
-    if let Some(Some(until)) = stated(ctx, "snoozed_until") {
-        if !matches!(temporal::classify(&until), Some(temporal::Kind::Instant)) {
-            return Ok(Some(temporal::refusal(
-                "snoozed_until",
-                &until,
-                &[temporal::Kind::Instant],
-            )));
-        }
-        if held.is_some_and(|held| held.status != "open") {
-            return Ok(Some("Only an open task can be snoozed.".to_owned()));
-        }
-    }
     Ok(None)
 }
 
@@ -612,7 +594,6 @@ struct AddTaskInput {
     zone: Option<String>,
     description: Option<String>,
     priority: Option<i64>,
-    effort_min: Option<i64>,
     rule: Option<String>,
     anchor: Option<String>,
     parent_id: Option<String>,
@@ -640,7 +621,6 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             zone: input.zone.as_deref(),
             description: input.description.as_deref(),
             priority: input.priority,
-            effort_min: input.effort_min,
             rule: input.rule.as_deref(),
             anchor: input.anchor.as_deref(),
             parent: input.parent_id.as_deref(),
@@ -660,17 +640,11 @@ struct EditTaskInput {
     title: Option<String>,
     #[serde(default, deserialize_with = "deserialize_patch")]
     description: Option<Option<String>>,
-    #[serde(default, deserialize_with = "deserialize_patch")]
-    due: Option<Option<String>>,
     priority: Option<i64>,
-    #[serde(default, deserialize_with = "deserialize_patch")]
-    effort_min: Option<Option<i64>>,
     #[serde(default, deserialize_with = "deserialize_patch")]
     rule: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_patch")]
     scheduled_on: Option<Option<String>>,
-    #[serde(default, deserialize_with = "deserialize_patch")]
-    snoozed_until: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_patch")]
     url: Option<Option<String>>,
     reminders: Option<Vec<i64>>,
@@ -751,9 +725,6 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     if let Some(priority) = input.priority {
         sets.change("priority", &was.priority, priority);
     }
-    if let Some(effort) = input.effort_min {
-        sets.change("effort_min", &was.effort_min, effort);
-    }
     if let Some(day) = &input.scheduled_on {
         sets.change("scheduled_on", &was.scheduled_on, day.clone());
     }
@@ -764,14 +735,6 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             url.as_deref().map(|url| url.trim().to_owned()),
         );
     }
-    // A SNOOZE BELONGS TO THE DUE, THE LEADS AND THE RULE IT WAS SET AGAINST (#1188, NA5): an
-    // edit of any of them that does not state a snooze of its own ends it.
-    let snooze = match &input.snoozed_until {
-        Some(until) => until.as_deref().map(temporal::canonical),
-        None if input.due.is_some() || input.reminders.is_some() || input.rule.is_some() => None,
-        None => was.snoozed_until.clone(),
-    };
-    sets.change("snoozed_until", &was.snoozed_until, snooze);
     let mut changed = sets.apply(ctx, &input.id)?;
     if let Some(title) = input.title.as_deref() {
         changed |= entity::rename(ctx, &input.id, title.trim())?;
@@ -923,7 +886,7 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
         return Ok(done);
     }
     connection.execute(
-        "UPDATE task SET status = 'done', done_at = ?2, snoozed_until = NULL, series_id = ?3
+        "UPDATE task SET status = 'done', done_at = ?2, series_id = ?3
           WHERE id = ?1",
         rusqlite::params![id, ctx.now, series],
     )?;
@@ -944,8 +907,8 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
     let next = ctx.insert_entity_under(Kind::Task, &title, home.as_deref())?;
     connection.execute(
         "INSERT INTO task (id, status, priority, due, due_timing, zone, rule, anchor, series_id,
-                           effort_min, description, position, url)
-         SELECT ?2, 'open', priority, ?3, due_timing, zone, rule, anchor, ?4, effort_min,
+                           description, position, url)
+         SELECT ?2, 'open', priority, ?3, due_timing, zone, rule, anchor, ?4,
                 description, position, url
            FROM task WHERE id = ?1",
         rusqlite::params![id, next, next_due, series],
@@ -991,11 +954,11 @@ fn complete_command(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 }
 
 /// Close or reopen a task without a successor: cancelling ends the occurrence, reopening makes a
-/// closed one open again. Both are idempotent. A snooze ends with the task being open.
+/// closed one open again. Both are idempotent.
 fn settle(ctx: &CommandCtx<'_, '_>, status: &str) -> Result<Json> {
     let input: TaskIdInput = ctx.parse_input()?;
     let changed = ctx.connection().execute(
-        "UPDATE task SET status = ?2, done_at = NULL, snoozed_until = NULL
+        "UPDATE task SET status = ?2, done_at = NULL
           WHERE id = ?1 AND status <> ?2",
         [input.id.as_str(), status],
     )?;
@@ -1027,12 +990,11 @@ const ADD_SCHEMA: &str = r#"{
     "zone": { "type": ["string", "null"], "description": "The zone a moment is read in (an IANA name)." },
     "scheduled_on": { "type": ["string", "null"], "description": "The day the member plans to do it." },
     "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
-    "effort_min": { "type": ["integer", "null"], "minimum": 1 },
     "reminders": { "type": "array", "maxItems": 20, "items": { "type": "integer", "minimum": 0, "maximum": 525600 },
       "description": "Minutes before the due, each once. Omitted: a timed due alerts at its time." },
     "rule": { "type": ["string", "null"], "description": "An RFC 5545 recurrence rule." },
     "anchor": { "type": "string", "enum": ["scheduled", "completion"] },
-    "parent_id": { "type": ["string", "null"], "description": "Its home: a project, a section or a parent task." },
+    "parent_id": { "type": ["string", "null"], "description": "Its home: a task list or a parent task." },
     "position": { "type": "number" },
     "url": { "type": ["string", "null"], "maxLength": 2048, "description": "A link the task points at." },
     "done_at": { "type": ["string", "null"], "description": "Founds the task already done, at this instant (an import of a completed item)." }
@@ -1049,11 +1011,9 @@ const EDIT_SCHEMA: &str = r#"{
     "zone": { "type": ["string", "null"] },
     "scheduled_on": { "type": ["string", "null"] },
     "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
-    "effort_min": { "type": ["integer", "null"], "minimum": 1 },
     "reminders": { "type": "array", "maxItems": 20, "items": { "type": "integer", "minimum": 0, "maximum": 525600 },
       "description": "States the task's leads: exactly these. Omitted: they stay." },
     "rule": { "type": ["string", "null"] },
-    "snoozed_until": { "type": ["string", "null"], "description": "A UTC instant: the reminder sounds again then, the due unmoved." },
     "url": { "type": ["string", "null"], "maxLength": 2048 },
     "expected_rev": { "type": "integer", "minimum": 0 }
   }
@@ -1333,7 +1293,7 @@ fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
     Ok(())
 }
 
-/// The phone's Reminders (iOS): a task in the project the origin fills. The member's own edit of a
+/// The phone's Reminders (iOS): a task in the task list the origin fills. The member's own edit of a
 /// field stands; a reminder the phone completes completes the task (the status and the instant
 /// are two fields written as one, so the table's own CHECK holds), and one deleted on the phone
 /// goes to the trash if the member never touched the task. What the phone alerts for, it alerts:

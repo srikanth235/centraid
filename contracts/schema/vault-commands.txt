@@ -3,6 +3,7 @@ account.edit
 account.remember_layout
 account.set_opening
 album.set_cover
+alert.snooze
 blob.collect
 blob.stage
 budget.set

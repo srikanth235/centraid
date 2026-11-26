@@ -203,10 +203,10 @@ fn the_calendar_is_the_events_home_and_a_move_is_the_shared_verb() {
             .status
             != centraid_vault::CommandStatus::Executed
     );
-    // An event is not at the top level, and not in a project.
+    // An event is not at the top level, and not in a task list.
     let sentence = w.refused("entity.move", json!({ "id": &id, "parent": null }));
     assert!(sentence.contains("calendar"), "{sentence}");
-    let project = w.container("project", "Roof");
+    let project = w.container("task_list", "Roof");
     let sentence = w.refused("entity.move", json!({ "id": &id, "parent": &project }));
     assert!(sentence.contains("does not go inside"), "{sentence}");
     let sentence = w.refused(
@@ -455,8 +455,8 @@ fn a_guest_resolves_to_a_person_by_address_and_survives_that_persons_purge() {
             .map(|g| (g.address.clone(), g.person_id.clone()))
             .collect::<Vec<_>>(),
         vec![
-            ("maya@example.com".to_owned(), Some(maya.clone())),
-            ("stranger@example.com".to_owned(), Some(sam.clone())),
+            (Some("maya@example.com".to_owned()), Some(maya.clone())),
+            (Some("stranger@example.com".to_owned()), Some(sam.clone())),
         ]
     );
     // Purging the person leaves the guest, now with nobody behind the address.
@@ -478,6 +478,147 @@ fn a_guest_resolves_to_a_person_by_address_and_survives_that_persons_purge() {
         .read(|c| centraid_vault::commands::event::guests_of(c, &id))
         .expect("guests");
     assert!(resolved.iter().all(|g| g.person_id.is_none()));
+}
+
+#[test]
+fn a_person_with_no_email_is_a_guest_and_their_purge_leaves_no_orphan_row() {
+    let w = World::new("event_guest_by_person");
+    let maya = w.person("Maya");
+    let id = event(
+        &w,
+        json!({ "title": "Walk", "starts": "2026-03-05T12:00", "timing": "floating" }),
+    );
+    w.ok("event.add_guest", json!({ "id": &id, "person_id": &maya }));
+    w.ok(
+        "event.add_guest",
+        json!({ "id": &id, "address": "pat@example.com" }),
+    );
+    let rows = |w: &World| {
+        w.strings(
+            "SELECT ifnull(address, '-') || '|' || ifnull(person_id, '-') FROM event_guest
+              WHERE event_id = ?1 ORDER BY id",
+            &[&id],
+        )
+    };
+    assert_eq!(
+        rows(&w),
+        [format!("-|{maya}"), "pat@example.com|-".to_owned()]
+    );
+    w.ok("event.add_guest", json!({ "id": &id, "person_id": &maya }));
+    assert_eq!(rows(&w).len(), 2, "the same person is one guest");
+    assert!(
+        w.refused("event.add_guest", json!({ "id": &id }))
+            .contains("a person or an address")
+    );
+    w.ok(
+        "event.respond",
+        json!({ "id": &id, "person_id": &maya, "status": "accepted" }),
+    );
+    assert_eq!(
+        text(
+            &w,
+            "SELECT status FROM event_guest WHERE event_id = ?1 AND person_id = ?2",
+            &[&id, &maya]
+        )
+        .as_deref(),
+        Some("accepted")
+    );
+    w.ok("entity.trash", json!({ "id": &maya }));
+    w.ok("entity.purge", json!({ "id": &maya }));
+    assert_eq!(
+        rows(&w),
+        ["pat@example.com|-"],
+        "the address-less row went first"
+    );
+}
+
+#[test]
+fn an_earlier_version_with_three_guests_restores_three_and_keeps_no_copy_of_the_start() {
+    let w = World::new("event_guest_version");
+    let maya = w.person("Maya");
+    let id = event(
+        &w,
+        json!({ "title": "Walk", "starts": "2026-03-05T12:00", "timing": "floating",
+                "guests": [{ "address": "a@example.com" }, { "address": "b@example.com" }] }),
+    );
+    w.ok("event.add_guest", json!({ "id": &id, "person_id": &maya }));
+    w.ok("event.edit", json!({ "id": &id, "guests": [] }));
+    let count = |w: &World| {
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM event_guest WHERE event_id = ?1",
+            &[&id],
+        )
+    };
+    assert_eq!(count(&w), 0);
+    let three: i64 = w.one(
+        "SELECT seq FROM revision WHERE entity_id = ?1 AND json_array_length(state, '$.event_guest') = 3",
+        &[&id],
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM revision r, json_each(r.state, '$.event_guest') g
+              WHERE r.entity_id = ?1 AND json_extract(g.value, '$.starts') IS NOT NULL",
+            &[&id]
+        ),
+        0
+    );
+    w.ok(
+        "history.restore_version",
+        json!({ "id": &id, "seq": three }),
+    );
+    assert_eq!(
+        count(&w),
+        3,
+        "an earlier version with three guests restores three"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM event_guest WHERE event_id = ?1 AND starts = '2026-03-05T12:00'",
+            &[&id]
+        ),
+        3,
+        "the restored rows copy the event's start again"
+    );
+}
+
+#[test]
+fn moving_an_event_re_sorts_it_on_a_persons_timeline_by_one_index() {
+    let w = World::new("event_guest_timeline");
+    let maya = w.person("Maya");
+    let first = event(
+        &w,
+        json!({ "title": "First", "starts": "2026-03-05T12:00", "timing": "floating" }),
+    );
+    let second = event(
+        &w,
+        json!({ "title": "Second", "starts": "2026-03-06T12:00", "timing": "floating" }),
+    );
+    for id in [&first, &second] {
+        w.ok("event.add_guest", json!({ "id": id, "person_id": &maya }));
+    }
+    let timeline =
+        "SELECT event_id FROM event_guest WHERE person_id = ?1 ORDER BY starts, event_id";
+    let order = |w: &World| w.strings(timeline, &[&maya]);
+    assert_eq!(order(&w), [first.clone(), second.clone()]);
+    w.ok(
+        "event.edit",
+        json!({ "id": &first, "starts": "2026-03-09T12:00" }),
+    );
+    assert_eq!(
+        order(&w),
+        [second, first],
+        "the guest row followed the event's new start"
+    );
+    let plan = w
+        .vault()
+        .explain_query_plan(
+            timeline,
+            &[centraid_vault::value::Value::Text(maya.clone())],
+        )
+        .expect("a plan")
+        .join("\n");
+    assert!(plan.contains("event_guest_by_person_start"), "{plan}");
+    assert!(!plan.contains("TEMP B-TREE"), "{plan}");
 }
 
 // ---------------------------------------------------------------------------------------------

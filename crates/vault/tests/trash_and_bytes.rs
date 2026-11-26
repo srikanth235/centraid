@@ -1,7 +1,7 @@
 //! The trash and what it empties ([#1146](https://github.com/srikanth235/centraid/issues/1146),
 //! wave 3, and #1214 K4): an overdue row is restorable until a pass empties it, the pass is
 //! bounded and a clock far from the last write empties nothing, a purge clears what an origin
-//! fills, and moving a section keeps what is in it. (The bytes under the trash, `released` and the
+//! fills. (The bytes under the trash, `released` and the
 //! file sweep, are K10's: `tests/blob_release.rs`.)
 
 mod common;
@@ -210,57 +210,6 @@ fn purging_a_calendar_or_a_folder_an_origin_fills_clears_the_origin() {
             "the {system} origin follows nothing once its target is gone"
         );
     }
-}
-
-#[test]
-fn moving_a_section_to_another_project_keeps_its_tasks_in_it() {
-    let w = World::new();
-    let make = |kind: &str, title: &str, parent: Option<&str>| {
-        w.ok(
-            "container.create",
-            json!({ "kind": kind, "title": title, "parent": parent }),
-        )["id"]
-            .as_str()
-            .unwrap()
-            .to_owned()
-    };
-    let from = make("project", "Old", None);
-    let to = make("project", "New", None);
-    let section = make("section", "Packing", Some(&from));
-    let mut tasks = Vec::new();
-    for _ in 0..2 {
-        let id = w.scratch.vault.ids().next();
-        w.scratch
-            .vault
-            .commit(|tx| {
-                tx.insert_entity_in(&id, Kind::Task, "Task", Some(&section), AT)?;
-                tx.connection()
-                    .execute("INSERT INTO task (id) VALUES (?1)", [&id])?;
-                Ok(())
-            })
-            .expect("a task");
-        tasks.push(id);
-    }
-    // One of them is in the trash on its own: the section moves with it still in it, so a
-    // restore finds it whole.
-    w.ok("entity.trash", json!({ "id": tasks[1] }));
-    w.ok("container.move", json!({ "id": section, "parent": to }));
-    for id in &tasks {
-        assert_eq!(
-            w.one::<String>("SELECT parent_id FROM entity WHERE id = ?1", &[id]),
-            section,
-            "{id} stays in its section"
-        );
-    }
-    assert_eq!(
-        w.one::<String>("SELECT parent_id FROM entity WHERE id = ?1", &[&section]),
-        to
-    );
-    w.ok("entity.restore", json!({ "id": tasks[1] }));
-    assert_eq!(
-        w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&tasks[1]]),
-        None
-    );
 }
 
 /// V19 (named as the plan lists it): one year ahead, nothing is purged and no action key is

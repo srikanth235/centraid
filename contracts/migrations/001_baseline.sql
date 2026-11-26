@@ -796,7 +796,7 @@ CREATE INDEX task_by_done      ON task(status, done_at, id);
 CREATE INDEX task_by_scheduled ON task(scheduled_on, id) WHERE scheduled_on IS NOT NULL;
 CREATE INDEX task_by_series    ON task(series_id, due, id) WHERE series_id IS NOT NULL;
 CREATE TRIGGER task_edit_clears_its_snooze AFTER UPDATE OF due, rule, status ON task
-  WHEN new.due IS NOT old.due OR new.rule IS NOT old.rule OR new.status <> 'open'
+  WHEN new.due IS NOT old.due OR new.rule IS NOT old.rule OR (new.status IS NOT old.status AND new.status <> 'open')
   BEGIN DELETE FROM snooze WHERE entity_id = new.id; END;
 -- D2: a reminder counts back from a due, so a task with none holds none: one is not made on a task
 -- without a due, and clearing the due takes the task's reminders with it. (Neither names a kind: the

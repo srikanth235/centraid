@@ -43,6 +43,7 @@
 //! nothing (#1146). A write a shell may re-offer without a key is idempotent by
 //! its own content, or by an id the phone minted before the first attempt.
 
+pub mod alert;
 pub mod arrival;
 pub mod blob;
 pub mod contact_point;
@@ -392,6 +393,7 @@ impl Registry {
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
         let modules: &[fn() -> Vec<CommandDefinition>] = &[
+            alert::definitions,
             blob::definitions,
             contact_point::definitions,
             container::definitions,

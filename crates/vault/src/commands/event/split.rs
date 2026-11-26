@@ -206,12 +206,22 @@ pub(super) fn split(ctx: &crate::commands::CommandCtx<'_, '_>, input: &EditInput
             guests::set_guests(ctx, &new_id, list.as_deref().unwrap_or_default())?;
         }
         None => {
-            connection.execute(
-                "INSERT INTO event_guest (event_id, address, person_id, name, role, status, organizer)
-                 SELECT ?2, address, person_id, name, role, status, organizer
-                   FROM event_guest WHERE event_id = ?1",
-                [id, new_id.as_str()],
-            )?;
+            for guest in guests::guests_of(connection, id)? {
+                connection.execute(
+                    "INSERT INTO event_guest (id, event_id, address, person_id, name, role, status, organizer)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    rusqlite::params![
+                        ctx.next_id(),
+                        new_id,
+                        guest.address,
+                        guest.person_id,
+                        guest.name,
+                        guest.role,
+                        guest.status,
+                        guest.organizer,
+                    ],
+                )?;
+            }
         }
     }
     // What is hung on the event, not part of its time: its tags and attachments.

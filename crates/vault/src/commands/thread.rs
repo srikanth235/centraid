@@ -32,9 +32,7 @@
 //!
 //! A refusal's reason and a notice are rows of `message_refusal` and `message_notice` (A1): this
 //! module names none of them, it asks the table. `message.outcome` is the one closed state machine
-//! and keeps its CHECK and triggers. The assistant's routing record is a JSON object the vault
-//! defines (A3): the command stamps `"v":1` on it, and a card list is a plain array with no
-//! version.
+//! and keeps its CHECK and triggers.
 //!
 //! ## One turn is one commit
 //!
@@ -44,19 +42,19 @@
 //!
 //! ## A REFUSAL MUST NOT QUOTE WHAT A DELETE REMOVES
 //!
-//! A conversation's text, its cards (titles read out of other apps) and its thumbnails are exactly
-//! what "delete this chat" removes. `turn`, `title` and a settled `text` are therefore SEALED input
-//! keys: a refusal's sentence never quotes the value, the mechanism Locker uses for a password
-//! (R-CHAT-6).
+//! A conversation's text and its thumbnails are exactly what "delete this chat" removes. `turn`,
+//! `title` and a settled `text` are therefore SEALED input keys: a refusal's sentence never quotes
+//! the value, the mechanism Locker uses for a password (R-CHAT-6).
 //!
 //! ## What a card is, and what is never stored
 //!
-//! A card is a JSON snapshot in the answer's own row (R-CHAT-3): no reference to the row it names, so
-//! a member's deleting a task is never a refusal or a hole in their history. The apps a card may name
-//! and a chat may be scoped to are [`crate::roster`], read here for the input schema and nowhere else.
-//! A camera-roll image is stored as a thumbnail of at most 256 pixels the caller made; the original
-//! never is. A vault photograph or document is stored as the `entity_id` it is, which the engine sets
-//! to NULL if the entity is purged: the chat keeps the question and its label.
+//! A card is a `message_card` row: the `entity_id` it shows and a closed `qualifier` code, and no
+//! word of the item. The thread read resolves the title live, so purging an item leaves none of its
+//! words in a card, and the engine sets `entity_id` to NULL, which the read draws as a tombstone.
+//! The apps a chat may be scoped to are [`crate::roster`], read here for the input schema and
+//! nowhere else. A camera-roll image is stored as a thumbnail of at most 256 pixels the caller made,
+//! with the label the member's phone gave it; the original never is. A vault photograph or document
+//! is stored as the `entity_id` it is and no words of its own: its title is read live too.
 
 use std::sync::OnceLock;
 
@@ -74,23 +72,15 @@ use crate::roster;
 /// question is `sent` and a proposal settles later, by `thread.settle_proposal`).
 const OUTCOMES: [&str; 4] = ["answered", "stopped", "refused", "proposed"];
 
-/// The version the vault stamps on the assistant's routing record (A3).
-const RECORD_VERSION: i64 = 1;
-
-/// One card a message snapshots. `app` is the roster's.
+/// One card a message shows: the item and a closed code, and no word of the item.
 fn card_schema() -> Value {
     json!({
       "type": "object",
-      "required": ["app", "entity", "id", "title"],
+      "required": ["entity_id"],
       "additionalProperties": false,
       "properties": {
-        "app": { "enum": roster::ids().collect::<Vec<_>>() },
-        "entity": { "type": "string", "minLength": 1 },
-        "id": { "type": "string", "minLength": 1 },
-        "qualifier": { "type": "string" },
-        "title": { "type": "string" },
-        "subtitle": { "type": "string" },
-        "meta": { "type": "string" }
+        "entity_id": { "type": "string", "minLength": 1 },
+        "qualifier": { "type": "string", "pattern": "^[a-z][a-z_]{0,23}$" }
       }
     })
 }
@@ -98,11 +88,11 @@ fn card_schema() -> Value {
 fn attachment_schema() -> Value {
     json!({
       "type": "object",
-      "required": ["form", "label"],
+      "required": ["form"],
       "additionalProperties": false,
       "properties": {
         "form": { "enum": ["photo", "document", "image"] },
-        "label": { "type": "string", "maxLength": 300 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 300 },
         "entity_id": { "type": "string", "minLength": 1 },
         "thumbnail_data_uri": { "type": "string", "maxLength": 400_000 }
       }
@@ -131,7 +121,6 @@ fn answer_schema() -> Value {
         "text": { "type": "string", "maxLength": 20_000 },
         "refusal": { "type": "string", "minLength": 1 },
         "notice": { "type": "string", "minLength": 1 },
-        "record_json": { "type": "string", "maxLength": 20_000 },
         "cards": { "type": "array", "maxItems": 50, "items": card_schema() }
       }
     })
@@ -281,25 +270,6 @@ fn pre_lookups(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
-/// The routing record is a JSON object, and the vault's own version is the only one it carries.
-fn pre_record(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let Some(text) = turn(ctx)["answer"]
-        .get("record_json")
-        .and_then(Value::as_str)
-    else {
-        return Ok(None);
-    };
-    let sentence = || Some("A turn's record is a JSON object of this vault's version.".to_owned());
-    Ok(match serde_json::from_str::<Value>(text) {
-        Ok(Value::Object(record)) => record
-            .get("v")
-            .is_some_and(|v| v.as_i64() != Some(RECORD_VERSION))
-            .then(sentence)
-            .flatten(),
-        _ => sentence(),
-    })
-}
-
 fn pre_title(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok((ctx.optional_str("thread_id").is_none()
         && title_of(str_of(&turn(ctx)["question"], "text")).is_empty())
@@ -310,12 +280,13 @@ fn pre_attachments(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     for attachment in attachments(ctx) {
         let form = str_of(&attachment, "form");
         let has = |key: &str| attachment.get(key).is_some();
-        // An image is its thumbnail and no vault item; a photo or a document is a vault item and
-        // no thumbnail (the table's CHECKs say the same).
+        // An image is its thumbnail and its label and no vault item; a photo or a document is a
+        // vault item and no label or thumbnail, its title is read live (the table's CHECKs say the
+        // same).
         let names_itself = if form == "image" {
-            has("thumbnail_data_uri") && !has("entity_id")
+            has("thumbnail_data_uri") && has("label") && !has("entity_id")
         } else {
-            has("entity_id") && !has("thumbnail_data_uri")
+            has("entity_id") && !has("thumbnail_data_uri") && !has("label")
         };
         if !names_itself {
             return Ok(Some(
@@ -390,22 +361,14 @@ fn keep_thumbnail(ctx: &CommandCtx<'_, '_>, uri: &str) -> Result<String> {
 
 #[derive(serde::Deserialize)]
 struct CardInput {
-    app: String,
-    entity: String,
-    id: String,
-    #[serde(default)]
-    qualifier: String,
-    title: String,
-    #[serde(default)]
-    subtitle: String,
-    #[serde(default)]
-    meta: String,
+    entity_id: String,
+    qualifier: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
 struct AttachmentInput {
     form: String,
-    label: String,
+    label: Option<String>,
     entity_id: Option<String>,
     thumbnail_data_uri: Option<String>,
 }
@@ -423,7 +386,6 @@ struct AnswerInput {
     text: Option<String>,
     refusal: Option<String>,
     notice: Option<String>,
-    record_json: Option<String>,
     #[serde(default)]
     cards: Vec<CardInput>,
 }
@@ -442,17 +404,6 @@ struct SaveTurnInput {
     turn: TurnInput,
 }
 
-/// The routing record as the vault stores it: the assistant's object with the vault's `"v":1`
-/// (A3). A precondition said it parses as an object.
-fn record_of(answer: &AnswerInput) -> Option<String> {
-    let text = answer.record_json.as_deref()?;
-    let Ok(Value::Object(mut record)) = serde_json::from_str::<Value>(text) else {
-        return None;
-    };
-    record.insert("v".to_owned(), json!(RECORD_VERSION));
-    Some(Value::Object(record).to_string())
-}
-
 fn insert_message(
     ctx: &CommandCtx<'_, '_>,
     thread_id: &str,
@@ -462,21 +413,10 @@ fn insert_message(
     text: &str,
     answer: &AnswerInput,
 ) -> Result<()> {
-    let snapshot: Vec<Value> = answer
-        .cards
-        .iter()
-        .map(|card| {
-            json!({
-                "app": card.app, "entity": card.entity, "id": card.id,
-                "qualifier": card.qualifier, "title": card.title,
-                "subtitle": card.subtitle, "meta": card.meta,
-            })
-        })
-        .collect();
     ctx.connection().execute(
         "INSERT INTO message
-           (thread_id, ordinal, role, text, outcome, refusal, notice, record, cards, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
+           (thread_id, ordinal, role, text, outcome, refusal, notice, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
         rusqlite::params![
             thread_id,
             ordinal,
@@ -485,11 +425,24 @@ fn insert_message(
             outcome,
             answer.refusal,
             answer.notice,
-            record_of(answer),
-            Value::Array(snapshot).to_string(),
             ctx.now,
         ],
     )?;
+    for (position, card) in answer.cards.iter().enumerate() {
+        let entity_id = Some(card.entity_id.as_str())
+            .filter(|id| matches!(find(ctx.connection(), id), Ok(Some(_))));
+        ctx.connection().execute(
+            "INSERT INTO message_card (thread_id, ordinal, position, entity_id, qualifier)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                thread_id,
+                ordinal,
+                i64::try_from(position).unwrap_or(0),
+                entity_id,
+                card.qualifier,
+            ],
+        )?;
+    }
     Ok(())
 }
 
@@ -687,10 +640,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 CommandCondition {
                     predicate: "a_reason_and_a_notice_are_lookup_rows",
                     check: pre_lookups,
-                },
-                CommandCondition {
-                    predicate: "a_record_is_an_object_of_this_version",
-                    check: pre_record,
                 },
                 CommandCondition {
                     predicate: "a_new_chat_is_titled_by_words",

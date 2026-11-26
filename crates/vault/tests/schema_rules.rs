@@ -1106,20 +1106,38 @@ fn a_locker_field_holds_the_columns_its_kind_says() {
 #[test]
 fn a_kind_that_needs_a_home_has_one_and_a_reading_has_no_name() {
     let w = World::new("rules_k4_homes");
-    // A section needs a project, an event a calendar: `entity_kind.may_be_top = 0`.
+    // An event needs a calendar: `entity_kind.may_be_top = 0`.
     w.refuses(&format!(
         "INSERT INTO entity (id, kind, title, created_at, updated_at)
-         VALUES ('{}', 'section', 'S', '{AT}', '{AT}')",
+         VALUES ('{}', 'event', 'E', '{AT}', '{AT}')",
         id(20)
     ));
-    let project = w.entity(21, "project", "P");
-    w.takes(&format!(
-        "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
-         VALUES ('{}', 'section', 'S', '{project}', 'project', '{AT}', '{AT}')",
+    // A task sits in a task list or under a task, and one level only: a subtask has no subtasks, and
+    // a task that has subtasks does not become one.
+    let list = w.entity(21, "task_list", "L");
+    let task_in = |n: u64, home: &str, kind: &str| {
+        format!(
+            "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+             VALUES ('{}', 'task', 'T', '{home}', '{kind}', '{AT}', '{AT}')",
+            id(n)
+        )
+    };
+    w.takes(&task_in(22, &list, "task_list"));
+    w.takes(&task_in(230, &list, "task_list"));
+    w.takes(&task_in(231, &id(22), "task"));
+    w.refuses(&task_in(232, &id(231), "task"));
+    w.refuses(&format!(
+        "UPDATE entity SET parent_id = '{}', parent_kind = 'task' WHERE id = '{}'",
+        id(230),
         id(22)
     ));
-    // Taking a section out of its project is a move to the top, which it may not make.
-    w.refuses(&format!(
+    w.takes(&format!(
+        "UPDATE entity SET parent_id = '{}', parent_kind = 'task' WHERE id = '{}'",
+        id(22),
+        id(230)
+    ));
+    // Taking a task out of its list is a move to the top, which it may make.
+    w.takes(&format!(
         "UPDATE entity SET parent_id = NULL, parent_kind = NULL WHERE id = '{}'",
         id(22)
     ));
@@ -1739,10 +1757,10 @@ fn an_event_reads_its_times_in_the_form_its_timing_says_and_needs_a_calendar() {
         "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{}', 'event', 'Homeless', '{AT}', '{AT}')",
         id(103)
     ));
-    let project = w.entity_in(104, "project");
+    let list = w.entity_in(104, "task_list");
     w.refuses(&format!(
         "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
-         VALUES ('{}', 'event', 'In a project', '{project}', 'project', '{AT}', '{AT}')",
+         VALUES ('{}', 'event', 'In a task list', '{list}', 'task_list', '{AT}', '{AT}')",
         id(105)
     ));
 }
@@ -1754,9 +1772,13 @@ fn a_guest_is_one_address_of_an_event_with_one_organizer_and_outlives_its_person
     w.takes(&format!(
         "INSERT INTO event (id, starts, timing) VALUES ('{ev}', '2026-03-02T09:00', 'floating')"
     ));
+    let made = std::cell::Cell::new(0);
     let with = |address: &str, column: &str, value: &str| {
+        made.set(made.get() + 1);
         format!(
-            "INSERT INTO event_guest (event_id, address, {column}) VALUES ('{ev}', '{address}', {value})"
+            "INSERT INTO event_guest (id, event_id, address, {column})
+             VALUES ('g{}', '{ev}', '{address}', {value})",
+            made.get()
         )
     };
     w.refuses(&with(" ", "role", "'required'"));
@@ -1772,6 +1794,21 @@ fn a_guest_is_one_address_of_an_event_with_one_organizer_and_outlives_its_person
     // The person an address resolves to is a person; purging them leaves the guest.
     let ada = w.entity(111, "person", "Ada");
     w.takes(&format!("INSERT INTO person (id) VALUES ('{ada}')"));
+    // A guest is an address or a person: neither is refused, a person is one guest of an event,
+    // and two guests with no address are two rows.
+    let bea = w.entity(112, "person", "Bea");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{bea}')"));
+    let by_person = |id: &str, person: &str| {
+        format!(
+            "INSERT INTO event_guest (id, event_id, person_id) VALUES ('{id}', '{ev}', '{person}')"
+        )
+    };
+    w.refuses(&format!(
+        "INSERT INTO event_guest (id, event_id) VALUES ('nobody', '{ev}')"
+    ));
+    w.takes(&by_person("by-bea", &bea));
+    w.refuses(&by_person("by-bea-again", &bea));
+    w.takes(&format!("DELETE FROM event_guest WHERE id = 'by-bea'"));
     w.refuses(&format!(
         "UPDATE event_guest SET person_id = '{ev}' WHERE address = 'b@example.com'"
     ));
@@ -1943,11 +1980,10 @@ fn a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own() {
     // The planned day is a date, and not the due.
     w.refuses(&ins("scheduled_on", "'2026-03-02T09:00'"));
     w.refuses(&ins("scheduled_on", "'2026-02-30'"));
-    // The columns say what they hold: a priority of 0 to 9, an effort of minutes, a link with an
+    // The columns say what they hold: a priority of 0 to 9, a link with an
     // address, a closed status and anchor.
     for (column, value) in [
         ("priority", "10"),
-        ("effort_min", "0"),
         ("url", "' '"),
         ("status", "'later'"),
         ("anchor", "'whenever'"),
@@ -1955,8 +1991,8 @@ fn a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own() {
         w.refuses(&ins(column, value));
     }
     w.takes(&ins(
-        "due, due_timing, zone, scheduled_on, priority, effort_min, url",
-        "'2026-03-02T08:00:00.000Z', 'zoned', 'Europe/Paris', '2026-03-01', 9, 30, 'https://example.com'",
+        "due, due_timing, zone, scheduled_on, priority, url",
+        "'2026-03-02T08:00:00.000Z', 'zoned', 'Europe/Paris', '2026-03-01', 9, 'https://example.com'",
     ));
     // Done is exactly when it says when, in the clock's one form; a snooze belongs to an open task.
     w.refuses(&format!("UPDATE task SET status = 'done' WHERE id = '{t}'"));

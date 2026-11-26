@@ -1459,7 +1459,7 @@ CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
 
 -- trigger task_edit_clears_its_snooze on task
 CREATE TRIGGER task_edit_clears_its_snooze AFTER UPDATE OF due, rule, status ON task
-  WHEN new.due IS NOT old.due OR new.rule IS NOT old.rule OR new.status <> 'open'
+  WHEN new.due IS NOT old.due OR new.rule IS NOT old.rule OR (new.status IS NOT old.status AND new.status <> 'open')
   BEGIN DELETE FROM snooze WHERE entity_id = new.id; END;
 
 -- trigger task_one_level_of_subtasks on entity

@@ -12,8 +12,9 @@
 //!   date repeats every year (a yearless `--MM-DD` has no origin year, a dated one starts at its
 //!   year); Feb 29 falls on Feb 28 in a year with no leap day. A Locker date fires once;
 //! - a repeating event or task holds its NEXT firing ([`advance`] moves it on); a one-day override
-//!   (`occurrence`) and a cancelled day are honoured; a task's `snoozed_until` is its one alert while
-//!   it is set (attached to its smallest lead).
+//!   (`occurrence`) and a cancelled day are honoured; a `snooze` row is the one alert of its target
+//!   (an event, a task, a person's date, a Locker date) until its instant has passed (attached to the
+//!   target's smallest lead).
 //!
 //! The rows are DERIVED DATA, written after the commit from the same queue as search
 //! (`index::after_commit`, the idle pass, `index::rebuild`), by [`sync`], one entity at a time and
@@ -260,6 +261,7 @@ pub fn sync(connection: &Connection, n: i64, now: i64) -> Result<()> {
         "person" => date_fires(connection, &reminders, refs, DateOf::Person)?,
         _ => date_fires(connection, &reminders, refs, DateOf::Field)?,
     };
+    let fires = snoozed(connection, &id, &reminders, fires, refs)?;
     let mut insert = connection.prepare_cached(
         "INSERT INTO alert (reminder_id, n, timing, fire_key, repeats) VALUES (?1, ?2, ?3, ?4, ?5)",
     )?;
@@ -280,6 +282,55 @@ pub fn sync(connection: &Connection, n: i64, now: i64) -> Result<()> {
         ])?;
     }
     Ok(())
+}
+
+/// A SNOOZE MOVES THE ALERT, NOT THE ITEM (#1214 S9): a target (the item, or one of its dates or
+/// fields) with a `snooze` row whose instant has not yet passed has one alert, at that instant, on
+/// its smallest lead. Nothing else about the item moves. A repeating target keeps its repeat flag,
+/// so once the snoozed alert has fired the next pass takes the item's own schedule back.
+fn snoozed(
+    connection: &Connection,
+    id: &str,
+    reminders: &[ReminderRow],
+    mut fires: Vec<(String, Fire)>,
+    refs: Refs,
+) -> Result<Vec<(String, Fire)>> {
+    let held = connection
+        .prepare_cached("SELECT date_id, field_id, until FROM snooze WHERE entity_id = ?1")?
+        .query_map([id], |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (date_id, field_id, until) in held {
+        let Some(at) = parse_instant_ms(&until).filter(|at| *at > refs.fixed) else {
+            continue;
+        };
+        let target: Vec<&ReminderRow> = reminders
+            .iter()
+            .filter(|r| r.date_id == date_id && r.field_id == field_id)
+            .collect();
+        let Some(first) = target.first() else {
+            continue;
+        };
+        let repeats = fires
+            .iter()
+            .any(|(reminder, fire)| fire.repeats && target.iter().any(|r| r.id == *reminder));
+        fires.retain(|(reminder, _)| !target.iter().any(|r| r.id == *reminder));
+        fires.push((
+            first.id.clone(),
+            Fire {
+                space: Timing::Fixed,
+                at,
+                repeats,
+                until: None,
+            },
+        ));
+    }
+    Ok(fires)
 }
 
 /// Remove every alert of the entity numbered `n`.
@@ -637,7 +688,6 @@ type TaskRow = (
     Option<String>,
     Option<String>,
     String,
-    Option<String>,
 );
 
 fn task_fires(
@@ -648,7 +698,7 @@ fn task_fires(
 ) -> Result<Vec<(String, Fire)>> {
     let row: Option<TaskRow> = connection
         .prepare_cached(
-            "SELECT due, due_timing, zone, rule, anchor, snoozed_until FROM task
+            "SELECT due, due_timing, zone, rule, anchor FROM task
               WHERE id = ?1 AND status = 'open'",
         )?
         .query_row([id], |row| {
@@ -658,33 +708,13 @@ fn task_fires(
                 row.get(2)?,
                 row.get(3)?,
                 row.get(4)?,
-                row.get(5)?,
             ))
         })
         .optional()?;
-    let Some((due, timing, zone, rule, anchor, snoozed)) = row else {
+    let Some((due, timing, zone, rule, anchor)) = row else {
         return Ok(Vec::new());
     };
     let direct: Vec<&ReminderRow> = reminders.iter().filter(|r| r.date_id.is_none()).collect();
-    // A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): while one is set it is the task's only
-    // alert, at the instant the member asked for, on its smallest lead. The due is untouched.
-    if let Some(until) = snoozed.as_deref().and_then(parse_instant_ms) {
-        return Ok(direct
-            .first()
-            .map(|reminder| {
-                (
-                    reminder.id.clone(),
-                    Fire {
-                        space: Timing::Fixed,
-                        at: until,
-                        repeats: false,
-                        until: None,
-                    },
-                )
-            })
-            .into_iter()
-            .collect());
-    }
     let (Some(due), Some(timing)) = (due, timing) else {
         return Ok(Vec::new());
     };
@@ -1016,7 +1046,8 @@ pub struct Notice {
     pub title: String,
     /// When the thing is, as the alert counts it (the firing plus the lead): an instant for a zoned
     /// item, a wall clock for a floating one, the day (`YYYY-MM-DD`) for an all-day item, a person's
-    /// date or a Locker date. A snoozed task says its due.
+    /// date or a Locker date. A snoozed task says its due; a snoozed alert of any other kind says no
+    /// moment (the snooze holds none).
     pub at: Option<String>,
     /// How `at` reads: `zoned`, `floating`, `all-day` or `date`.
     pub timing: String,
@@ -1071,6 +1102,16 @@ pub fn notice(connection: &Connection, reminder_id: &str) -> Result<Option<Notic
         Timing::Floating
     };
     let shifted = ms_in(space, &fire_key).map(|ms| space.key_of(ms + offset_min * MINUTE_MS));
+    let snoozed: bool = connection
+        .prepare_cached(
+            "SELECT EXISTS (SELECT 1 FROM snooze
+                             WHERE entity_id = ?1 AND ifnull(date_id, '') = ifnull(?2, '')
+                               AND ifnull(field_id, '') = ifnull(?3, '') AND until = ?4)",
+        )?
+        .query_row(params![entity_id, date_id, field_id, fire_key], |row| {
+            row.get(0)
+        })?;
+    let shifted = shifted.filter(|_| !snoozed);
     let (at, timing, what) = match kind.as_str() {
         "person" => {
             let what: Option<(String, Option<String>)> = connection
@@ -1108,13 +1149,11 @@ pub fn notice(connection: &Connection, reminder_id: &str) -> Result<Option<Notic
             (at, timing, None)
         }
         _ => {
-            let row: (Option<String>, Option<String>, Option<String>) = connection
-                .prepare_cached("SELECT due, due_timing, snoozed_until FROM task WHERE id = ?1")?
-                .query_row([&entity_id], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-                })?;
+            let row: (Option<String>, Option<String>) = connection
+                .prepare_cached("SELECT due, due_timing FROM task WHERE id = ?1")?
+                .query_row([&entity_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
             let timing = row.1.unwrap_or_else(|| "zoned".to_owned());
-            let at = if row.2.is_some() {
+            let at = if snoozed {
                 row.0
             } else if timing == "all-day" {
                 shifted.map(|text| text[..10].to_owned())

@@ -808,6 +808,13 @@ fn merge(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let dates = merge_dates(ctx, loser, winner)?;
     let (points, same_points) = merge_points(connection, loser, winner)?;
     // The invitations the loser was a guest of, and the readings and daily figures they own.
+    // On an event both were guests of, the survivor's row and answer stay.
+    connection.execute(
+        "DELETE FROM event_guest
+          WHERE person_id = ?1
+            AND event_id IN (SELECT event_id FROM event_guest WHERE person_id = ?2)",
+        [loser, winner],
+    )?;
     let guests = connection.execute(
         "UPDATE event_guest SET person_id = ?2 WHERE person_id = ?1",
         [loser, winner],

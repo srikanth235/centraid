@@ -316,6 +316,42 @@ pub(crate) fn home_refusal(
             parent.kind.noun()
         )));
     }
+    let shallow = |kind: &str, home: &str| -> Result<bool> {
+        Ok(connection.query_row(
+            "SELECT EXISTS (SELECT 1 FROM home_shape WHERE kind = ?1 AND home_kind = ?2 AND shallow = 1)",
+            [kind, home],
+            |row| row.get(0),
+        )?)
+    };
+    if shallow(kind.as_str(), parent.kind.as_str())? {
+        let parent_is_nested: bool = connection.query_row(
+            "SELECT EXISTS (SELECT 1 FROM entity p JOIN home_shape h
+                              ON h.kind = p.kind AND h.home_kind = p.parent_kind AND h.shallow = 1
+                             WHERE p.id = ?1)",
+            [parent_id],
+            |row| row.get(0),
+        )?;
+        if parent_is_nested {
+            return Ok(Some(format!(
+                "“{}” is already a subtask, and a subtask cannot have subtasks of its own",
+                parent.title
+            )));
+        }
+        if let Some(id) = id {
+            let has_nested: bool = connection.query_row(
+                "SELECT EXISTS (SELECT 1 FROM entity c JOIN home_shape h
+                                  ON h.kind = c.kind AND h.home_kind = c.parent_kind AND h.shallow = 1
+                                 WHERE c.parent_id = ?1 AND c.deleted_at IS NULL)",
+                [id],
+                |row| row.get(0),
+            )?;
+            if has_nested {
+                return Ok(Some(
+                    "a task that has subtasks cannot become a subtask itself".to_owned(),
+                ));
+            }
+        }
+    }
     if let Some(id) = id {
         // Climb from the new home: finding the row itself means it would end up inside itself.
         let inside: bool = connection.query_row(
@@ -619,6 +655,21 @@ pub(crate) fn purge_one(
                 connection.execute("DELETE FROM origin WHERE fills = ?1", [id])?;
             }
             PurgeRule::Refuse => {}
+        }
+    }
+    // A guest that is only this person has nothing left to be but a row with no address and no
+    // person, which the table refuses: those go before the person does, the others let go.
+    if found.kind == Kind::Person {
+        for event in ids(
+            connection,
+            "SELECT DISTINCT event_id FROM event_guest WHERE person_id = ?1 AND address IS NULL",
+            id,
+        )? {
+            connection.execute(
+                "DELETE FROM event_guest WHERE event_id = ?1 AND person_id = ?2 AND address IS NULL",
+                [event.as_str(), id],
+            )?;
+            ctx.touch(&event)?;
         }
     }
     // An album's cover is a photograph's bytes: once those are purged the cover
