@@ -35,9 +35,6 @@ const OS_UPLOADS: &str = "the OS-owned background uploads are iOS's `URLSession`
 const VAULT_TELLS_HOME: &str = "the vault service tells Home by name (`Ctx::post`, vault/service.rs to shell/home.rs); no shell sends it";
 
 /// One reason, several rows.
-const ROLL_REPORT: &str = "a service-to-service report: the camera roll tells the pass service (imports/camera_roll.rs to passes/service.rs); no shell sends it";
-
-/// One reason, several rows.
 const RUNTIME_EVENT: &str = "the runtime builds this event itself (screens/src/runtime.rs) and hands it to every screen that matches it; no shell sends it";
 
 pub const REGISTER: &[Entry] = &[
@@ -193,15 +190,6 @@ pub const REGISTER: &[Entry] = &[
     ),
     // Runtime: the runtime itself originates or consumes it.
     (
-        "RollReported.BytesFed.landed",
-        runtime_named(
-            "a service-to-service report: the camera roll tells the pass service (imports/camera_roll.rs to passes/service.rs). `landed =` is a photo grid argument",
-            Missing::Ios,
-        ),
-    ),
-    ("RollReported.fed", runtime(ROLL_REPORT)),
-    ("RollReported.walked", runtime(ROLL_REPORT)),
-    (
         "ScreenEvent.announced",
         runtime(
             "runtime.rs synthesises it when a shell fact is announced, and custody/filing.rs reads it; no shell sends it",
@@ -224,12 +212,6 @@ pub const REGISTER: &[Entry] = &[
     ("ScreenEvent.off_thread_done", runtime(RUNTIME_EVENT)),
     ("ScreenEvent.left", runtime(RUNTIME_EVENT)),
     ("ScreenEvent.tab_hidden", runtime(RUNTIME_EVENT)),
-    (
-        "ScreenEvent.roll_reported",
-        runtime(
-            "the camera roll posts it and the pass service reads it (imports/camera_roll.rs, passes/service.rs); no shell sends it",
-        ),
-    ),
     (
         "ScreenEvent.screen_opened",
         runtime(
