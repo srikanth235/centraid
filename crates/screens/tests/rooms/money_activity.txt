@@ -1,0 +1,82 @@
+room app_place key="money"
+  header title="Money" subtitle="3 transactions"
+    key add sym="Plus" "Add transaction" #key/add
+    filter clear=#filter/clear
+      menu #money/filter
+        section "Show"
+          item "Uncategorized" #filter/uncategorized
+          item "Pending" #filter/pending
+        section "Account"
+          item "All accounts" checked #filter/account/all
+          item "Checking" #filter/account/01900000-0000-7000-8000-000000000101
+          item "Savings" #filter/account/01900000-0000-7000-8000-000000000102
+        section "Category"
+          item "All categories" checked #filter/category/all
+          item "Clothes and household" #filter/category/category:shopping.general
+          item "Dining" #filter/category/01900000-0000-7000-8000-000000000202
+          item "Dining out" #filter/category/category:food.dining
+          item "Entertainment and travel" #filter/category/category:fun.entertainment
+          item "Fees and taxes" #filter/category/category:fees
+          item "Food" #filter/category/category:food
+          item "Food & Drink" #filter/category/01900000-0000-7000-8000-000000000203
+          item "Fuel" #filter/category/category:transport.fuel
+          item "Fun and travel" #filter/category/category:fun
+          item "Groceries" #filter/category/01900000-0000-7000-8000-000000000201
+          item "Groceries" #filter/category/category:food.groceries
+          item "Health" #filter/category/category:health
+          item "Health care" #filter/category/category:health.care
+          item "Home and repairs" #filter/category/category:housing.home
+          item "Housing" #filter/category/category:housing
+          item "Income" #filter/category/category:income
+          item "Other income" #filter/category/category:income.other
+          item "Pay" #filter/category/category:income.pay
+          item "Phone and internet" #filter/category/category:utilities.phone
+          item "Power, gas and water" #filter/category/category:utilities.bills
+          item "Rent or mortgage" #filter/category/category:housing.rent
+          item "Shopping" #filter/category/category:shopping
+          item "Subscriptions" #filter/category/category:fun.subscriptions
+          item "Transit and rideshare" #filter/category/category:transport.transit
+          item "Transport" #filter/category/category:transport
+          item "Utilities" #filter/category/category:utilities
+  band home=#band/home search=#band/search more=#band/more
+    tab "Activity" sym="Activity" selected #tab/activity
+    tab "Spending" sym="BarChart2" #tab/spending
+    tab "Cash flow" sym="Coin" #tab/cashflow
+    menu #band/more/menu
+      section
+        item "Accounts" #more/accounts
+        item "Budgets" #more/budgets
+        item "Rules" #more/rules
+        item "Categories" #more/categories
+        item "Transfers" #more/transfers
+        item "Match dismissals" #more/dismissals
+        item "Import CSV" #more/import-csv
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    section #section/activity "Activity"
+      row #row/01900000-0000-7000-8000-000000000301 "Market Fresh" meta="2026-11-24 · Checking" trailing="-$84.50" swipe="Move to trash" #row/01900000-0000-7000-8000-000000000301/trash
+        menu #row/01900000-0000-7000-8000-000000000301/menu
+          section
+            item "Open" #row/01900000-0000-7000-8000-000000000301/menu/open
+            item "Edit" #row/01900000-0000-7000-8000-000000000301/menu/edit
+            item "Star" #row/01900000-0000-7000-8000-000000000301/menu/star
+            item "Select" #row/01900000-0000-7000-8000-000000000301/menu/select
+            item "Move to trash" destructive #row/01900000-0000-7000-8000-000000000301/menu/trash
+      row #row/01900000-0000-7000-8000-000000000303 "Corner Co-op" meta="2026-11-20 · Checking" trailing="-$60.00" swipe="Move to trash" #row/01900000-0000-7000-8000-000000000303/trash
+        menu #row/01900000-0000-7000-8000-000000000303/menu
+          section
+            item "Open" #row/01900000-0000-7000-8000-000000000303/menu/open
+            item "Edit" #row/01900000-0000-7000-8000-000000000303/menu/edit
+            item "Star" #row/01900000-0000-7000-8000-000000000303/menu/star
+            item "Select" #row/01900000-0000-7000-8000-000000000303/menu/select
+            item "Move to trash" destructive #row/01900000-0000-7000-8000-000000000303/menu/trash
+      row #row/01900000-0000-7000-8000-000000000302 "Payroll" meta="2026-11-15 · Checking" trailing="$4,200.00":net swipe="Move to trash" #row/01900000-0000-7000-8000-000000000302/trash
+        menu #row/01900000-0000-7000-8000-000000000302/menu
+          section
+            item "Open" #row/01900000-0000-7000-8000-000000000302/menu/open
+            item "Edit" #row/01900000-0000-7000-8000-000000000302/menu/edit
+            item "Star" #row/01900000-0000-7000-8000-000000000302/menu/star
+            item "Select" #row/01900000-0000-7000-8000-000000000302/menu/select
+            item "Move to trash" destructive #row/01900000-0000-7000-8000-000000000302/menu/trash
+  search placeholder="Search transactions" #search

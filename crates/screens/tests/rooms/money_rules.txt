@@ -1,0 +1,43 @@
+room pushed_page key="money/rules"
+  header title="Rules"
+    back "Money" #back
+  ready
+    section #section/rules "Rules"
+      trailing "Apply rules" sym="CheckCircle" #rules/apply
+      row #rule/01900000-0000-7000-8000-000000000401 "Market Fresh" meta="MKT FRESH → Groceries" swipe="Delete" #rule/01900000-0000-7000-8000-000000000401/delete
+    section #section/add "New rule"
+      form
+        choice #field/match "Match"
+          option "Contains" selected
+          option "Is"
+          option "Matches"
+        text #field/text "Bank text"  rev=0 required
+        text #field/display "Payee name"  rev=0
+        choice #field/category "Category"
+          option "Clothes and household" selected
+          option "Dining"
+          option "Dining out"
+          option "Entertainment and travel"
+          option "Fees and taxes"
+          option "Food"
+          option "Food & Drink"
+          option "Fuel"
+          option "Fun and travel"
+          option "Groceries"
+          option "Groceries"
+          option "Health"
+          option "Health care"
+          option "Home and repairs"
+          option "Housing"
+          option "Income"
+          option "Other income"
+          option "Pay"
+          option "Phone and internet"
+          option "Power, gas and water"
+          option "Rent or mortgage"
+          option "Shopping"
+          option "Subscriptions"
+          option "Transit and rideshare"
+          option "Transport"
+          option "Utilities"
+        explicit save="Save"#form/save cancel="Cancel"#form/cancel save_disabled

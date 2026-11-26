@@ -34,6 +34,7 @@ pub fn registry() -> Registry {
         .exact(SETTINGS, || Box::new(Settings))
         .exact(BACKUP, || Box::new(Backup))
         .merge(super::people::registry())
+        .merge(super::money::registry())
 }
 
 fn stored(build: &Build<'_>, key: &str, default: &str) -> String {
@@ -105,6 +106,14 @@ impl RoomScreen for Home {
                 "",
                 glyph("Users", ""),
                 Handler::Open(super::people::PEOPLE.to_owned()),
+            ),
+            blocks::tile(
+                &mut b.sel,
+                "tile/money",
+                &words::home_money_tile(EN),
+                "",
+                glyph("Coin", ""),
+                Handler::Open(super::money::MONEY.to_owned()),
             ),
             blocks::tile(
                 &mut b.sel,

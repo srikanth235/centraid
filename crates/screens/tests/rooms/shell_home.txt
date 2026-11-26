@@ -6,5 +6,6 @@ room home key="home"
   ready
     tiles
       tile "People" glyph="Users" #tile/people
+      tile "Money" glyph="Coin" #tile/money
       tile "Backup" subtitle="Backed up 5 min ago" glyph="Backup" #tile/backup
       tile "Settings" glyph="Settings" #tile/settings

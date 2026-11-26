@@ -127,6 +127,7 @@ pub mod backup_check;
 pub mod backup_home;
 pub mod custody;
 pub mod home;
+pub mod money;
 pub mod pairing;
 pub mod passes;
 pub mod people;

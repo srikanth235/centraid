@@ -1,0 +1,38 @@
+room pushed_page key="money/budgets"
+  header title="Budgets" subtitle="Nov 2026"
+    back "Money" #back
+  ready
+    section #section/budgets "Nov 2026"
+      row #budget/01900000-0000-7000-8000-000000000201 "Groceries" meta="$124.50 / $400.00" trailing="$400.00" chips="Carry over":accent
+    section #section/set "Set budget"
+      form
+        choice #field/category "Category"
+          option "Clothes and household" selected
+          option "Dining"
+          option "Dining out"
+          option "Entertainment and travel"
+          option "Fees and taxes"
+          option "Food"
+          option "Food & Drink"
+          option "Fuel"
+          option "Fun and travel"
+          option "Groceries"
+          option "Groceries"
+          option "Health"
+          option "Health care"
+          option "Home and repairs"
+          option "Housing"
+          option "Income"
+          option "Other income"
+          option "Pay"
+          option "Phone and internet"
+          option "Power, gas and water"
+          option "Rent or mortgage"
+          option "Shopping"
+          option "Subscriptions"
+          option "Transit and rideshare"
+          option "Transport"
+          option "Utilities"
+        money #field/amount "Amount" "$0.00"
+        toggle #field/carry "Carry over" off
+        explicit save="Save"#form/save cancel="Cancel"#form/cancel

@@ -12,6 +12,7 @@ pub mod field;
 pub mod form;
 pub mod frame;
 pub mod host;
+pub mod money;
 pub mod notify_words;
 pub mod people;
 pub mod rooms;

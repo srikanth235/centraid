@@ -1,0 +1,51 @@
+room app_place key="money/cashflow"
+  header title="Cash flow" subtitle="Nov 2026"
+    key tool sym="ChevronLeft" "Previous month" #key/prev
+    key tool sym="ChevronRight" "Next month" #key/next
+  band home=#band/home search=#band/search more=#band/more
+    tab "Activity" sym="Activity" #tab/activity
+    tab "Spending" sym="BarChart2" #tab/spending
+    tab "Cash flow" sym="Coin" selected #tab/cashflow
+    menu #band/more/menu
+      section
+        item "Accounts" #more/accounts
+        item "Budgets" #more/budgets
+        item "Rules" #more/rules
+        item "Categories" #more/categories
+        item "Transfers" #more/transfers
+        item "Match dismissals" #more/dismissals
+        item "Import CSV" #more/import-csv
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    figure "Net" "+$4,055.50" caption="Income $4,200.00 · Spending $144.50" tone=net
+    chart #chart/cashflow summary="Income and spending over six months" empty="No cash flow in this period."
+      series bar "Income" points=6
+        point "in:2026-06" x="Jun 2026" y="$0.00"
+        point "in:2026-07" x="Jul 2026" y="$0.00"
+        point "in:2026-08" x="Aug 2026" y="$0.00"
+        point "in:2026-09" x="Sep 2026" y="$0.00"
+        point "in:2026-10" x="Oct 2026" y="$0.00"
+        point "in:2026-11" x="Nov 2026" y="$4,200.00"
+      series bar "Spending" points=6
+        point "out:2026-06" x="Jun 2026" y="$0.00"
+        point "out:2026-07" x="Jul 2026" y="$0.00"
+        point "out:2026-08" x="Aug 2026" y="$0.00"
+        point "out:2026-09" x="Sep 2026" y="$0.00"
+        point "out:2026-10" x="Oct 2026" y="$0.00"
+        point "out:2026-11" x="Nov 2026" y="$144.50"
+      series line "Net" points=6
+        point "net:2026-06" x="Jun 2026" y="$0.00"
+        point "net:2026-07" x="Jul 2026" y="$0.00"
+        point "net:2026-08" x="Aug 2026" y="$0.00"
+        point "net:2026-09" x="Sep 2026" y="$0.00"
+        point "net:2026-10" x="Oct 2026" y="$0.00"
+        point "net:2026-11" x="Nov 2026" y="+$4,055.50"
+      rule "$0.00"
+    section #section/months "By month"
+      row #cf/2026-06 "Jun 2026" meta="$0.00 · -$0.00" trailing="$0.00":net
+      row #cf/2026-07 "Jul 2026" meta="$0.00 · -$0.00" trailing="$0.00":net
+      row #cf/2026-08 "Aug 2026" meta="$0.00 · -$0.00" trailing="$0.00":net
+      row #cf/2026-09 "Sep 2026" meta="$0.00 · -$0.00" trailing="$0.00":net
+      row #cf/2026-10 "Oct 2026" meta="$0.00 · -$0.00" trailing="$0.00":net
+      row #cf/2026-11 "Nov 2026" meta="$4,200.00 · -$144.50" trailing="+$4,055.50":net

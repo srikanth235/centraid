@@ -1,0 +1,4 @@
+room sheet key="money/account/01900000-0000-7000-8000-000000000102/currency"
+  header title="Change currency"
+  ready
+    confirm outlined "Change currency to EUR?" body="Existing figures keep their written value in EUR. Refused if any figure would lose a fraction." warning="This rescales every line in Savings." yes="Change currency"#confirm/yes no="Cancel"#confirm/no

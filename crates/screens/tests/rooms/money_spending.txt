@@ -1,0 +1,29 @@
+room app_place key="money/spending"
+  header title="Spending" subtitle="Nov 2026"
+    key tool sym="ChevronLeft" "Previous month" #key/prev
+    key tool sym="ChevronRight" "Next month" #key/next
+  band home=#band/home search=#band/search more=#band/more
+    tab "Activity" sym="Activity" #tab/activity
+    tab "Spending" sym="BarChart2" selected #tab/spending
+    tab "Cash flow" sym="Coin" #tab/cashflow
+    menu #band/more/menu
+      section
+        item "Accounts" #more/accounts
+        item "Budgets" #more/budgets
+        item "Rules" #more/rules
+        item "Categories" #more/categories
+        item "Transfers" #more/transfers
+        item "Match dismissals" #more/dismissals
+        item "Import CSV" #more/import-csv
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    figure "Total spent" "$144.50" caption="Budget $400.00"
+    chart #chart/spending summary="Spending by category for Nov 2026" empty="No spending in Nov 2026."
+      series bar "Spending" points=2
+        point "cat:01900000-0000-7000-8000-000000000202" x="Dining" y="$20.00"
+        point "cat:01900000-0000-7000-8000-000000000201" x="Groceries" y="$124.50"
+      rule "Budget $400.00" tone=warning
+    section #section/categories "By category"
+      row #spending/01900000-0000-7000-8000-000000000202 "Dining" trailing="$20.00"
+      row #spending/01900000-0000-7000-8000-000000000201 "Groceries" meta="Budget $400.00" trailing="$124.50"
