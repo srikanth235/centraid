@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.RoomBlock
+import centraid.core.v1.RoomCanvasEvent
 import centraid.core.v1.RoomChange
 import centraid.core.v1.RoomCheck
 import centraid.core.v1.RoomCheckState
@@ -114,10 +115,11 @@ internal fun RoomBlockView(
     onTap: (String) -> Unit,
     onChange: (RoomChange) -> Unit,
     modifier: Modifier = Modifier,
+    onCanvas: (RoomCanvasEvent) -> Unit = {},
 ) {
     when {
         block.hero != null -> RoomHeroBlock(block.hero!!, onTap, modifier)
-        block.section != null -> RoomSectionBlock(block.section!!, onTap, onChange, modifier)
+        block.section != null -> RoomSectionBlock(block.section!!, onTap, onChange, modifier, onCanvas)
         block.row != null -> RoomRowBlock(block.row!!, onTap, modifier = modifier)
         block.facts != null -> RoomFactsBlock(block.facts!!, onTap, modifier)
         block.form != null -> RoomFormBlock(block.form!!, onTap, onChange, modifier)
@@ -142,7 +144,7 @@ internal fun RoomBlockView(
         block.calendar_grid != null -> RoomCanvasPlaceholder("calendar_grid", block.calendar_grid!!.anchor_day, modifier)
         block.photo_grid != null -> RoomCanvasPlaceholder("photo_grid", "", modifier)
         block.note_editor != null -> RoomCanvasPlaceholder("note_editor", block.note_editor!!.title, modifier)
-        block.chart != null -> RoomCanvasPlaceholder("chart", block.chart!!.summary, modifier)
+        block.chart != null -> ChartCanvas(block.chart!!, onCanvas, modifier)
     }
 }
 
@@ -329,6 +331,7 @@ internal fun RoomSectionBlock(
     onTap: (String) -> Unit,
     onChange: (RoomChange) -> Unit,
     modifier: Modifier = Modifier,
+    onCanvas: (RoomCanvasEvent) -> Unit = {},
 ) {
     Column(
         modifier
@@ -376,7 +379,7 @@ internal fun RoomSectionBlock(
         } else {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 section.blocks.forEach { child ->
-                    RoomBlockView(child, onTap = onTap, onChange = onChange)
+                    RoomBlockView(child, onTap = onTap, onChange = onChange, onCanvas = onCanvas)
                 }
             }
         }
