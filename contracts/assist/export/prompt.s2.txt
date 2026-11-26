@@ -41,4 +41,21 @@ today: Sunday 2026-09-27
 me: 
 
 kinds:
-<|im_end|>
+person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes · verbs: create edit delete restore star unstar add_to log unlink
+event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore unlink
+task: name, date (due), status (open|completed|cancelled), priority (0 to 9), completed (date), description, starred (yes|no) · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore star unstar add_to tag untag unlink
+note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar tag untag unlink
+document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar tag untag unlink
+photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag unlink archive unarchive
+album: name · links: photos · verbs: create delete restore
+locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag unlink archive unarchive
+notebook: name · links: notes · verbs: create delete restore
+folder: name · links: documents · verbs: create delete restore
+list: name, area · links: tasks · verbs: create delete restore
+transaction: name, date (posted), amount (), account, category, transfer, status (pending|posted) · verbs: create edit delete restore unlink
+daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value · verbs: create delete
+workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m) · verbs: create edit delete restore unlink
+account: name, type (checking|savings|credit_card|cash|loan|investment|asset), currency, opening (), opening_on, on_budget (yes|no) · verbs: create edit delete restore log archive unarchive
+category: name, key, group · verbs: create archive unarchive
+budget: name, date (month), amount (), carry (yes|no) · verbs: edit
+rule: name, date (created), category, position · verbs: create edit delete<|im_end|>

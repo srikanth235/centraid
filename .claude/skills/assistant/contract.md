@@ -4,8 +4,8 @@ The contract is what the model reads and writes: eight tools (`find`, `compute`,
 
 ## What is generated, never hand-edited
 
-- Kinds, verbs, fields, links and actions come from the app manifests (`crates/apps/<app>/manifest.json`). [`crates/assist/build.rs`](../../../crates/assist/build.rs) turns them into `Kind`, `Verb`, `ACTIONS`, `KINDS` and `VERBS` at build time. `meta.rs` holds no kind or verb row, and a test fails if one appears.
-- A verb is live when a direct action of a writable kind backs it, or an `unbacked` row in [`contracts/assist/verbs.json`](../../../contracts/assist/verbs.json) does. The build fails when an action now backs an `unbacked` row, so that list only shrinks.
+- Kinds, fields and links are the model's kinds in [`crates/domain/src/chat.rs`](../../../crates/domain/src/chat.rs). Actions are `ACTIONS` in `crates/domain` ([app-plane](../change/app-plane.md) §4): an action that is `Direct` says one verb of `verbs.json` on its chat kinds, with the names its input fields are said under. [`crates/assist/build.rs`](../../../crates/assist/build.rs) turns both into `Kind`, `Verb`, `ACTIONS`, `KINDS` and `VERBS` at build time. `meta.rs` holds no kind or verb row. A screen, a read or a room is never an input, so a screen change cannot move `tools_hash`.
+- A verb is live when a direct action of a writable kind backs it, or the runtime owns it (`undo`). The build fails on a verb [`verbs.json`](../../../contracts/assist/verbs.json) does not declare, and on two actions that say the same `(verb, kind, qualifier)`.
 - [`contracts/assist/export/`](../../../contracts/assist/export/README.md) is written by `nativetools export`. Regenerate it, do not edit it:
 
 ```sh
@@ -15,7 +15,7 @@ cargo run -p centraid-nativetools --bin nativetools -- export contracts/assist/e
 ## What moves with a change
 
 1. **The export.** `crates/nativetools/tests/export_fixture.rs` renders the export to a scratch directory and diffs every file. It prints the regenerate command and the first differing line.
-2. **The census (target).** One row per action, checked against the manifests by a test that returns with the new catalogue.
+2. **The census.** [`catalog-census.csv`](../../../contracts/assist/catalog-census.csv) has one row per action and how chat reaches it (`direct:<verb>` or `handoff:<reason>`). `crates/domain/tests/census.rs` holds it to `ACTIONS`; regenerate it with `cargo run -p centraid-domain --bin export-census > contracts/assist/catalog-census.csv`.
 3. **The pin.** `tools_hash` and `prompt_hash` in the model record are BLAKE3 hashes over the pinned mode's tools block, its kind card in `USD`, the identity markers and the escape rule. Change any of that text and `model-record` fails until the record is rewritten with `cargo xtask model-pin`. An adapter made against the old hashes is never used, and the stock model answers. So a contract change that reaches the hashed text means a new adapter. See [model.md](./model.md) and [training.md](./training.md).
 4. **Tools modes.** The phone and the eval run the mode named in the record. The `s2` signatures are a frozen constant. The `sig` tools derive from `tools()`. `Flags::default()` is `sig`, and `crates/datagen` renders with it. `model-pin` takes the mode the model learned as `--tools-mode`. [`crates/assist/data.json`](../../../crates/assist/data.json) pins the data version with the mode and hashes it was rendered for, and the `data-pin` rule of `cargo xtask rules` fails when the runtime's hashes for that mode differ from the pin. The pin and the model record are separate: a new data version does not move the record, and a new adapter does not move the pin.
 5. **The grammar.** `native/grammar.rs` builds the think grammar from the catalog and the prompt, per mode. `crates/assist/tests/constrained_output.rs` holds it. `native/legacy.rs` renames the tool names the shipped model wrote, so keep it while that model is pinned.

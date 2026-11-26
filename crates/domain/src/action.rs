@@ -245,6 +245,8 @@ pub enum Handoff {
     Destructive,
     /// The OS owner check comes first: an export.
     OwnerCheck,
+    /// The model has no word for what it acts on yet: a card opens the screen.
+    Open,
 }
 
 /// What the model says for an action: one verb of `contracts/assist/verbs.json`, the kinds it
@@ -253,8 +255,15 @@ pub enum Handoff {
 #[derive(Debug, Clone, Copy)]
 pub struct Say {
     pub verb: &'static str,
+    /// Chat kinds ([`crate::chat::KINDS`]), by id.
     pub kinds: &'static [&'static str],
     pub qualifier: Option<&'static str>,
+    /// `(input field, the names the model says it under)`, the first name canonical.
+    pub names: &'static [(&'static str, &'static [&'static str])],
+    /// `(input field, JSON)` for a field this action can only take one value of.
+    pub fixed: &'static [(&'static str, &'static str)],
+    /// `(input field, JSON)` for a field the model leaves out and the action fills.
+    pub filled: &'static [(&'static str, &'static str)],
 }
 
 /// How chat reaches an action. Every action has one: no action is screen-only.
@@ -264,6 +273,8 @@ pub enum Chat {
     Direct(Say),
     /// A card opens the screen with the inputs filled.
     Handoff(Handoff),
+    /// A card, and the model has a word for it: it says the verb, and the card is what answers.
+    Card(Handoff, Say),
 }
 
 /// One action.
@@ -290,6 +301,24 @@ pub struct ActionDecl {
 }
 
 impl ActionDecl {
+    /// What the model says to ask for this action, when it has a word for it.
+    #[must_use]
+    pub const fn says(&self) -> Option<&Say> {
+        match &self.chat {
+            Chat::Direct(say) | Chat::Card(_, say) => Some(say),
+            Chat::Handoff(_) => None,
+        }
+    }
+
+    /// Why a card finishes it, when one does.
+    #[must_use]
+    pub const fn handoff(&self) -> Option<Handoff> {
+        match self.chat {
+            Chat::Handoff(reason) | Chat::Card(reason, _) => Some(reason),
+            Chat::Direct(_) => None,
+        }
+    }
+
     /// The name Undo and the census use: `kind.verb`, or `kind.verb/qualifier`.
     #[must_use]
     pub fn name(&self) -> String {
@@ -385,6 +414,9 @@ impl ActionDecl {
             verb,
             kinds,
             qualifier: None,
+            names: &[],
+            fixed: &[],
+            filled: &[],
         });
         self
     }
@@ -401,7 +433,62 @@ impl ActionDecl {
             verb,
             kinds,
             qualifier: Some(qualifier),
+            names: &[],
+            fixed: &[],
+            filled: &[],
         });
+        self
+    }
+
+    /// The names the model says the input fields under.
+    #[must_use]
+    pub const fn names(
+        mut self,
+        names: &'static [(&'static str, &'static [&'static str])],
+    ) -> Self {
+        if let Chat::Direct(say) = &mut self.chat {
+            say.names = names;
+        }
+        self
+    }
+
+    /// Input fields this action can only take one value of.
+    #[must_use]
+    pub const fn fixed(mut self, fixed: &'static [(&'static str, &'static str)]) -> Self {
+        if let Chat::Direct(say) = &mut self.chat {
+            say.fixed = fixed;
+        }
+        self
+    }
+
+    /// Input fields the model leaves out and the action fills.
+    #[must_use]
+    pub const fn filled(mut self, filled: &'static [(&'static str, &'static str)]) -> Self {
+        if let Chat::Direct(say) = &mut self.chat {
+            say.filled = filled;
+        }
+        self
+    }
+
+    /// A card finishes it, and the model says `verb` on `kinds` to ask for it.
+    #[must_use]
+    pub const fn card(
+        mut self,
+        reason: Handoff,
+        verb: &'static str,
+        kinds: &'static [&'static str],
+    ) -> Self {
+        self.chat = Chat::Card(
+            reason,
+            Say {
+                verb,
+                kinds,
+                qualifier: None,
+                names: &[],
+                fixed: &[],
+                filled: &[],
+            },
+        );
         self
     }
 

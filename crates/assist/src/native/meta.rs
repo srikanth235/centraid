@@ -304,11 +304,7 @@ impl InverseSpec {
     /// What a door runs.
     #[must_use]
     pub const fn call(&self) -> crate::native::door::Call {
-        crate::native::door::Call {
-            app: self.app,
-            action: self.action,
-            command: self.command,
-        }
+        crate::native::door::Call::bare(self.command)
     }
 }
 
@@ -369,11 +365,7 @@ impl ActionSpec {
     /// What a door runs.
     #[must_use]
     pub const fn call(&self) -> crate::native::door::Call {
-        crate::native::door::Call {
-            app: self.app,
-            action: self.action,
-            command: self.command,
-        }
+        crate::native::door::Call::bare(self.command)
     }
 }
 

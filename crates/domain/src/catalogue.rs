@@ -21,7 +21,8 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("entity.trash")
-    .say("create", &["account"]),
+    .say("create", &["account"])
+    .names(&[("title", &["name"]), ("type", &["type"])]),
     act(
         "account",
         "edit",
@@ -36,7 +37,8 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("type", Ty::Text),
         ],
     )
-    .say("edit", &["account"]),
+    .say("edit", &["account"])
+    .names(&[("title", &["name"])]),
     act(
         "account",
         "edit",
@@ -78,7 +80,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("budget.set")
-    .say_q("edit", &["category"], "budget"),
+    .say("edit", &["budget"]),
     act(
         "budget",
         "set_carry",
@@ -90,7 +92,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("budget.set_carry")
-    .say_q("edit", &["category"], "carry"),
+    .say_q("edit", &["budget"], "carry"),
     act(
         "category",
         "add",
@@ -102,7 +104,8 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("entity.purge")
-    .say("create", &["category"]),
+    .say("create", &["category"])
+    .names(&[("title", &["name"])]),
     act(
         "checkpoint",
         "record",
@@ -115,7 +118,7 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .here(&[Scope::Account])
     .pair("checkpoint.record")
-    .say_q("log", &["account"], "checkpoint"),
+    .say("log", &["account"]),
     act(
         "rule",
         "add",
@@ -134,7 +137,7 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .here(&[Scope::Account])
     .pair("rule.delete")
-    .say_q("create", &["category"], "rule"),
+    .say("create", &["rule"]),
     act(
         "rule",
         "edit",
@@ -152,17 +155,17 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("rule.edit")
-    .say_q("edit", &["category"], "rule"),
+    .say("edit", &["rule"]),
     act("rule", "delete", "rule.delete", &[req("id", Ty::Text)])
         .pair("rule.add")
-        .say_q("delete", &["category"], "rule"),
+        .say("delete", &["rule"]),
     act(
         "rule",
         "apply",
         "rule.apply",
         &[opt("id", Ty::Text), opt("overwrite", Ty::Bool)],
     )
-    .say_q("apply", &["category"], "rule"),
+    .hand(Handoff::Open),
     act(
         "txn",
         "add",
@@ -186,7 +189,7 @@ pub const ACTIONS: &[ActionDecl] = &[
     .here(&[Scope::Account, Scope::Day, Scope::Person])
     .with(&["edge.add"])
     .pair("entity.trash")
-    .say("create", &["txn"]),
+    .say("create", &["transaction"]),
     act(
         "txn",
         "add",
@@ -228,7 +231,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("status", Ty::OneOf(&["pending", "posted"])),
         ],
     )
-    .say("edit", &["txn"]),
+    .say("edit", &["transaction"]),
     act(
         "txn",
         "categorize",
@@ -240,7 +243,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .set()
-    .say("categorize", &["txn"]),
+    .hand(Handoff::Open),
     act(
         "txn",
         "split",
@@ -251,7 +254,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             req("parts", Ty::List),
         ],
     )
-    .say_q("edit", &["txn"], "split"),
+    .say_q("edit", &["transaction"], "split"),
     act(
         "txn",
         "link_transfer",
@@ -259,7 +262,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         &[req("id", Ty::Text), req("other_id", Ty::Text)],
     )
     .pair("txn.unlink_transfer")
-    .say_q("link", &["txn"], "transfer"),
+    .hand(Handoff::Open),
     act(
         "txn",
         "unlink_transfer",
@@ -267,21 +270,21 @@ pub const ACTIONS: &[ActionDecl] = &[
         &[req("id", Ty::Text)],
     )
     .pair("txn.link_transfer")
-    .say_q("unlink", &["txn"], "transfer"),
+    .say_q("unlink", &["transaction"], "transfer"),
     act(
         "txn",
         "confirm_match",
         "txn.confirm_match",
         &[req("hand_id", Ty::Text), req("statement_id", Ty::Text)],
     )
-    .say_q("apply", &["txn"], "match"),
+    .hand(Handoff::Open),
     act(
         "txn",
         "dismiss_match",
         "txn.dismiss_match",
         &[req("hand_id", Ty::Text), req("statement_id", Ty::Text)],
     )
-    .say_q("apply", &["txn"], "dismiss"),
+    .hand(Handoff::Open),
     act(
         "txn",
         "export_csv",
@@ -317,17 +320,8 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .here(&[Scope::Home])
     .pair("entity.trash")
-    .say(
-        "create",
-        &[
-            "notebook",
-            "folder",
-            "album",
-            "list",
-            "task_list",
-            "calendar",
-        ],
-    ),
+    .say("create", &["folder", "notebook", "album", "list"])
+    .names(&[("parent", &["area", "parent"]), ("title", &["name"])]),
     act(
         "container",
         "move",
@@ -338,18 +332,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("position", Ty::Num),
         ],
     )
-    .say_q(
-        "edit",
-        &[
-            "notebook",
-            "folder",
-            "album",
-            "list",
-            "task_list",
-            "calendar",
-        ],
-        "position",
-    ),
+    .say_q("edit", &["folder", "notebook", "album", "list"], "position"),
     act(
         "container",
         "style",
@@ -360,18 +343,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             req("id", Ty::Text),
         ],
     )
-    .say_q(
-        "edit",
-        &[
-            "notebook",
-            "folder",
-            "album",
-            "list",
-            "task_list",
-            "calendar",
-        ],
-        "style",
-    ),
+    .say_q("edit", &["folder", "notebook", "album", "list"], "color"),
     act(
         "album",
         "set_cover",
@@ -390,26 +362,20 @@ pub const ACTIONS: &[ActionDecl] = &[
     .say(
         "delete",
         &[
-            "person",
-            "place",
             "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
             "document",
-            "photo",
-            "account",
-            "txn",
+            "workout",
             "locker_item",
-            "reading",
-            "thread",
-            "notebook",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person",
             "folder",
+            "notebook",
             "album",
             "list",
-            "task_list",
-            "calendar",
+            "account",
         ],
     ),
     act(
@@ -423,26 +389,20 @@ pub const ACTIONS: &[ActionDecl] = &[
     .say(
         "restore",
         &[
-            "person",
-            "place",
             "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
             "document",
-            "photo",
-            "account",
-            "txn",
+            "workout",
             "locker_item",
-            "reading",
-            "thread",
-            "notebook",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person",
             "folder",
+            "notebook",
             "album",
             "list",
-            "task_list",
-            "calendar",
+            "account",
         ],
     ),
     act(
@@ -458,22 +418,7 @@ pub const ACTIONS: &[ActionDecl] = &[
     .set()
     .say_q(
         "edit",
-        &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
-            "notebook",
-            "folder",
-        ],
+        &["note", "document", "task", "person", "folder", "notebook"],
         "move",
     ),
     act(
@@ -489,28 +434,24 @@ pub const ACTIONS: &[ActionDecl] = &[
     .say_q(
         "edit",
         &[
-            "person",
-            "place",
             "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
             "document",
-            "photo",
-            "account",
-            "txn",
+            "workout",
             "locker_item",
-            "notebook",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person",
             "folder",
+            "notebook",
             "album",
             "list",
-            "task_list",
-            "calendar",
-            "thread",
+            "account",
         ],
         "title",
-    ),
+    )
+    .names(&[("title", &["name"])]),
     act("entity", "purge", "entity.purge", &[req("id", Ty::Text)])
         .irreversible()
         .outlined()
@@ -545,23 +486,9 @@ pub const ACTIONS: &[ActionDecl] = &[
     .pair("flag.clear/starred")
     .say(
         "star",
-        &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
-            "reading",
-            "thread",
-        ],
-    ),
+        &["document", "locker_item", "note", "person", "photo", "task"],
+    )
+    .fixed(&[("flag", "\"starred\"")]),
     act(
         "flag",
         "set",
@@ -575,7 +502,8 @@ pub const ACTIONS: &[ActionDecl] = &[
     .q("pinned")
     .set()
     .pair("flag.clear/pinned")
-    .say_q("edit", &["note"], "pinned"),
+    .say_q("edit", &["note"], "pinned")
+    .fixed(&[("flag", "\"pinned\"")]),
     act(
         "flag",
         "set",
@@ -589,7 +517,8 @@ pub const ACTIONS: &[ActionDecl] = &[
     .q("archived")
     .set()
     .pair("flag.clear/archived")
-    .say("archive", &["photo", "account", "locker_item"]),
+    .say("archive", &["locker_item", "account", "category", "photo"])
+    .fixed(&[("flag", "\"archived\"")]),
     act(
         "flag",
         "clear",
@@ -605,23 +534,9 @@ pub const ACTIONS: &[ActionDecl] = &[
     .pair("flag.set/starred")
     .say(
         "unstar",
-        &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
-            "reading",
-            "thread",
-        ],
-    ),
+        &["document", "locker_item", "note", "person", "photo", "task"],
+    )
+    .fixed(&[("flag", "\"starred\"")]),
     act(
         "flag",
         "clear",
@@ -635,7 +550,8 @@ pub const ACTIONS: &[ActionDecl] = &[
     .q("pinned")
     .set()
     .pair("flag.set/pinned")
-    .say_q("edit", &["note"], "unpinned"),
+    .say_q("edit", &["note"], "unpinned")
+    .fixed(&[("flag", "\"pinned\"")]),
     act(
         "flag",
         "clear",
@@ -649,7 +565,11 @@ pub const ACTIONS: &[ActionDecl] = &[
     .q("archived")
     .set()
     .pair("flag.set/archived")
-    .say("unarchive", &["photo", "account", "locker_item"]),
+    .say(
+        "unarchive",
+        &["locker_item", "account", "category", "photo"],
+    )
+    .fixed(&[("flag", "\"archived\"")]),
     act(
         "tag",
         "add",
@@ -675,23 +595,8 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .set()
     .pair("tag.remove")
-    .say(
-        "tag",
-        &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
-        ],
-    ),
+    .say("tag", &["document", "locker_item", "note", "photo", "task"])
+    .names(&[("label", &["label"])]),
     act(
         "tag",
         "remove",
@@ -706,21 +611,9 @@ pub const ACTIONS: &[ActionDecl] = &[
     .pair("tag.add")
     .say(
         "untag",
-        &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
-        ],
-    ),
+        &["document", "locker_item", "note", "photo", "task"],
+    )
+    .names(&[("label", &["label"])]),
     act(
         "tag",
         "color",
@@ -742,7 +635,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             req("label", Ty::Text),
         ],
     )
-    .say_q("edit", &["tag"], "color"),
+    .say_q("edit", &["document"], "label_color"),
     act(
         "edge",
         "add",
@@ -762,23 +655,30 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("edge.remove")
-    .say(
-        "attach",
+    .hand(Handoff::Open),
+    act(
+        "edge",
+        "add",
+        "edge.add",
         &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
+            opt("anchor", Ty::Object),
+            req("from", Ty::Text),
+            opt("label", Ty::Text),
+            opt("position", Ty::Num),
+            req(
+                "rel",
+                Ty::OneOf(&[
+                    "contains", "tagged", "about", "attached", "with", "related", "depicts",
+                ]),
+            ),
+            req("to", Ty::Text),
         ],
-    ),
+    )
+    .q("contains")
+    .pair("edge.remove/contains")
+    .say("add_to", &["photo"])
+    .names(&[("from", &["to"])])
+    .fixed(&[("rel", "\"contains\"")]),
     act(
         "edge",
         "remove",
@@ -796,23 +696,28 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("edge.add")
-    .say(
-        "detach",
+    .hand(Handoff::Open),
+    act(
+        "edge",
+        "remove",
+        "edge.remove",
         &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
+            req("from", Ty::Text),
+            opt("label", Ty::Text),
+            req(
+                "rel",
+                Ty::OneOf(&[
+                    "contains", "tagged", "about", "attached", "with", "related", "depicts",
+                ]),
+            ),
+            req("to", Ty::Text),
         ],
-    ),
+    )
+    .q("contains")
+    .pair("edge.add/contains")
+    .say("remove_from", &["photo"])
+    .names(&[("from", &["from"])])
+    .fixed(&[("rel", "\"contains\"")]),
     act(
         "edge",
         "move",
@@ -824,24 +729,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("edge.move")
-    .say_q(
-        "edit",
-        &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
-        ],
-        "position",
-    ),
+    .hand(Handoff::Open),
     act(
         "link",
         "add",
@@ -849,23 +737,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         &[req("a", Ty::Text), req("b", Ty::Text)],
     )
     .pair("link.remove")
-    .say(
-        "link",
-        &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
-        ],
-    ),
+    .hand(Handoff::Open),
     act(
         "link",
         "remove",
@@ -876,18 +748,15 @@ pub const ACTIONS: &[ActionDecl] = &[
     .say(
         "unlink",
         &[
-            "person",
-            "place",
             "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
             "document",
-            "photo",
-            "account",
-            "txn",
+            "workout",
             "locker_item",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person",
         ],
     ),
     act(
@@ -905,49 +774,17 @@ pub const ACTIONS: &[ActionDecl] = &[
         "history.keep_version",
         &[req("fields", Ty::Object), req("id", Ty::Text)],
     )
-    .say_q(
-        "edit",
-        &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "note",
-            "document",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
-        ],
-        "version",
-    ),
+    .hand(Handoff::Open),
     act(
         "history",
         "restore_version",
         "history.restore_version",
         &[req("id", Ty::Text), req("seq", Ty::Int)],
     )
-    .say_q(
-        "restore",
-        &[
-            "person",
-            "place",
-            "event",
-            "task",
-            "workout",
-            "touch",
-            "photo",
-            "account",
-            "txn",
-            "locker_item",
-        ],
-        "version",
-    ),
+    .hand(Handoff::Open),
     act("vault", "rename", "vault.rename", &[req("name", Ty::Text)])
         .pair("vault.rename")
-        .say_q("edit", &["person"], "vault"),
+        .hand(Handoff::Open),
     act("vault", "export_all", "vault.export_all", &[])
         .irreversible()
         .owner()
@@ -989,7 +826,13 @@ pub const ACTIONS: &[ActionDecl] = &[
     .here(&[Scope::Home, Scope::Day, Scope::Person])
     .with(&["edge.add"])
     .pair("entity.trash")
-    .say("create", &["event"]),
+    .say("create", &["event"])
+    .names(&[
+        ("description", &["description"]),
+        ("ends", &["duration"]),
+        ("starts", &["date", "start"]),
+        ("title", &["name"]),
+    ]),
     act(
         "event",
         "propose",
@@ -1076,7 +919,12 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("zone", Ty::Text),
         ],
     )
-    .say("edit", &["event"]),
+    .say("edit", &["event"])
+    .names(&[
+        ("description", &["description"]),
+        ("ends", &["duration"]),
+        ("title", &["name"]),
+    ]),
     act(
         "event",
         "edit_occurrence",
@@ -1098,7 +946,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("event.edit_occurrence")
-    .say_q("reschedule", &["event"], "occurrence"),
+    .say("reschedule", &["event"]),
     act(
         "event",
         "split",
@@ -1140,7 +988,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             req("status", Ty::OneOf(&["accepted", "declined", "tentative"])),
         ],
     )
-    .say("respond", &["event"]),
+    .hand(Handoff::Open),
     act(
         "event",
         "export_ics",
@@ -1219,7 +1067,14 @@ pub const ACTIONS: &[ActionDecl] = &[
     .here(&[Scope::Home, Scope::Day, Scope::Person])
     .with(&["edge.add"])
     .pair("entity.trash")
-    .say("create", &["task"]),
+    .say("create", &["task"])
+    .names(&[
+        ("description", &["description"]),
+        ("due", &["date", "due"]),
+        ("parent_id", &["list", "parent"]),
+        ("priority", &["priority"]),
+        ("title", &["name"]),
+    ]),
     act(
         "task",
         "edit",
@@ -1238,7 +1093,39 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("zone", Ty::Text),
         ],
     )
-    .say("edit", &["task"]),
+    .say("edit", &["task"])
+    .names(&[
+        ("description", &["description"]),
+        ("due", &["date"]),
+        ("priority", &["priority"]),
+        ("title", &["name"]),
+    ]),
+    act(
+        "task",
+        "edit",
+        "task.edit",
+        &[
+            opt("description", Ty::Text),
+            opt("due", Ty::Text),
+            opt("expected_rev", Ty::Int),
+            req("id", Ty::Text),
+            opt("priority", Ty::Int),
+            opt("reminders", Ty::List),
+            opt("rule", Ty::Text),
+            opt("scheduled_on", Ty::Text),
+            opt("title", Ty::Text),
+            opt("url", Ty::Text),
+            opt("zone", Ty::Text),
+        ],
+    )
+    .q("reschedule")
+    .say("reschedule", &["task"])
+    .names(&[
+        ("description", &["description"]),
+        ("due", &["date"]),
+        ("priority", &["priority"]),
+        ("title", &["name"]),
+    ]),
     act("task", "complete", "task.complete", &[req("id", Ty::Text)])
         .pair("task.reopen")
         .say("complete", &["task"]),
@@ -1258,7 +1145,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("zone", Ty::Text),
         ],
     )
-    .say_q("edit", &["task"], "organize"),
+    .say("add_to", &["task"]),
     act(
         "task",
         "export_ics",
@@ -1284,7 +1171,12 @@ pub const ACTIONS: &[ActionDecl] = &[
     .here(&[Scope::Home, Scope::Member, Scope::Person, Scope::Day])
     .with(&["edge.add"])
     .pair("entity.trash")
-    .say("create", &["note"]),
+    .say("create", &["note"])
+    .names(&[
+        ("body", &["body"]),
+        ("notebook_id", &["notebook"]),
+        ("title", &["name"]),
+    ]),
     act(
         "note",
         "edit",
@@ -1298,7 +1190,8 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("title", Ty::Text),
         ],
     )
-    .say("edit", &["note"]),
+    .say("edit", &["note"])
+    .names(&[("body", &["body"]), ("title", &["name"])]),
     act(
         "note",
         "asset_add",
@@ -1311,7 +1204,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("note.asset_remove")
-    .say_q("attach", &["note"], "asset"),
+    .hand(Handoff::Open),
     act(
         "note",
         "asset_remove",
@@ -1319,14 +1212,14 @@ pub const ACTIONS: &[ActionDecl] = &[
         &[req("asset_id", Ty::Text), req("id", Ty::Text)],
     )
     .pair("note.asset_add")
-    .say_q("detach", &["note"], "asset"),
+    .hand(Handoff::Open),
     act(
         "note",
         "asset_reorder",
         "note.asset_reorder",
         &[req("id", Ty::Text), req("order", Ty::List)],
     )
-    .say_q("edit", &["note"], "assets"),
+    .hand(Handoff::Open),
     act(
         "note",
         "import",
@@ -1402,7 +1295,12 @@ pub const ACTIONS: &[ActionDecl] = &[
     .here(&[Scope::Home, Scope::Member, Scope::Person])
     .with(&["edge.add"])
     .pair("entity.trash")
-    .say("create", &["document"]),
+    .say("create", &["document"])
+    .names(&[
+        ("body_text", &["text"]),
+        ("folder_id", &["folder"]),
+        ("title", &["name"]),
+    ]),
     act(
         "document",
         "edit",
@@ -1530,7 +1428,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("entity.trash")
-    .say("create", &["place"]),
+    .hand(Handoff::Open),
     act(
         "place",
         "edit",
@@ -1544,14 +1442,14 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("zone", Ty::Text),
         ],
     )
-    .say("edit", &["place"]),
+    .hand(Handoff::Open),
     act(
         "place",
         "locate",
         "place.locate",
         &[req("id", Ty::Text), opt("locality", Ty::Text)],
     )
-    .say_q("edit", &["place"], "locate"),
+    .hand(Handoff::Open),
     act(
         "place",
         "merge",
@@ -1582,7 +1480,13 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .here(&[Scope::Home])
     .pair("entity.trash")
-    .say("create", &["person"]),
+    .say("create", &["person"])
+    .names(&[
+        ("cadence_days", &["cadence"]),
+        ("nickname", &["nickname"]),
+        ("role", &["role"]),
+        ("title", &["name"]),
+    ]),
     act(
         "person",
         "edit",
@@ -1603,7 +1507,43 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("title", Ty::Text),
         ],
     )
-    .say("edit", &["person"]),
+    .say("edit", &["person"])
+    .names(&[
+        ("cadence_days", &["cadence"]),
+        ("met", &["met"]),
+        ("nickname", &["nickname"]),
+        ("role", &["role"]),
+        ("title", &["name"]),
+    ]),
+    act(
+        "person",
+        "edit",
+        "person.edit",
+        &[
+            opt("cadence_days", Ty::Int),
+            opt("expected_rev", Ty::Int),
+            opt("family", Ty::Text),
+            opt("form", Ty::Text),
+            opt("given", Ty::Text),
+            req("id", Ty::Text),
+            opt("met", Ty::Text),
+            opt("nickname", Ty::Text),
+            opt("org", Ty::Text),
+            opt("phonetic", Ty::Text),
+            opt("role", Ty::Text),
+            opt("sort_name", Ty::Text),
+            opt("title", Ty::Text),
+        ],
+    )
+    .q("cadence")
+    .say_q("edit", &["person"], "cadence")
+    .names(&[
+        ("cadence_days", &["cadence"]),
+        ("met", &["met"]),
+        ("nickname", &["nickname"]),
+        ("role", &["role"]),
+        ("title", &["name"]),
+    ]),
     act(
         "person",
         "add_date",
@@ -1616,7 +1556,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("reminders", Ty::List),
         ],
     )
-    .say_q("create", &["person"], "date"),
+    .hand(Handoff::Open),
     act(
         "person",
         "edit_date",
@@ -1628,14 +1568,14 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("label", Ty::Text),
         ],
     )
-    .say_q("edit", &["person"], "date"),
+    .hand(Handoff::Open),
     act(
         "person",
         "remove_date",
         "person.remove_date",
         &[req("date_id", Ty::Text)],
     )
-    .say_q("delete", &["person"], "date"),
+    .hand(Handoff::Open),
     act(
         "person",
         "add_note",
@@ -1658,7 +1598,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("edge.remove")
-    .say_q("link", &["person"], "relationship"),
+    .hand(Handoff::Open),
     act(
         "person",
         "save_contact_point",
@@ -1672,42 +1612,43 @@ pub const ACTIONS: &[ActionDecl] = &[
             req("value", Ty::Text),
         ],
     )
-    .say_q("edit", &["person"], "contact_point"),
+    .hand(Handoff::Open),
     act(
         "person",
         "remove_contact_point",
         "person.remove_contact_point",
         &[req("point_id", Ty::Text)],
     )
-    .say_q("delete", &["person"], "contact_point"),
+    .hand(Handoff::Open),
     act(
         "person",
         "prefer_contact_point",
         "person.prefer_contact_point",
         &[req("point_id", Ty::Text), opt("preferred", Ty::Bool)],
     )
-    .say_q("edit", &["person"], "preferred"),
+    .hand(Handoff::Open),
     act(
         "person",
         "reorder_contact_points",
         "person.reorder_contact_points",
         &[req("id", Ty::Text), req("order", Ty::List)],
     )
-    .say_q("edit", &["person"], "contact_points"),
+    .hand(Handoff::Open),
     act(
         "person",
         "set_avatar",
         "person.set_avatar",
         &[opt("blob", Ty::Text), req("id", Ty::Text)],
     )
-    .say_q("edit", &["person"], "avatar"),
+    .hand(Handoff::Open),
     act(
         "person",
         "move",
         "person.move",
         &[req("id", Ty::Text), opt("list_id", Ty::Text)],
     )
-    .say_q("edit", &["person"], "list"),
+    .say("add_to", &["person"])
+    .names(&[("list_id", &["to", "from"])]),
     act(
         "person",
         "merge",
@@ -1790,7 +1731,7 @@ pub const ACTIONS: &[ActionDecl] = &[
     .here(&[Scope::Person, Scope::Day])
     .with(&["edge.add"])
     .pair("entity.trash")
-    .say("log", &["touch"]),
+    .say("log", &["person"]),
     act(
         "touch",
         "edit",
@@ -1806,7 +1747,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("starts", Ty::Text),
         ],
     )
-    .say("edit", &["touch"]),
+    .hand(Handoff::Open),
     act(
         "workout",
         "log",
@@ -1831,7 +1772,18 @@ pub const ACTIONS: &[ActionDecl] = &[
     .here(&[Scope::Person, Scope::Day])
     .with(&["edge.add"])
     .pair("entity.trash")
-    .say("log", &["workout"]),
+    .say("create", &["workout"])
+    .names(&[
+        ("climb_m", &["climb"]),
+        ("distance_m", &["distance"]),
+        ("ends", &["end"]),
+        ("energy_kcal", &["energy"]),
+        ("heart_bpm", &["heart_rate"]),
+        ("moving_s", &["moving"]),
+        ("starts", &["date", "start"]),
+        ("title", &["name"]),
+        ("type", &["type"]),
+    ]),
     act(
         "workout",
         "edit",
@@ -1854,7 +1806,18 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("with", Ty::List),
         ],
     )
-    .say("edit", &["workout"]),
+    .say("edit", &["workout"])
+    .names(&[
+        ("climb_m", &["climb"]),
+        ("distance_m", &["distance"]),
+        ("ends", &["end"]),
+        ("energy_kcal", &["energy"]),
+        ("heart_bpm", &["heart_rate"]),
+        ("moving_s", &["moving"]),
+        ("starts", &["date", "start"]),
+        ("title", &["name"]),
+        ("type", &["type"]),
+    ]),
     act(
         "reading",
         "add",
@@ -1871,7 +1834,7 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .here(&[Scope::Day])
     .pair("entity.trash")
-    .say("log", &["reading"]),
+    .hand(Handoff::Open),
     act(
         "reading",
         "edit",
@@ -1885,7 +1848,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("value2", Ty::Num),
         ],
     )
-    .say("edit", &["reading"]),
+    .hand(Handoff::Open),
     act(
         "measurement",
         "log",
@@ -1900,7 +1863,12 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .here(&[Scope::Day])
     .pair("measurement.clear")
-    .say_q("log", &["reading"], "day"),
+    .say("create", &["daily_figure"])
+    .names(&[
+        ("day", &["date", "day"]),
+        ("metric", &["name", "metric"]),
+        ("value", &["value"]),
+    ]),
     act(
         "measurement",
         "clear",
@@ -1913,7 +1881,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("measurement.log")
-    .say_q("delete", &["reading"], "day"),
+    .say("delete", &["daily_figure"]),
     act(
         "health",
         "export_csv",
@@ -1966,7 +1934,8 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("entity.trash")
-    .say("create", &["locker_item"]),
+    .say("create", &["locker_item"])
+    .names(&[("title", &["name"]), ("type", &["type"])]),
     act(
         "locker",
         "edit_item",
@@ -2001,7 +1970,8 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .owner()
-    .say("edit", &["locker_item"]),
+    .say("edit", &["locker_item"])
+    .names(&[("title", &["name"])]),
     act(
         "locker",
         "duplicate_item",
@@ -2013,7 +1983,7 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .pair("entity.trash")
-    .say("duplicate", &["locker_item"]),
+    .hand(Handoff::Open),
     act(
         "locker",
         "set_field",
@@ -2061,14 +2031,14 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .owner()
-    .say_q("edit", &["locker_item"], "passkey"),
+    .hand(Handoff::Open),
     act(
         "locker",
         "remove_passkey",
         "locker.remove_passkey",
         &[req("item_id", Ty::Text), req("passkey_id", Ty::Text)],
     )
-    .say_q("delete", &["locker_item"], "passkey"),
+    .hand(Handoff::Open),
     act(
         "locker",
         "totp_code",
@@ -2077,7 +2047,7 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .irreversible()
     .owner()
-    .hand(Handoff::Reveal),
+    .card(Handoff::Reveal, "reveal", &["locker_item"]),
     act(
         "locker",
         "export",
@@ -2099,13 +2069,7 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .irreversible()
     .outlined()
-    .say_q(
-        "detach",
-        &[
-            "person", "event", "task", "workout", "document", "photo", "txn",
-        ],
-        "follow",
-    ),
+    .hand(Handoff::Open),
     act(
         "follow",
         "take_stated",
@@ -2117,13 +2081,7 @@ pub const ACTIONS: &[ActionDecl] = &[
             opt("origin", Ty::Text),
         ],
     )
-    .say_q(
-        "edit",
-        &[
-            "person", "event", "task", "workout", "document", "photo", "txn",
-        ],
-        "take_stated",
-    ),
+    .hand(Handoff::Open),
     act("thread", "clear", "thread.clear", &[])
         .irreversible()
         .outlined()
