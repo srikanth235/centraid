@@ -66,6 +66,7 @@ fn open(handle: &Handle, key: &str, tab: &str, root: bool) -> wire::RoomShown {
             key: key.to_owned(),
             tab: tab.to_owned(),
             root,
+            ..Default::default()
         }),
     )
     .remove(0)

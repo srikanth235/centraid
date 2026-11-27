@@ -506,3 +506,6 @@ The old performers are the intended homes: iOS `ScreenPlatform.swift`, `LockerCl
 | `permission_status` (`ShellGrant`) | `UNUserNotificationCenter`, `PHPhotoLibrary`, `AVCaptureDevice`, the store's own status | `NotificationManagerCompat`, `checkSelfPermission` | Settings, the More rows (target) |
 
 A refused grant answers `ShellFailed{grant}` or `ShellGrant{grant}` with one of `REFUSED`, `RESTRICTED`, `LIMITED`, `UNAVAILABLE`; a dismissed sheet is `ShellFailed{cancelled}`. Core words every sentence the member reads. Built here: the channel, `Outcome::effect`, `Input::Effect`, and the callers for following (`store_read`, `phone_watch`, `open_settings`, `release_grant`); the rest are defined and wait for their lanes.
+
+**The door's three calls (lane W's seam).** `Door::enrol_store(store)` with `store` in `photos`, `calendar`, `reminders`, `people`, `health` sends `FollowRequest{ENROL}` for `camera_roll`, `calendar`, `reminders`, `contacts`, `health` (the tap that asks the OS once) and says "Waiting for your phone." `Door::open_settings(store)` adds an `open_settings` effect to the response. `Door::permission_refused(store)` is the follower's `STATUS.blocked == REFUSED`. The shell tells the core its platform with `RoomOpen.platform` (`ios` or `android`); `Door::reminders_source()` is false on `android`.
+

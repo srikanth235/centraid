@@ -902,6 +902,8 @@ message RoomOpen {
   string key = 1;
   string tab = 2;
   bool root = 3;
+  // The shell's platform, `ios` or `android`, sent with its opens; empty keeps the last one told.
+  string platform = 4;
 }
 
 message RoomSend {
