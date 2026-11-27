@@ -143,6 +143,21 @@ jobs:
       - name: Run the shared-fixture tests
         working-directory: mobile
         run: ./gradlew -Pcentraid.android=true :androidApp:testDebugUnitTest --tests 'dev.centraid.android.kit.BackupCheckControlsTest' --no-daemon --stacktrace
+      # Every Roborazzi golden and the accessibility suite, compared against the committed images.
+      - name: Verify the Compose goldens and run the unit tests
+        working-directory: mobile
+        run: ./gradlew -Pcentraid.android=true :androidApp:testDebugUnitTest -Droborazzi.test.verify=true --no-daemon --stacktrace
+      - name: Upload the Roborazzi compare output
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: roborazzi-compare
+          path: |
+            mobile/androidApp/build/outputs/roborazzi
+            mobile/androidApp/build/reports/roborazzi
+            mobile/androidApp/build/reports/tests
+          retention-days: 7
+          if-no-files-found: warn
 
   engine:
     runs-on: ubuntu-latest

@@ -16,7 +16,7 @@ Driving a local simulator with a different CLI than the one a runner installs is
 
 ## The selectors
 
-Compose gets `Modifier.testTag`, SwiftUI gets `.accessibilityIdentifier`, and both use **the same string**, which is what lets one flow file drive both platforms. The ids are listed in `flows/selectors.md` beside the screen that renders them. An id no screen renders selects nothing, so a flow may only name ids that table lists; nothing checks that rule mechanically.
+Compose gets `Modifier.testTag`, SwiftUI gets `.accessibilityIdentifier`, and both use **the same string**, which is what lets one flow file drive both platforms. A room's ids are the ones its snapshot prints (`crates/screens/tests/rooms/*.txt`); `flows/selectors.md` lists the ids the shells add around them. An id no room draws selects nothing, so a flow may only name ids those two list; nothing checks that rule mechanically.
 
 ## Running it, when there is a device
 
