@@ -1,80 +1,13 @@
-Fixed-Core Android Debug APK
+Android Debug APK receipt
 
-Source: `50510fd0befe4002643d5553d76af652e7064551`
+Source commit: `096e04cb2354aef9b4ab42002e240bb1e02306ec`
+Core source commit: `50510fd0befe4002643d5553d76af652e7064551`
 Build command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:assembleDebug --no-daemon`
-Result: `BUILD SUCCESSFUL`. The APK is package `dev.centraid`, minSdk 24 / targetSdk 36, and arm64-v8a only. The embedded Core SHA matches the local API 24 library. `apksigner` confirms the signing certificate SHA-256 matches the previous debug APK, so the package can upgrade without clearing app data. The unique download filename and `androidApp-debug.apk` are identical hardlinks with SHA-256 `f0417406f077050c248600304cc25e180f89fcedd4f736f45eb15aac6d8e1c01` (197,707,943 bytes).
+Result: `BUILD SUCCESSFUL` (`/tmp/centraid-android-repackage.log`). The only change after the Core source commit adds two unused generated `KitWords` constants; member-visible behavior and the native Core library are unchanged.
 
-Download: `mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-e20e17a0.apk`
+The artifact is package `dev.centraid`, minSdk 24 / targetSdk 36, arm64-v8a only. The embedded Core SHA-256 equals the API 24 arm64 library: `e20e17a0ca3c42779d75d97994edd1d18ee6e6c6dbe2b2760f01a9da346f1d16`. All five expected C ABI exports are present. `zipalign -c -v 4` and `apksigner verify` pass; the signing certificate SHA-256 `90c42bb21431aa4523e0b5e97ae5e739f5bc5d3454c3b8d98aea9ab67783d0be` matches the prior debug APK signer. The default and named download files are identical (197,707,943 bytes), SHA-256 `12489c7e2431cc3d61d61c2860b48192aff1b23ba8e132bd223246cf027861a1`.
+
+Download: `mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-096e04cb.apk`
 Default output: `mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk`
 
-The first incremental package was 371,139,947 bytes because an obsolete zero-filled ZIP region remained between entries. I removed only the two generated APK output names and reran `assembleDebug`; the clean package has no multi-megabyte ZIP gaps and is 197,707,943 bytes. ZIP alignment verification passed. No source packaging changes were made.
-
-Build logs: `/tmp/centraid-android-fixed-apk-build.log` and `/tmp/centraid-android-fixed-apk-repackage.log`. `device_run` is false; no phone or emulator was used.
-
-Captured command output:
-
-Picked up JAVA_TOOL_OPTIONS: -Duser.home=/tmp/centraid-robolectric-home
-To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
-Daemon will be stopped at the end of the build 
-> Task :androidApp:preBuild UP-TO-DATE
-> Task :core:androidPreBuild UP-TO-DATE
-> Task :androidApp:preDebugBuild UP-TO-DATE
-> Task :core:preAndroidMainBuild UP-TO-DATE
-> Task :androidApp:mergeDebugNativeDebugMetadata NO-SOURCE
-> Task :androidApp:generateDebugResources UP-TO-DATE
-> Task :core:generateAndroidMainEmptyResourceFiles UP-TO-DATE
-> Task :androidApp:packageDebugResources UP-TO-DATE
-> Task :core:kmpPartiallyResolvedDependenciesChecker
-> Task :core:checkKotlinGradlePluginConfigurationErrors SKIPPED
-> Task :core:generateCommonMainProtos UP-TO-DATE
-> Task :core:compileAndroidMain UP-TO-DATE
-> Task :core:bundleAndroidMainClassesToCompileJar UP-TO-DATE
-> Task :core:processAndroidMainJavaRes UP-TO-DATE
-> Task :core:bundleLibRuntimeToDirAndroidMain UP-TO-DATE
-> Task :core:writeAndroidMainAarMetadata UP-TO-DATE
-> Task :core:processAndroidMainManifest UP-TO-DATE
-> Task :core:mergeAndroidMainJniLibFolders UP-TO-DATE
-> Task :core:mergeAndroidMainNativeLibs NO-SOURCE
-> Task :core:copyAndroidMainJniLibsProjectOnly UP-TO-DATE
-> Task :androidApp:processDebugNavigationResources UP-TO-DATE
-> Task :androidApp:parseDebugLocalResources UP-TO-DATE
-> Task :androidApp:generateDebugRFile UP-TO-DATE
-> Task :androidApp:compileDebugKotlin UP-TO-DATE
-> Task :androidApp:javaPreCompileDebug UP-TO-DATE
-> Task :androidApp:compileDebugJavaWithJavac NO-SOURCE
-> Task :androidApp:generateDebugAssets UP-TO-DATE
-> Task :androidApp:mergeDebugAssets UP-TO-DATE
-> Task :androidApp:compressDebugAssets UP-TO-DATE
-> Task :androidApp:generateDebugGlobalSynthetics UP-TO-DATE
-> Task :androidApp:l8DexDesugarLibDebug UP-TO-DATE
-> Task :androidApp:processDebugJavaRes UP-TO-DATE
-> Task :androidApp:mergeDebugJavaResource UP-TO-DATE
-> Task :androidApp:checkDebugDuplicateClasses UP-TO-DATE
-> Task :androidApp:desugarDebugFileDependencies UP-TO-DATE
-> Task :androidApp:mergeExtDexDebug UP-TO-DATE
-> Task :androidApp:mergeLibDexDebug UP-TO-DATE
-> Task :androidApp:checkDebugAarMetadata UP-TO-DATE
-> Task :androidApp:mapDebugSourceSetPaths UP-TO-DATE
-> Task :androidApp:compileDebugNavigationResources UP-TO-DATE
-> Task :androidApp:mergeDebugResources UP-TO-DATE
-> Task :androidApp:createDebugCompatibleScreenManifests UP-TO-DATE
-> Task :androidApp:extractDeepLinksDebug UP-TO-DATE
-> Task :androidApp:processDebugMainManifest UP-TO-DATE
-> Task :androidApp:processDebugManifest UP-TO-DATE
-> Task :androidApp:processDebugManifestForPackage UP-TO-DATE
-> Task :androidApp:processDebugResources UP-TO-DATE
-> Task :androidApp:dexBuilderDebug UP-TO-DATE
-> Task :androidApp:mergeProjectDexDebug UP-TO-DATE
-> Task :androidApp:mergeDebugJniLibFolders UP-TO-DATE
-> Task :androidApp:mergeDebugNativeLibs UP-TO-DATE
-> Task :androidApp:stripDebugDebugSymbols UP-TO-DATE
-> Task :androidApp:validateSigningDebug UP-TO-DATE
-> Task :androidApp:writeDebugAppMetadata UP-TO-DATE
-> Task :androidApp:writeDebugSigningConfigVersions UP-TO-DATE
-> Task :androidApp:packageDebug
-> Task :androidApp:createDebugApkListingFileRedirect UP-TO-DATE
-> Task :androidApp:assembleDebug
-
-BUILD SUCCESSFUL in 20s
-48 actionable tasks: 2 executed, 46 up-to-date
-Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html
+No device or emulator was used (`device_run: false`). No Core/FFI/Screens runtime source changed since `50510fd0`; no Core or JVM rebuild was needed.

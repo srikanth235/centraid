@@ -1,9 +1,9 @@
 {
   "artifact": "Debug APK",
-  "source_commit": "50510fd0befe4002643d5553d76af652e7064551",
+  "source_commit": "096e04cb2354aef9b4ab42002e240bb1e02306ec",
   "path": "mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
-  "download_path": "mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-e20e17a0.apk",
-  "sha256": "f0417406f077050c248600304cc25e180f89fcedd4f736f45eb15aac6d8e1c01",
+  "download_path": "mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-096e04cb.apk",
+  "sha256": "12489c7e2431cc3d61d61c2860b48192aff1b23ba8e132bd223246cf027861a1",
   "bytes": 197707943,
   "min_sdk": 24,
   "target_sdk": 36,
@@ -39,5 +39,6 @@
   "device_run": false,
   "embedded_core_path": "lib/arm64-v8a/libcentraid_core_ffi.so",
   "zip_alignment_verified": true,
-  "status": "Current fixed-Core Debug APK; prior Android debug APK had stale foreground-vault room routing."
+  "status": "Repackaged Android Debug APK at source commit 096e04cb; app-only generated copy adds two unused KitWords constants. Embedded Core is unchanged from the verified functional Core build at 50510fd0.",
+  "core_source_commit": "50510fd0befe4002643d5553d76af652e7064551"
 }
