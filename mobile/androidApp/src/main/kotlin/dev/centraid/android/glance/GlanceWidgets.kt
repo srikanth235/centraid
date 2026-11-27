@@ -16,7 +16,6 @@ import java.io.IOException
 internal object GlanceWidgets {
     const val ACTION_ADD_REMINDER: String = "dev.centraid.action.ADD_REMINDER"
     const val EXTRA_TITLE: String = "dev.centraid.extra.REMINDER_TITLE"
-    const val ACTION_AGENDA_OPEN: String = "dev.centraid.action.AGENDA_OPEN"
     const val EXTRA_OPEN_KEY: String = "dev.centraid.extra.OPEN_KEY"
     const val ACTION_REFRESH: String = "dev.centraid.action.GLANCE_REFRESH"
 

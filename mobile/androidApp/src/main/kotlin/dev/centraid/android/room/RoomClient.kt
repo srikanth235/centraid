@@ -14,6 +14,8 @@ import centraid.core.v1.RoomSend
 import centraid.core.v1.RoomShown
 import centraid.core.v1.RoomTap
 import centraid.core.v1.RoomTransition
+import centraid.core.v1.ShareInRequest
+import centraid.core.v1.ShareInResponse
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import kotlinx.coroutines.CoroutineScope
@@ -111,6 +113,26 @@ internal class RoomClient(
     suspend fun canvas(instance: Long, event: RoomCanvasEvent): CoreOutcome<Unit> =
         send(instance, RoomEvent(canvas = event))
 
+    suspend fun openDeepLink(url: String, tab: String = activeTab.value): CoreOutcome<Unit>? {
+        val roomKey = parseDeepLink(url) ?: return null
+        return open(key = roomKey, tab = tab, root = false)
+    }
+
+    suspend fun drainShareIn(inboxDir: String): CoreOutcome<ShareInResponse> =
+        when (
+            val outcome = core.call(
+                Envelope(
+                    request_id = 0,
+                    request = Request(share_in = ShareInRequest(inbox_dir = inboxDir)),
+                ),
+            )
+        ) {
+            is CoreOutcome.Failed -> outcome
+            is CoreOutcome.Answered -> CoreOutcome.Answered(
+                outcome.value.response?.share_in ?: ShareInResponse(),
+            )
+        }
+
     fun selectTab(tab: String) {
         selectedTab.value = tab
     }
@@ -137,5 +159,20 @@ internal class RoomClient(
         const val APPEARANCE_SYSTEM: String = "system"
         const val APPEARANCE_LIGHT: String = "light"
         const val APPEARANCE_DARK: String = "dark"
+        private const val DEEP_LINK_PREFIX: String = "centraid://"
+
+        fun parseDeepLink(url: String): String? {
+            if (!url.startsWith(DEEP_LINK_PREFIX)) return null
+            val path = url.removePrefix(DEEP_LINK_PREFIX)
+                .substringBefore('?')
+                .substringBefore('#')
+            val parts = path.split('/')
+            if (parts.size != 3 || parts[0] != "open") return null
+            val kind = parts[1]
+            val id = parts[2]
+            if (kind.isEmpty() || !kind.all { it in 'a'..'z' || it in '0'..'9' || it == '_' }) return null
+            if (id.isEmpty() || id.length > 64 || !id.all { it in 'a'..'z' || it in '0'..'9' || it == '-' }) return null
+            return "$kind/$id"
+        }
     }
 }

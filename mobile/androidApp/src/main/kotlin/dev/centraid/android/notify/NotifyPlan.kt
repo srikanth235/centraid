@@ -8,7 +8,7 @@ import java.time.ZoneId
 /**
  * THE DECISIONS OF THE NOTIFICATION PERFORMER THAT NEED NO ANDROID (#1173), so a JVM test reads them.
  *
- * Which notifications exist, when they fire and what they say is Rust's (`crates/screens/src/agenda/notify`).
+ * Which notifications exist, when they fire and what they say is Rust's (`crates/core/src/notify`).
  * This is only the bookkeeping a performer owes it: whether the permission lets anything be held, which
  * alarms to take down and which to set when the whole desired set arrives, and which kind of alarm the
  * platform will give.

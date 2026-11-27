@@ -73,7 +73,7 @@ public class MainActivity : FragmentActivity() {
         setIntent(intent)
         NotifyTaps.note(intent)
         val open = AppSession.current.value ?: return
-        open.scope.launch { NotifyTaps.flush(open.screens) }
+        open.scope.launch { NotifyTaps.flush(open.rooms, open.screens) }
     }
 
     override fun onDestroy() {
@@ -122,8 +122,7 @@ public class MainActivity : FragmentActivity() {
                     try {
                         rust.attach(opened, scope)
                         value = opened
-                        NotifyTaps.flush(opened.screens)
-                        // PRESSES THAT NEVER REACHED THE CORE (a receiver the process outlived) go now.
+                        NotifyTaps.flush(opened.rooms, opened.screens)
                         opened.scope.launch { Notify.drain(applicationContext) }
                         awaitCancellation()
                     } finally {

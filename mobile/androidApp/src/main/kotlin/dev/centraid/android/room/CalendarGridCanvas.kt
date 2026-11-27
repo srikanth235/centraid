@@ -245,7 +245,7 @@ private fun CalendarDayView(
             ) {
                 KitText("Overdue", KitType.Group, StateColor.Red.text)
                 overdueTasks.forEachIndexed { idx, item ->
-                    CalendarAgendaItemRow(item = item, onTap = onTap)
+                    CalendarItemRow(item = item, onTap = onTap)
                     if (idx < overdueTasks.lastIndex) RoomHairline()
                 }
             }
@@ -721,7 +721,7 @@ private fun CalendarListView(
                 if (day.items.isNotEmpty()) {
                     Column(Modifier.fillMaxWidth().kitCard().padding(horizontal = 12.dp, vertical = 4.dp)) {
                         day.items.forEachIndexed { idx, item ->
-                            CalendarAgendaItemRow(item = item, onTap = onTap)
+                            CalendarItemRow(item = item, onTap = onTap)
                             if (idx < day.items.lastIndex) RoomHairline()
                         }
                     }
@@ -955,7 +955,7 @@ private fun CalendarCompactPill(
 }
 
 @Composable
-private fun CalendarAgendaItemRow(
+private fun CalendarItemRow(
     item: RoomCalendarItem,
     onTap: (String) -> Unit,
 ) {

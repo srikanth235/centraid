@@ -61,10 +61,7 @@
          (`screens/people/ContactsImporter.kt`). Read once, written into the
          member's vault as their own people; nothing is synced back. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <!-- Calendar, for Agenda's calendar follow: asked for when the member taps
-         "Import calendar" on Agenda's day one, never at launch
-         (`screens/agenda/CalendarImporter.kt`). Read only: the phone's events are
-         copied into the member's vault and nothing is written back. -->
+    <!-- Calendar follow: read only, asked when the member taps follow, never at launch. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <!-- Health, READ ONLY (#1129, R-1129-7): Health Connect's daily totals
          and workouts, asked for when the member taps Connect on Health's
@@ -106,15 +103,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- AGENDA'S REMINDERS AND ALERTS (#1173; `notify/Notify.kt`). POST_NOTIFICATIONS
-         above is asked for at the first reminder that would fire (never at launch).
-         SCHEDULE_EXACT_ALARM and NOT USE_EXACT_ALARM: Play restricts USE_EXACT_ALARM to
-         apps whose core function is an alarm clock or a calendar, and Centraid is a
-         vault whose Agenda is one app among many, so claiming it risks the listing.
-         SCHEDULE_EXACT_ALARM is a user-revocable grant (on by default on 31 and 32, off
-         on 33 and up); when it is not held the reminder is set inexact, a few minutes
-         late at worst, and the member is never sent to settings for it. The boot
-         receiver re-arms every alarm a reboot cleared. -->
+    <!-- Reminders and alerts (`notify/Notify.kt`). POST_NOTIFICATIONS is asked at the first
+         reminder that would fire (never at launch). SCHEDULE_EXACT_ALARM (not USE_EXACT_ALARM)
+         falls back to inexact alarms when not held. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -154,24 +145,49 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- "ADD A REMINDER" AND A WIDGET'S TAPS (#1173): the launcher's long-press shortcuts
-                 send `dev.centraid.action.ADD_REMINDER` ("What's next" sends AGENDA_OPEN with no key) and a widget's rows, body and button send
-                 `dev.centraid.action.AGENDA_OPEN` with one opaque key, both aimed at this activity,
-                 which hands them to the core (`glance/AgendaIntents.kt`). There is no filter for
-                 them, but the activity is exported, so ANY app may send either: nothing here is
-                 trusted. The core opens only a page the snapshot's own table names for that key,
-                 and Agenda's home for any other, and an add writes nothing until the member taps
-                 Add. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="open"
+                    android:scheme="centraid" />
+            </intent-filter>
         </activity>
 
-        <!-- AGENDA'S TWO HOME-SCREEN WIDGETS (#1173). Framework providers over RemoteViews
-             (`glance/`): they draw the one snapshot file Rust's `agenda.glance` service keeps
-             (`filesDir/agenda-glance.json`) and never open the vault. Exported because the launcher
-             binds a widget's provider; the only broadcasts they act on are the platform's update and
-             the app's own redraw request, and both only redraw what is already on disk. The label
-             and the description come from the generated strings, which the launcher reads before any
-             code runs. Privacy ruling: titles never show on a locked phone, so both providers are
-             `home_screen` only (never `keyguard`) and the app adds no lock-screen surface. -->
+        <activity
+            android:name="dev.centraid.android.share.ShareInReceiverActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="text/calendar" />
+                <data android:mimeType="text/vcard" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="text/calendar" />
+                <data android:mimeType="text/vcard" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- Home-screen widgets (`glance/`): home_screen only (never keyguard). -->
         <receiver
             android:name="dev.centraid.android.glance.UpNextWidget"
             android:exported="true"
@@ -218,9 +234,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- AGENDA'S NOTIFICATIONS (#1173). None is exported. The boot receiver hears
-             the system's own broadcasts (reboot, a new time or zone, this app updated,
-             the exact-alarm grant changing) and re-arms every recorded alarm. -->
+        <!-- Notification receivers (`notify/`). None is exported. -->
         <receiver
             android:name="dev.centraid.android.notify.NotifyAlarmReceiver"
             android:exported="false" />

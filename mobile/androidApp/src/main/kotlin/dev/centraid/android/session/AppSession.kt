@@ -9,6 +9,7 @@ import android.Manifest
 import dev.centraid.android.backup.LinkFacts
 import dev.centraid.android.notify.Notify
 import dev.centraid.android.room.RoomClient
+import dev.centraid.android.share.ShareInboxWriter
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
 import dev.centraid.core.CoreFailure
@@ -63,7 +64,10 @@ internal object AppSession {
         suspend fun environment() = AppSession.environment(context, screens)
 
         suspend fun foreground(on: Boolean) {
-            if (on) AppSession.environment(context, screens)
+            if (on) {
+                AppSession.environment(context, screens)
+                AppSession.drainShareInbox(context, rooms)
+            }
             screens.lifecycle(foreground = on)
         }
     }
@@ -243,6 +247,7 @@ internal object AppSession {
         scope.launch {
             rooms.loadAppearance()
             rooms.open(RoomClient.DEFAULT_TAB, tab = RoomClient.DEFAULT_TAB, root = true)
+            drainShareInbox(context, rooms)
             Notify.replayPresses(context, core)
             Notify.launched(context, core) { effects.ui?.ask(Manifest.permission.POST_NOTIFICATIONS) }
         }
@@ -256,5 +261,12 @@ internal object AppSession {
             }
         }
         return open
+    }
+
+    private suspend fun drainShareInbox(context: Context, rooms: RoomClient) {
+        val inbox = ShareInboxWriter.inboxDir(context)
+        if (ShareInboxWriter.hasPendingItems(inbox)) {
+            rooms.drainShareIn(inbox.absolutePath)
+        }
     }
 }
