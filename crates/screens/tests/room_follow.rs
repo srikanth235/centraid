@@ -369,7 +369,7 @@ fn a_refused_permission_says_so_makes_no_reads_after_and_offers_settings() {
     let dir = tempfile::tempdir().unwrap();
     let handle = phone(dir.path());
     let handle = &handle;
-    let mut shell = Shell::new(&handle);
+    let mut shell = Shell::new(handle);
     shell.open("people");
     shell.tap("Follow Contacts");
     let asks = shell.pump();
@@ -542,13 +542,12 @@ fn stopping_keeps_what_was_read_forgets_the_enrolment_and_ends_passes() {
         sheet.contains("Stop following Contacts?") && sheet.contains("What it already added stays"),
         "a stop asks first, in words that say nothing is deleted:\n{sheet}"
     );
-    assert_eq!(
+    assert!(
         shell
             .verb(wire::FollowVerb::Status, "contacts")
             .status
             .unwrap()
-            .enrolled,
-        true
+            .enrolled
     );
     shell.tap_id("confirm/no");
     assert!(
