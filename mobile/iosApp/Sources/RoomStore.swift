@@ -1415,8 +1415,8 @@ final class RoomStore: ObservableObject {
                         var picked = Centraid_Core_V1_ShellPicked()
                         picked.items = staged
                         self?.answer(effect, instance: instance, picked: picked)
-                    case .failure(let reason):
-                        self?.answer(effect, instance: instance, failed: reason)
+                    case .failure(let failure):
+                        self?.answer(effect, instance: instance, failed: failure.effectReason)
                     }
                 }
             }
@@ -1432,8 +1432,8 @@ final class RoomStore: ObservableObject {
                         var picked = Centraid_Core_V1_ShellPicked()
                         picked.items = staged
                         self?.answer(effect, instance: instance, picked: picked)
-                    case .failure(let reason):
-                        self?.answer(effect, instance: instance, failed: reason)
+                    case .failure(let failure):
+                        self?.answer(effect, instance: instance, failed: failure.effectReason)
                     }
                 }
             }
@@ -1449,8 +1449,8 @@ final class RoomStore: ObservableObject {
                         var picked = Centraid_Core_V1_ShellPicked()
                         picked.items = staged
                         self?.answer(effect, instance: instance, picked: picked)
-                    case .failure(let reason):
-                        self?.answer(effect, instance: instance, failed: reason)
+                    case .failure(let failure):
+                        self?.answer(effect, instance: instance, failed: failure.effectReason)
                     }
                 }
             }

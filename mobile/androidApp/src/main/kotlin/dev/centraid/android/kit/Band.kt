@@ -254,17 +254,17 @@ internal fun Modifier.bandGround(shape: Shape): Modifier {
                     state = hazeState,
                     style = HazeStyle(
                         backgroundColor = Surface.page,
-                        tint = HazeTint(Surface.card.copy(alpha = if (dark) 0.18f else 0.12f)),
+                        tint = HazeTint(BandGlass.tint(Surface.card, dark)),
                         blurRadius = 16.dp,
                         noiseFactor = 0f,
-                        fallbackTint = HazeTint(Surface.card.copy(alpha = if (dark) 0.82f else 0.76f)),
+                        fallbackTint = HazeTint(BandGlass.tint(Surface.card, dark)),
                     ),
                     block = { blurEnabled = true },
                 )
             } else {
                 Modifier.background(
                     if (highContrast || LocalBandOpaqueFallback.current) Surface.card
-                    else Surface.card.copy(alpha = if (dark) 0.82f else 0.76f),
+                    else BandGlass.tint(Surface.card, dark),
                     shape,
                 )
             },
@@ -281,6 +281,17 @@ internal fun Modifier.bandGround(shape: Shape): Modifier {
         )
     }
     return plate.border(CentraidGeometry.HAIRLINE.dp, rim, shape)
+}
+
+/**
+ * The band tint keeps both selected ink and inactive meta legible over extreme photos.
+ * These rounded-up minima are shared by RenderEffect, its scrim fallback, and API 24–30.
+ */
+internal object BandGlass {
+    const val LIGHT_ALPHA: Float = 0.94f
+    const val DARK_ALPHA: Float = 0.90f
+
+    fun tint(card: Color, dark: Boolean): Color = card.copy(alpha = if (dark) DARK_ALPHA else LIGHT_ALPHA)
 }
 
 /** A source is deliberately scoped to one ordinary room; secure rooms use an opaque plate. */

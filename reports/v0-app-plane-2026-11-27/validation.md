@@ -21,6 +21,7 @@ These receipts describe the remediation worktree. The schema packet separately p
 | Android debug APK assembly | Passed; arm64-only packaging, API 24 native floor, matching embedded Core SHA, JDK time desugaring present | [APK assembly](validation/android-apk.txt), [artifact hashes](validation/android-artifact.json) |
 | Android unit tests | 210 tests, 0 failures/errors, 2 opt-in captures skipped in the default suite; capture was run separately | [Android unit run](validation/android-unit.txt), [JUnit totals](validation/android-unit-summary.json) |
 | Final opt-in Android captures and secret-control regressions | Passed: 20 light and 20 dark review previews, two separate scrolling-layout previews, and both masked-control cases | [Capture run](validation/android-captures.txt), [layout fixture](glass-layout-fixture.json) |
+| Glass contrast over extreme photo backgrounds | Two generated-resource tests passed; selected and inactive text remain at least 4.5:1 over black/white sources | [Contrast/capture receipt](validation/android-captures.txt) |
 | `bun run docs:build` | Passed | [Docs build](validation/docs-build.txt) |
 | `bun run docs:smoke` | Passed, 12 pages and internal links | [Docs smoke](validation/docs-smoke.txt) |
 

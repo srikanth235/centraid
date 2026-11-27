@@ -71,6 +71,12 @@ xcrun simctl io booted screenshot target/ios-verification/screenshots/calendar_g
 
 Simulator images do not replace the physical-device checks for owner authentication, followed stores, clipboard expiry, photo picking/deletion, and background Locker relock.
 
+## GitHub runner verification
+
+The PR's macOS job now builds both simulator and device Rust targets, runs the simulator unit/UI tests, requires the five light/dark screenshot attachments, exports PNGs from the result bundle, and builds the generic iPhone app with code signing disabled. An unsigned build verifies compilation; it does not install on or exercise an iPhone. The share extension still needs a real host-app/share-sheet flow and is not covered by these screenshot assertions.
+
+The first runner attempt built the simulator Core successfully, then found an invalid `Result` failure type in the picker/scanner bridge. That was replaced with a local Swift error type while retaining the same cancellation/failure reasons. The retry's actual outcome must be recorded before claiming SDK/XCTest or device-build success.
+
 ## Linux checks already completed
 
 Swift 6.4.3 syntax-only parsing passed for 14 changed Swift files after the `Room.hue_key` binding landed. A final source review then added the `RoomHeaderKeyView` environment read, an explicit `UniformTypeIdentifiers` import, and a generic core-error sentence mapping; those small edits were not parsed again. Linux parsing did not typecheck against the iOS SDK or run XCTest. The Swift toolchain archive was verified with Swift’s published signing key before use; receipts are [signature verification](validation/swift-signature.txt) and [syntax parsing](validation/swift-syntax.txt).

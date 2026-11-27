@@ -11,7 +11,7 @@ name: gate
 #                      (.github/actions/setup, `cargo-cache-save-pr`).
 #   engine             the on-device chat's llama.cpp build, too slow for the
 #                      `pr` profile (R-CHAT-10).
-#   ios                Swift 6 app/XCTest and the Rust simulator core.
+#   ios                Swift 6 app/XCTest and the Rust simulator and unsigned device cores.
 #   android            the Compose shell's Kotlin compiled against the Android SDK (no native
 #                      core: `compileDebugKotlin` stops before the libraries are packaged), on
 #                      the runner's own SDK.
@@ -43,19 +43,30 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           rust: "true"
-          rust-targets: aarch64-apple-ios-sim
+          rust-targets: aarch64-apple-ios aarch64-apple-ios-sim
           cargo-cache: ios-simulator
       - name: Install the native generators
         run: brew install xcodegen protobuf swift-protobuf
-      - name: Build the actual simulator core with llama
+      - name: Build the actual simulator and device cores with llama
         run: |
           set -euo pipefail
           mkdir -p target/ios-verification
           IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
           export IPHONEOS_DEPLOYMENT_TARGET
-          mobile/scripts/ios-core.sh aarch64-apple-ios-sim 2>&1 | tee target/ios-verification/rust-core.log
+          mobile/scripts/ios-core.sh aarch64-apple-ios-sim aarch64-apple-ios 2>&1 | tee target/ios-verification/rust-core.log
       - name: Compile Swift 6 app and run XCTest
         run: bash mobile/scripts/verify-ios.sh
+      - name: Build unsigned iPhone app for a generic device
+        working-directory: mobile/iosApp
+        run: |
+          set -euo pipefail
+          export IPHONEOS_DEPLOYMENT_TARGET="$(cat ../ios-deployment-target)"
+          mkdir -p ../../target/ios-verification
+          xcodebuild -project Centraid.xcodeproj -scheme Centraid \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ../../target/ios-verification/device-derived-data \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build \
+            2>&1 | tee ../../target/ios-verification/centraid-device-build.log
       - name: Upload iOS compiler and test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

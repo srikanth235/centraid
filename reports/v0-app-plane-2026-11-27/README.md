@@ -25,7 +25,7 @@ Two findings needed no new behavior: Notes bodies are local text rather than fet
 
 ## Android glass appearance
 
-The floating controls now use a softer shadow and a subtle rim. Haze 1.6.10 samples the scrolling content behind the plate on Android 12/API 31 and later; Android 7–11 keeps a translucent tint. High contrast and secure rooms use an opaque surface. The source is scoped to each ordinary room, excludes its controls, and is disabled for secure content. Footer clearance lets the last row scroll fully into view. This approximates the iOS material appearance; it does not implement Apple's Liquid Glass refraction or morphing.
+The floating controls now use a softer shadow and a subtle rim. Haze 1.6.10 samples the scrolling content behind the plate on Android 12/API 31 and later; Android 7–11 keeps a translucent tint. A contrast-preserving scrim keeps selected and inactive text legible over extreme photo backgrounds; both color schemes are tested at a minimum 4.5:1. High contrast and secure rooms use an opaque surface. The source is scoped to each ordinary room, excludes its controls, and is disabled for secure content. Footer clearance lets the last row scroll fully into view. This approximates the iOS material appearance; it does not implement Apple's Liquid Glass refraction or morphing.
 
 The [light preview](snapshots/light/money_root.png), [dark preview](snapshots/dark/money_root.png), and [earlier shadow](snapshots/before/light/money_root.png) are actual Compose/Robolectric captures. GPU blur and scrolling performance still require a phone check.
 

@@ -6,7 +6,7 @@
 
 - **`gate`**: ubuntu, 120 minutes. Full history is fetched, because `buf breaking` compares against `main` and the released tags. It installs the gate's tools, runs `sh .githooks/pre-commit --all`, then runs `cargo xtask gate --profile pr`. The pins (nextest with a SHA-256 check, actionlint, buf, and `cargo-deny` if absent) are in `.github/actions/gate-tools` only; `nightly.yml`'s `gate` job uses the same action. The cargo cache (key `gate`) is saved from pull requests as well as `main`; see below.
 - **`engine`**: the on-device chat's llama.cpp build is too slow for the `pr` profile, so this job runs `clippy` and `cargo test` over `centraid-assist-llama` and `centraid-core-ffi` with the `llama` feature on. The real-model tests are `#[ignore]`d because they need a GGUF file the repo does not carry.
-- **`ios`**: macOS, 90 minutes. It builds the simulator core with llama, compiles the Swift app, runs XCTest, then the accessibility audit UI tests (`mobile/iosApp/UITests`) on the seeded demo vault.
+- **`ios`**: macOS, 90 minutes. It builds the simulator and device cores with llama, compiles the Swift app, runs XCTest and the accessibility audit UI tests (`mobile/iosApp/UITests`) on the seeded demo vault, exports the required light/dark screenshot attachments, and builds the generic iPhone app without signing.
 - **`android`**: ubuntu, 45 minutes. It runs `compileDebugKotlin` on the runner's SDK, which type-checks the Compose shell without packaging the native libraries, one shared-fixture unit test (`BackupCheckControlsTest`), then the whole `testDebugUnitTest` suite with `-Droborazzi.test.verify=true`, so every Compose golden is compared. A failure uploads `roborazzi-compare`.
 - **`dependency-review`**: pull requests only. It reads the PR's dependency diff and fails on high severity or an AGPL or GPL-3.0 licence in a new dependency.
 - **`pr-title`**: pull requests, except Dependabot. It runs `.githooks/commit-msg` over the title, because a squash merge's subject is the PR title. The form is `type(scope): subject (#N)`.
@@ -32,7 +32,7 @@ The workflow has `concurrency: group: gate-<PR number, or the ref>` with `cancel
 1. The job log shows the one line per step and, for a failed step, the last line of stderr and the artifact directory. A step that runs a command buffers its output and prints none of it. The `rules`, `doc-links`, `design`, `ledgers` and `lockfile` steps, and the pin check of `ci-policy`, do print their findings.
 2. When the `gate` job fails it uploads the artifact **`gate-pr-artifacts`** (`target/xtask/**`, kept 7 days). Inside, the paths start at the profile: `pr/test/stderr.log` for the test step, and `pr/<step>/command.txt`, `stdout.log` and `stderr.log` for any command step. `findings.txt` is the evidence for the internal steps. If xtask itself fails to compile there is no artifact: read the job log.
 3. Download it with `gh run download <run-id> -n gate-pr-artifacts`.
-4. `ios` uploads `ios-verification` (compiler and test logs, the `.xcresult`) every time. `engine` uploads nothing, so its detail is the job log; `android` uploads `roborazzi-compare` (the compare images and test reports) only when it fails.
+4. `ios` uploads `ios-verification` (compiler and test logs, screenshot PNGs, the `.xcresult`) every time. `engine` uploads nothing, so its detail is the job log; `android` uploads `roborazzi-compare` (the compare images and test reports) only when it fails.
 5. To reproduce a failed step, run `cargo xtask gate --profile pr --lane <step>`.
 
 ## Other workflows

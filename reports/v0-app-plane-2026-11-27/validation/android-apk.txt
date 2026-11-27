@@ -66,3 +66,5 @@ Unable to strip the following libraries, packaging them as they are: libandroidx
 BUILD SUCCESSFUL in 2m 15s
 48 actionable tasks: 22 executed, 26 up-to-date
 Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html
+
+Band contrast update: `:androidApp:assembleDebug --no-daemon` passed after updating the band tint. Artifact metadata/hash refreshed in `android-artifact.json`; the APK embeds the unchanged API 24 arm64 core library.

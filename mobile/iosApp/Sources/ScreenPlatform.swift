@@ -110,17 +110,27 @@ struct PickLimits {
 /// exists only while the save sheet is up.
 @MainActor
 enum FilePerformer {
+    enum Failure: Swift.Error {
+        case reason(String)
+
+        var effectReason: String {
+            switch self {
+            case .reason(let value): value
+            }
+        }
+    }
+
     private static var holders: [PickerHolder] = []
     private static var photoHolders: [PhotoPickerHolder] = []
     private static var scannerHolders: [DocumentScannerHolder] = []
 
-    static func pickerResult(_ items: [Centraid_Core_V1_ShellPickedItem]) -> Result<[Centraid_Core_V1_ShellPickedItem], String> {
-        items.isEmpty ? .failure(EffectReason.cancelled) : .success(items)
+    static func pickerResult(_ items: [Centraid_Core_V1_ShellPickedItem]) -> Result<[Centraid_Core_V1_ShellPickedItem], Failure> {
+        items.isEmpty ? .failure(.reason(EffectReason.cancelled)) : .success(items)
     }
 
     static func pickPhotos(
         _ pick: Centraid_Core_V1_ShellPickPhoto,
-        _ done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void
+        _ done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], Failure>) -> Void
     ) {
         var configuration = PHPickerConfiguration()
         configuration.filter = pick.video ? .videos : .images
@@ -129,7 +139,7 @@ enum FilePerformer {
         let holder = PhotoPickerHolder { results in
             Task {
                 guard !results.isEmpty else {
-                    await MainActor.run { done(.failure(EffectReason.cancelled)) }
+                    await MainActor.run { done(.failure(.reason(EffectReason.cancelled))) }
                     return
                 }
                 do {
@@ -140,7 +150,7 @@ enum FilePerformer {
                     }
                     await MainActor.run { done(pickerResult(items)) }
                 } catch {
-                    await MainActor.run { done(.failure(EffectReason.unreadable)) }
+                    await MainActor.run { done(.failure(.reason(EffectReason.unreadable))) }
                 }
             }
         }
@@ -149,8 +159,8 @@ enum FilePerformer {
         present(picker, holder)
     }
 
-    static func scanDocument(_ done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void) {
-        guard VNDocumentCameraViewController.isSupported else { done(.failure(EffectReason.unavailable)); return }
+    static func scanDocument(_ done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], Failure>) -> Void) {
+        guard VNDocumentCameraViewController.isSupported else { done(.failure(.reason(EffectReason.unavailable))); return }
         let scanner = VNDocumentCameraViewController()
         let holder = DocumentScannerHolder { result in done(result) }
         scanner.delegate = holder
@@ -184,12 +194,12 @@ enum FilePerformer {
 
     static func pickPaths(
         _ pick: Centraid_Core_V1_ShellPickFile,
-        _ done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void
+        _ done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], Failure>) -> Void
     ) {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes(pick.types))
         picker.allowsMultipleSelection = pick.multiple
         let holder = PickerHolder { urls in
-            guard !urls.isEmpty else { done(.failure(EffectReason.cancelled)); return }
+            guard !urls.isEmpty else { done(.failure(.reason(EffectReason.cancelled))); return }
             do {
                 var items: [Centraid_Core_V1_ShellPickedItem] = []
                 for source in urls {
@@ -211,7 +221,7 @@ enum FilePerformer {
                 }
                 done(.success(items))
             } catch {
-                done(.failure(EffectReason.unreadable))
+                done(.failure(.reason(EffectReason.unreadable)))
             }
         }
         present(picker, holder)
@@ -412,7 +422,7 @@ enum FilePerformer {
     }
 
     private static func present(_ picker: VNDocumentCameraViewController, _ holder: DocumentScannerHolder) {
-        guard let top = presenter() else { holder.finish(.failure(EffectReason.unavailable)); return }
+        guard let top = presenter() else { holder.finish(.failure(.reason(EffectReason.unavailable))); return }
         scannerHolders.append(holder)
         holder.onFinish = { scannerHolders.removeAll { $0 === holder } }
         picker.delegate = holder
@@ -445,15 +455,15 @@ enum FilePerformer {
     }
 
     private final class DocumentScannerHolder: NSObject, VNDocumentCameraViewControllerDelegate {
-        let done: (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void
+        let done: (Result<[Centraid_Core_V1_ShellPickedItem], Failure>) -> Void
         var onFinish: () -> Void = {}
-        init(done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void) { self.done = done }
-        func finish(_ result: Result<[Centraid_Core_V1_ShellPickedItem], String>) { done(result); onFinish() }
+        init(done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], Failure>) -> Void) { self.done = done }
+        func finish(_ result: Result<[Centraid_Core_V1_ShellPickedItem], Failure>) { done(result); onFinish() }
         func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-            controller.dismiss(animated: true) { self.finish(.failure(EffectReason.cancelled)) }
+            controller.dismiss(animated: true) { self.finish(.failure(.reason(EffectReason.cancelled))) }
         }
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
-            controller.dismiss(animated: true) { self.finish(.failure(EffectReason.failed)) }
+            controller.dismiss(animated: true) { self.finish(.failure(.reason(EffectReason.failed))) }
         }
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
             do {
@@ -473,7 +483,7 @@ enum FilePerformer {
                     items.append(item)
                 }
                 controller.dismiss(animated: true) { self.finish(.success(items)) }
-            } catch { controller.dismiss(animated: true) { self.finish(.failure(EffectReason.unwritable)) } }
+            } catch { controller.dismiss(animated: true) { self.finish(.failure(.reason(EffectReason.unwritable))) } }
         }
     }
 }

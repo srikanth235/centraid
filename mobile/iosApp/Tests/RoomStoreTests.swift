@@ -546,7 +546,7 @@ final class RoomStoreTests: XCTestCase {
     func testNativePickerCallbackMapsEmptySelectionToCancelled() {
         switch FilePerformer.pickerResult([]) {
         case .success: XCTFail("An empty picker selection is cancellation")
-        case .failure(let reason): XCTAssertEqual(reason, EffectReason.cancelled)
+        case .failure(let failure): XCTAssertEqual(failure.effectReason, EffectReason.cancelled)
         }
     }
 

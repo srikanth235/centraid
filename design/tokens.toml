@@ -646,6 +646,7 @@ dark_mark = "#a8aa66"
 glass-sheer = { light = "rgba(255,255,255,0.5)", dark = "rgba(44,42,39,0.72)" }
 glass-veil = { light = "rgba(255,255,255,0.6)", dark = "rgba(44,42,39,0.72)" }
 glass-bar = { light = "rgba(255,255,255,0.72)", dark = "rgba(44,42,39,0.72)" }
+glass-band = { light = "rgba(255,255,255,0.94)", dark = "rgba(31,30,28,0.90)" }
 glass-key = { light = "rgba(255,255,255,0.8)", dark = "rgba(44,42,39,0.8)" }
 glass-card = { light = "rgba(255,255,255,0.85)", dark = "rgba(44,42,39,0.85)" }
 glass-solid = { light = "rgba(255,255,255,0.9)", dark = "rgba(44,42,39,0.9)" }

@@ -89,6 +89,7 @@
   --fixed-surface-page: #F4F2EE;
   --fixed-text-meta: #6F6B64;
   --fixed-violet: #4E3C86;
+  --glass-band: rgba(255,255,255,0.94);
   --glass-bar: rgba(255,255,255,0.72);
   --glass-card: rgba(255,255,255,0.85);
   --glass-key: rgba(255,255,255,0.8);
@@ -250,6 +251,7 @@
   --fixed-surface-page: #F4F2EE;
   --fixed-text-meta: #6F6B64;
   --fixed-violet: #4E3C86;
+  --glass-band: rgba(31,30,28,0.90);
   --glass-bar: rgba(44,42,39,0.72);
   --glass-card: rgba(44,42,39,0.85);
   --glass-key: rgba(44,42,39,0.8);
