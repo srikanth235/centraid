@@ -17,10 +17,18 @@ final class AccessibilityAuditTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
         found = [:]
+        visualProofs = [:]
     }
 
     /// Issues found in this run, by `mode | screen | audit type`.
     private var found: [String: Int] = [:]
+
+    /// Required durable canvas attachments per visual mode. This ratchets coverage
+    /// independently of the export script's nonempty-PNG check.
+    private var visualProofs: [String: Set<String>] = [:]
+    private static let requiredVisualProofs: Set<String> = [
+        "calendar_grid", "note_editor", "photo_grid", "people_root", "money_root"
+    ]
 
     /// THE RATCHET (`audit-baseline.json`): how many issues of each kind the audit
     /// reports TODAY, per mode, screen and audit type. The count may fall and may
@@ -37,6 +45,14 @@ final class AccessibilityAuditTests: XCTestCase {
 
     /// Settles the run against the ratchet. Called last in every audit test.
     private func settle(mode: String) {
+        if mode == "light" || mode == "dark" {
+            let captured = visualProofs[mode] ?? []
+            XCTAssertEqual(
+                captured,
+                Self.requiredVisualProofs,
+                "\(mode) visual tour must attach every required canvas screenshot"
+            )
+        }
         for key in Set(found.keys).union(Self.baseline.keys.filter { $0.hasPrefix("\(mode)|") }).sorted() {
             let now = found[key] ?? 0
             let allowed = Self.baseline[key] ?? 0
@@ -801,6 +817,7 @@ final class AccessibilityAuditTests: XCTestCase {
         _ = app.wait(for: .runningForeground, timeout: 5)
         _ = waitForStableHierarchy(app)
         clearSystemAlerts(app)
+        attachVisualProofIfRequired(app, mode: mode, screen: screen)
         // PROOF ON REQUEST: `CENTRAID_UI_PROOF_DIR` (a directory) takes a screenshot of each audited
         // screen, as the audit finds it, for the exemptions that cite one. Unset, nothing is written.
         if let dir = ProcessInfo.processInfo.environment["CENTRAID_UI_PROOF_DIR"] {
@@ -894,6 +911,35 @@ final class AccessibilityAuditTests: XCTestCase {
             found["\(mode)|\(screen)|\(Self.typeName(type))", default: 0] += 1
         }
         print(issues == 0 ? "A11Y-PASS|\(mode)|\(screen)" : "A11Y-FAIL|\(mode)|\(screen)|\(issues)")
+    }
+
+    /// Durable screenshots for the native surfaces reviewed with the app-plane change.
+    /// Assert the canvas/root selector first so a transition or empty wrapper cannot masquerade
+    /// as a successful capture. Light and dark cover the visual system; the largest-text audit
+    /// retains its existing accessibility focus and doesn't duplicate these artifacts.
+    @MainActor private func attachVisualProofIfRequired(_ app: XCUIApplication, mode: String, screen: String) {
+        guard mode == "light" || mode == "dark" else { return }
+        let proof: (file: String, identifier: String)?
+        switch screen {
+        case "Calendar": proof = ("calendar_grid", "cal/grid")
+        case "Notes Add": proof = ("note_editor", "editor")
+        case "Photos": proof = ("photo_grid", "photo-grid")
+        case "People": proof = ("people_root", "header/add")
+        case "Money": proof = ("money_root", "header/add")
+        default: proof = nil
+        }
+        guard let proof else { return }
+        let expected = app.el(proof.identifier)
+        XCTAssertTrue(
+            expected.waitForExistence(timeout: 15),
+            "\(mode) \(screen) visual proof requires canvas/root selector \(proof.identifier)"
+        )
+        guard expected.exists else { return }
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Centraid-\(mode)-\(proof.file)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        visualProofs[mode, default: []].insert(proof.file)
     }
 }
 

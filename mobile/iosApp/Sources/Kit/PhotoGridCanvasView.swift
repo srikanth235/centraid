@@ -199,6 +199,7 @@ struct PhotoGridCanvasView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("photo-grid")
     }
 
     private var gridContent: some View {

@@ -64,6 +64,7 @@ jobs:
           path: |
             target/ios-verification/*.log
             target/ios-verification/*.xcresult
+            target/ios-verification/screenshots/**
             mobile/iosApp/Sources/Generated
           retention-days: 7
           if-no-files-found: warn

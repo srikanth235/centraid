@@ -83,12 +83,25 @@ container="$(xcrun simctl get_app_container "$simulator" dev.centraid.Centraid d
 test -f "$container/Documents/demo-vault/vault.db" || { echo "error: demo vault was not placed in the app container" >&2; exit 1; }
 xcrun simctl terminate "$simulator" dev.centraid.Centraid || true
 documents_listing
+ui_status=0
 TEST_RUNNER_CENTRAID_DEV_SEED="$CENTRAID_DEV_SEED" \
   xcodebuild -project Centraid.xcodeproj -scheme Centraid \
   -destination "$destination" -derivedDataPath "$artifacts/app-derived-data" \
   -resultBundlePath "$artifacts/CentraidUITests.xcresult" \
   -only-testing:CentraidUITests test \
-  2>&1 | tee "$artifacts/centraid-ui-tests.log"
+  2>&1 | tee "$artifacts/centraid-ui-tests.log" || ui_status=$?
+# Export the durable XCTAttachment screenshots from the result bundle. Fail the job if the
+# expected screenshot attachments were not actually written, rather than treating an empty
+# output directory as visual proof.
+mkdir -p "$artifacts/screenshots"
+xcrun xcresulttool export attachments \
+  --path "$artifacts/CentraidUITests.xcresult" \
+  --output-path "$artifacts/screenshots"
+if ! find "$artifacts/screenshots" -type f -name '*.png' -print -quit | grep -q .; then
+  echo "error: CentraidUITests produced no screenshot PNG attachments" >&2
+  exit 1
+fi
+if [ "$ui_status" -ne 0 ]; then exit "$ui_status"; fi
 # REDUCE MOTION HAS NO LAUNCH ARGUMENT (#1202, S4), nor does Bold Text: they are the
 # system's own settings, so they are written into this simulator's accessibility
 # preferences and it is restarted, and the one UI test that wants them says so by
