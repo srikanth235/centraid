@@ -5,8 +5,8 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use super::door::Door;
 use super::blocks::{self, Confirm};
+use super::door::Door;
 use super::frame::room;
 use super::screen::{Build, Event, Input, Nav, Outcome, Registry, RoomScreen, Status};
 use super::selector::Handler;
@@ -196,10 +196,13 @@ pub fn handle(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
             |refused| Outcome::refuse(&refused.0),
             |()| Outcome::default(),
         ),
-        "settings" => ask(e.door, wire::FollowVerb::Settings, system).map_or_else(
-            |refused| Outcome::refuse(&refused.0),
-            |()| Outcome::default(),
+        "settings" => Outcome::effect(
+            &format!("follow:settled:{system}"),
+            wire::shell_effect::Kind::OpenSettings(wire::ShellOpenSettings {
+                system: system.to_owned(),
+            }),
         ),
+        "settled" => Outcome::default(),
         "note" => {
             let status = status(e.door, system).unwrap_or_default();
             let blocked = wire::FollowGrant::try_from(status.blocked).unwrap_or_default();
@@ -245,8 +248,14 @@ impl RoomScreen for StopConfirm {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
-        let holes = [("store", store(&self.system)), ("source", source(&self.system))];
-        let holes = [(holes[0].0, holes[0].1.as_str()), (holes[1].0, holes[1].1.as_str())];
+        let holes = [
+            ("store", store(&self.system)),
+            ("source", source(&self.system)),
+        ];
+        let holes = [
+            (holes[0].0, holes[0].1.as_str()),
+            (holes[1].0, holes[1].1.as_str()),
+        ];
         let title = fill(&words::stop_title(EN), &holes);
         let body = fill(&words::stop_body(EN), &holes);
         let confirm = blocks::confirm(
@@ -288,10 +297,14 @@ impl RoomScreen for StopConfirm {
             Ok(_) => Outcome {
                 nav: Nav::Pop,
                 status: Some(Status {
-                    sentence: fill(&words::stopped_status(EN), &[("store", &store(&self.system))]),
+                    sentence: fill(
+                        &words::stopped_status(EN),
+                        &[("store", &store(&self.system))],
+                    ),
                     undo: false,
                     refused: false,
                 }),
+                ..Outcome::default()
             },
             Err(refused) => Outcome::refuse(&refused.0),
         }

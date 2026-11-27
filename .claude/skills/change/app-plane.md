@@ -457,15 +457,15 @@ The member turns a phone store on from the More of the app that owns it; the cor
 | `health` | Health: "Follow Health" | the health store, read permission only; windows and a cursor | on the member's tap |
 | `camera_roll` | Photos: "Follow camera roll" | the grant only (the camera-roll walk stays the pass service's) | on the member's tap |
 
-**The wire** is `FollowRequest`/`FollowResponse` and one pushed event, `FollowAsk` (`Event.follow`). Field numbers are additive.
+**The wire** is `FollowRequest`/`FollowResponse` and the shell-effect channel of section 17 (`ShellStoreRead`, `ShellPhoneWatch`, `ShellOpenSettings`, `ShellReleaseGrant`, pushed as `Event.effect`). Field numbers are additive.
 
 | Direction | Message | Meaning |
 | --- | --- | --- |
 | Room, on a tap | `FollowRequest{verb: ENROL, system}` through `Door::call` | The member's tap. Core mints an ask with `ask_permission` true and pushes it |
 | Shell, app forward, a watch, a window | `FollowRequest{verb: TRIGGER, system}` (empty `system` is every store) | A trigger carries no data. For every store this device enrolled and the phone has not refused, core pushes one ask with `ask_permission` false. It never pushes one for a store not enrolled, refused, restricted or unavailable, and a trigger while an ask is in flight queues exactly one more |
-| Core to shell | `Event.follow = FollowAsk{ask_id, system, kind, ask_permission, window, cursor}` | `READ`: read the store and answer. `WATCH_ON`/`WATCH_OFF`: start or stop watching the store (contacts, calendar, reminders) and send a `TRIGGER` for it on each change. `OPEN_SETTINGS`: open the OS settings page for the store (the member's tap on a refused row). `FORGET`: release the grant for one folder |
-| Shell to core | `FollowRequest{verb: PASS, system, ask_id, grant, input_json, refused, background_refused}` | The answer to a `READ`. `grant` is what the OS said; with `GRANTED`, `input_json` is the follow command's input (`origin`, `records`, `complete`, `since`, `gone`; for Health `{"workouts": …, "readings": …}`). An answer to an older ask is `stale` and ignored |
-| Room, on the stop row | `FollowRequest{verb: STOP, system, input_json: {"ref"?}}` | Retires every origin of the store (or the one `ref`), forgets this device's habit, answers `WATCH_OFF` and, for a folder, `FORGET`. Deletes nothing |
+| Core to shell | `Event.effect`: `store_read{system, ask_permission, window, cursor}`, `phone_watch{system, on}`, `release_grant{ref}`; a room's tap on a refused row asks `open_settings{system}` through `Outcome::effect` | `store_read`: read the store and answer with `PASS` (its `ask_id` is the effect's `effect_id`). `phone_watch`: start or stop watching (contacts, calendar, reminders) and send a `TRIGGER` for it on each change. `release_grant`: release the grant for one folder |
+| Shell to core | `FollowRequest{verb: PASS, system, ask_id, grant, input_json, refused, background_refused}` | The answer to a `store_read`. `grant` is what the OS said; with `GRANTED`, `input_json` is the follow command's input (`origin`, `records`, `complete`, `since`, `gone`; for Health `{"workouts": …, "readings": …}`). An answer to an older ask is `stale` and ignored |
+| Room, on the stop row | `FollowRequest{verb: STOP, system, input_json: {"ref"?}}` | Retires every origin of the store (or the one `ref`), forgets this device's habit, pushes `phone_watch` off and, for a folder, `release_grant`. Deletes nothing |
 
 **Rules.**
 
@@ -478,4 +478,29 @@ The member turns a phone store on from the More of the app that owns it; the cor
 
 **D13: the enrolment key.** `follow.<store>` (`contacts`, `calendar`, `reminders`, `files`, `health`, `camera_roll`): `{"v":1,"on":true,"chosen":[…]}` (`chosen` is Health's types), core-owned, in the device store beside the vault.
 
-**Not built (target).** The native adapters (Swift, Kotlin) that perform `FollowAsk` and send `FollowRequest`; until they land a shell that sends nothing leaves every store as it is. A background-window pass for Health (Android only) waits on the same adapters.
+**Not built (target).** The native adapters (Swift, Kotlin) that perform the following effects and send `FollowRequest`; until they land a shell that sends nothing leaves every store as it is. A background-window pass for Health (Android only) waits on the same adapters.
+
+## 17. The shell-effect channel
+
+A room never touches the phone. When a tap needs the phone, its screen returns `Outcome::effect(tag, kind)`; the runtime gives the effect an id, answers the event with it in `RoomResponse.effects`, and routes the shell's answer (`RoomEvent.effect_result`, carrying the id) back to the same room as `Input::Effect` under `tag`. The core asks on its own through `Event.effect` (following does); an answer to those is a request of its own (`FollowRequest{PASS}`), not a room event. The wire is `ShellEffect` and `ShellEffectResult` in [`room.proto`](../../../crates/api-proto/proto/centraid/core/v1/room.proto); every variant is defined now so the native lanes are briefed once. Bytes never cross: a file is a path the core wrote or a shell picked. A shell names no command and no screen, and does only what an effect says.
+
+The old performers are the intended homes: iOS `ScreenPlatform.swift`, `LockerClipboardLease.swift`, `ShelfCopyExport.swift`, `Chat/ChatModelDownload.swift`; Android `kit/ScreenEffects.kt`, `kit/OwnerPrompt.kt`.
+
+| Effect (answer) | iOS | Android | Used by |
+| --- | --- | --- | --- |
+| `store_read` (a `FollowRequest{PASS}`) | `CNContactStore`, `EKEventStore` events and reminders, `HKHealthStore` read-only, the document picker with a security-scoped bookmark, `PHPhotoLibrary` authorization | `ContactsContract`, `CalendarContract`, Health Connect `HealthConnectClient`, `ACTION_OPEN_DOCUMENT_TREE`, `READ_MEDIA_IMAGES`; Reminders answers `UNAVAILABLE` | Following (built in Rust; the performers are target) |
+| `phone_watch` (none) | `EKEventStoreChanged`, `CNContactStoreDidChange` | content observers (`PhoneWatchers.kt`) | Following |
+| `open_settings` (`ShellDone`) | `UIApplication.openSettingsURLString` | `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`, or the notification channel page for `notifications` | Following (built); Notifications |
+| `release_grant` (none) | drop the folder's bookmark | release the persisted tree URI permission | Following |
+| `owner_check` (`ShellOwner`) | `LAContext` `deviceOwnerAuthentication` | `BiometricPrompt` with device credential (`OwnerPrompt.kt`) | Locker, every `export*`, recovery key, restore (target) |
+| `share` (`ShellDone`) | `UIActivityViewController` | `Intent.ACTION_SEND` through a `FileProvider` | A single item's Share (target) |
+| `save_file` (`ShellDone`) | `UIDocumentPickerViewController` export | `ACTION_CREATE_DOCUMENT` | Export (target) |
+| `pick_file` (`ShellPicked`) | `UIDocumentPickerViewController` open | `ACTION_OPEN_DOCUMENT` | Docs, imports (target) |
+| `pick_photo` (`ShellPicked`) | `PHPickerViewController` | the photo picker | Photos (target) |
+| `scan_document` (`ShellPicked`) | `VNDocumentCameraViewController` | the document scanner | Docs, Money (target) |
+| `clipboard_copy` (`ShellDone`) | `UIPasteboard` with `localOnly` and an expiry, the lease in `LockerClipboardLease.swift` | `ClipboardManager` with `EXTRA_IS_SENSITIVE`, cleared at the lease | Locker (target) |
+| `photo_delete` (`ShellDone` or `ShellFailed{cancelled}`) | `PHAssetChangeRequest.deleteAssets` | `MediaStore.createDeleteRequest` | Photos Free up space (target) |
+| `model_download` (`ShellDone`) | a background `URLSession` download (`ChatModelDownload.swift`) | `DownloadManager` or `WorkManager` | Chat (target) |
+| `permission_status` (`ShellGrant`) | `UNUserNotificationCenter`, `PHPhotoLibrary`, `AVCaptureDevice`, the store's own status | `NotificationManagerCompat`, `checkSelfPermission` | Settings, the More rows (target) |
+
+A refused grant answers `ShellFailed{grant}` or `ShellGrant{grant}` with one of `REFUSED`, `RESTRICTED`, `LIMITED`, `UNAVAILABLE`; a dismissed sheet is `ShellFailed{cancelled}`. Core words every sentence the member reads. Built here: the channel, `Outcome::effect`, `Input::Effect`, and the callers for following (`store_read`, `phone_watch`, `open_settings`, `release_grant`); the rest are defined and wait for their lanes.

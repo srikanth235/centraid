@@ -94,6 +94,9 @@ struct Entry {
     restore: Option<Place>,
     status: Option<Status>,
     last: Option<wire::Room>,
+    pending: BTreeMap<u64, String>,
+    outbox: Vec<wire::ShellEffect>,
+    asked: u64,
 }
 
 pub struct Rooms {
@@ -150,6 +153,9 @@ impl Rooms {
             restore: None,
             status: None,
             last: None,
+            pending: BTreeMap::new(),
+            outbox: Vec::new(),
+            asked: 0,
         };
         rebuild(&mut entry, door)?;
         self.next += 1;
@@ -177,6 +183,15 @@ impl Rooms {
             movement,
             room: top.last.clone().unwrap_or_default(),
         }
+    }
+
+    /// The effects the rooms asked for since the last call, in order.
+    pub fn take_effects(&mut self) -> Vec<wire::ShellEffect> {
+        self.stacks
+            .values_mut()
+            .flatten()
+            .flat_map(|entry| std::mem::take(&mut entry.outbox))
+            .collect()
     }
 
     /// The depth of a tab's stack.
@@ -294,6 +309,10 @@ fn handle(entry: &mut Entry, event: &wire::RoomEvent, door: &dyn Door) -> Then {
             });
             Then::Nothing
         }
+        Some(E::EffectResult(result)) => match entry.pending.remove(&result.effect_id) {
+            Some(tag) => own(entry, &tag, &Input::Effect(result.clone()), door),
+            None => Then::Nothing,
+        },
         Some(E::Tap(tap)) => dispatch(entry, &tap.selector_id, &Input::Tap, door),
         Some(E::Change(change)) => {
             let input = match &change.value {
@@ -421,6 +440,15 @@ fn own(entry: &mut Entry, tag: &str, input: &Input, door: &dyn Door) -> Then {
     };
     if let Some(status) = outcome.status {
         entry.status = Some(status);
+    }
+    if let Some((tag, kind)) = outcome.effect {
+        entry.asked += 1;
+        let effect_id = (entry.id << 32) | entry.asked;
+        entry.pending.insert(effect_id, tag);
+        entry.outbox.push(wire::ShellEffect {
+            effect_id,
+            kind: Some(kind),
+        });
     }
     match outcome.nav {
         Nav::Stay => Then::Rebuild,

@@ -1504,7 +1504,10 @@ impl RoomScreen for FollowedFoldersPage {
                                     &mut b.sel,
                                     &format!("followed/{}/stop", origin.id),
                                     &words::menu_stop_following(EN),
-                                    Handler::Open(format!("follow/stop/files:{}", origin.external_ref)),
+                                    Handler::Open(format!(
+                                        "follow/stop/files:{}",
+                                        origin.external_ref
+                                    )),
                                 )],
                             )],
                             &mut b.sel,

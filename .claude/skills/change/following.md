@@ -13,11 +13,11 @@ The phone's own stores (contacts, calendars, reminders, a picked folder, the hea
 - `Store` is the list: `contacts`, `calendar`, `reminders`, `files`, `health`, `camera_roll`. `key()` is the wire's `system` and the device key's suffix; `origin_system()` is the vault's (`reminders` is `phone_reminders`); `command()` is `follow.<system>` (Health also runs `follow.health_readings`).
 - Enrolment is a device key, `follow.<store>` (app-plane D13), set when the OS grants the member's tap and deleted by a stop. A pass asks it first and asks nothing of a store this device did not enrol.
 - Requests, all `FollowRequest` through `centraid_call` (the five symbols are untouched):
-  - `ENROL` (a room's tap): one `FollowAsk` with `ask_permission` true. The only place the OS is asked.
-  - `TRIGGER` (app forward, a watch, a window): for each enrolled store the phone has not refused, one ask with `ask_permission` false. An ask already in flight queues exactly one more; a third trigger replaces an ask nobody answered. No clock: the machine moves on triggers and answers.
+  - `ENROL` (a room's tap): one `store_read` effect with `ask_permission` true. The only place the OS is asked.
+  - `TRIGGER` (app forward, a watch, a window): for each enrolled store the phone has not refused, one `store_read` with `ask_permission` false. An ask already in flight queues exactly one more; a third trigger replaces an ask nobody answered. No clock: the machine moves on triggers and answers.
   - `PASS` (the shell's answer): an answer to an ask that is not the store's current one is `stale` and ignored. `GRANTED` and `LIMITED` run `follow.<system>` with `input_json`; `REFUSED`, `RESTRICTED` and `UNAVAILABLE` block the store (no trigger asks again until the member taps `ENROL`); `CANCELLED` changes nothing.
-  - `STOP`: runs `follow.stop` for each live origin of the store (or the one `{"ref"}`), forgets the habit, answers `WATCH_OFF` and, for a folder, `FORGET`. Deletes nothing.
-  - `STATUS`: what a room says (`FollowStatus`). `SETTINGS`: pushes `OPEN_SETTINGS`.
+  - `STOP`: runs `follow.stop` for each live origin of the store (or the one `{"ref"}`), forgets the habit, pushes `phone_watch` off and, for a folder, `release_grant`. Deletes nothing.
+  - `STATUS`: what a room says (`FollowStatus`). A refused row's "Open Settings" is the room's own `open_settings` effect (app-plane section 17).
 - A cursor lives on the origin row. Health's ask carries the cursor this install's origin holds (`entity.followed_stores`, the row whose `device_id` is this install; none or another install's is empty, a complete read). The answer's command input carries the new one in `origin.cursor`; the core sets `origin.device_id` itself, so it moves in the same commit as the records. A shell keeps no cursor.
 - The window an ask places: Calendar 7 days back and 62 on; Health 365 days of totals and 90 days of workouts (`days_back`, `workouts_since_ms`). The shell reads the days in the phone's zone.
 - After every request that changes a store's state the core pushes a change of the table `follow`; a room that built a follow row watches it and redraws.
@@ -28,17 +28,19 @@ The phone's own stores (contacts, calendars, reminders, a picked folder, the hea
 
 ## What each shell performs (target: the native lane builds these)
 
-| Core pushes (`Event.follow`, `FollowAsk.kind`) | The shell does |
+The channel and every other variant are app-plane section 17; the performers are the existing `ScreenPlatform.swift` and `kit/ScreenEffects.kt` families. For following:
+
+| Effect (`Event.effect` or a room response) | The shell does |
 | --- | --- |
-| `READ`, `contacts` | iOS `CNContactStore` (request access only if `ask_permission`); Android `ContactsContract` with `READ_CONTACTS` (request only if `ask_permission`). Answers `PASS` with `grant` and, if granted, `{"origin":{"ref","label"},"records":[{"external_id","fields"}],"complete"}` |
-| `READ`, `calendar` | iOS `EKEventStore` events and calendars from `days_back` to `days_on`; Android `CalendarContract`. A write-only iOS grant is `RESTRICTED`; a partial read is `LIMITED` with `complete` false |
-| `READ`, `reminders` | iOS `EKEventStore` reminders. Android has no store: answer `UNAVAILABLE` |
-| `READ`, `files` | With `ask_permission`, the system folder picker (iOS document picker with a security-scoped bookmark, Android `ACTION_OPEN_DOCUMENT_TREE`), then keep the grant (D9). Without it, read every folder whose grant is held. Answer one snapshot per folder; a dismissed picker is `CANCELLED` |
-| `READ`, `health` | iOS HealthKit, Android Health Connect, read permission only, for `chosen` over `days_back` and `workouts_since_ms`. With `cursor` answer a delta (changed rows only, ids of deleted workouts in `gone`) or a complete read when the cursor is unusable; put the new one in `origin.cursor`. `refused` names the types the OS refused; `background_refused` is Health Connect's. Input is `{"workouts": …, "readings": …}` |
-| `READ`, `camera_roll` | Ask the photo-library grant only if `ask_permission`; answer `grant`, no snapshot (the walk is the pass service's) |
-| `WATCH_ON`, `WATCH_OFF` (contacts, calendar, reminders) | iOS `EKEventStoreChanged` and `CNContactStoreDidChange`; Android content observers. On a change send `FollowRequest{TRIGGER, system}` |
-| `OPEN_SETTINGS` | iOS `UIApplication.openSettingsURLString`; Android `ACTION_APPLICATION_DETAILS_SETTINGS` |
-| `FORGET` (`ref`) | Release the folder's grant (D9) |
+| `store_read`, `contacts` | iOS `CNContactStore` (request access only if `ask_permission`); Android `ContactsContract` with `READ_CONTACTS` (request only if `ask_permission`). Answers `FollowRequest{PASS, ask_id = effect_id}` with `grant` and, if granted, `{"origin":{"ref","label"},"records":[{"external_id","fields"}],"complete"}` |
+| `store_read`, `calendar` | iOS `EKEventStore` events and calendars from `days_back` to `days_on`; Android `CalendarContract`. A write-only iOS grant is `RESTRICTED`; a partial read is `LIMITED` with `complete` false |
+| `store_read`, `reminders` | iOS `EKEventStore` reminders. Android has no store: answer `UNAVAILABLE` |
+| `store_read`, `files` | With `ask_permission`, the system folder picker (iOS document picker with a security-scoped bookmark, Android `ACTION_OPEN_DOCUMENT_TREE`), then keep the grant (D9). Without it, read every folder whose grant is held. Answer one snapshot per folder; a dismissed picker is `CANCELLED` |
+| `store_read`, `health` | iOS HealthKit, Android Health Connect, read permission only, for `chosen` over `days_back` and `workouts_since_ms`. With `cursor` answer a delta (changed rows only, ids of deleted workouts in `gone`) or a complete read when the cursor is unusable; put the new one in `origin.cursor`. `refused` names the types the OS refused; `background_refused` is Health Connect's. Input is `{"workouts": …, "readings": …}` |
+| `store_read`, `camera_roll` | Ask the photo-library grant only if `ask_permission`; answer `grant`, no snapshot (the walk is the pass service's) |
+| `phone_watch` (contacts, calendar, reminders) | iOS `EKEventStoreChanged` and `CNContactStoreDidChange`; Android content observers. On a change send `FollowRequest{TRIGGER, system}` |
+| `open_settings` | iOS `UIApplication.openSettingsURLString`; Android `ACTION_APPLICATION_DETAILS_SETTINGS`. Answer `ShellDone` |
+| `release_grant` (`ref`) | Release the folder's grant (D9) |
 
 The shell also sends `TRIGGER` with no `system` each time the app comes forward and once when a granted background window opens (Android Health only, by the owner's decision). It sends nothing else, asks the OS only inside an ask whose `ask_permission` is true, and sends no snapshot of its own accord.
 
@@ -46,7 +48,7 @@ The shell also sends `TRIGGER` with no `system` each time the app comes forward 
 
 1. Vault first. Add or edit the `SystemMap` row, and use [vault-model](vault-model.md) for the schema digest, the `origin.system` and `source` CHECKs in `contracts/migrations/001_baseline.sql` and `contracts/schema/vault-commands.txt`.
 2. Add the `Store` variant (its `key`, `origin_system`, `command`, `watched`) in the follower, its window in `follow_ask` if it has one, and its row in the owning app's More (`follow::items`, a `strings/follow.rs` noun and source).
-3. A new kind of ask is a new `FollowAskKind` in `room.proto`; use [ffi](ffi.md) if the ABI is touched.
+3. A new kind of ask is a new `ShellEffect` variant in `room.proto`; use [ffi](ffi.md) if the ABI is touched.
 4. Say in the shell that cannot read the store why (Android's Reminders answers `UNAVAILABLE`).
 5. A refused or partial read is one plain status line, the same words for every store. It is not a failure.
 

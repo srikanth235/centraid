@@ -2419,6 +2419,7 @@ impl TxnForm {
                     undo: false,
                     refused: false,
                 }),
+                ..Outcome::default()
             }
         } else {
             let id = mint_uuid_v7(e.door.now_ms());
@@ -2451,6 +2452,7 @@ impl TxnForm {
                             undo: done.undo,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     }
                 }
                 Err(refused) => Outcome::refuse(&refused.0),
@@ -3050,6 +3052,7 @@ impl RoomScreen for CsvImportRoom {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 }
             }
             _ => Outcome::default(),
@@ -3316,6 +3319,7 @@ impl RoomScreen for NewAccountForm {
                             undo: done.undo,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     },
                     Err(refused) => Outcome::refuse(&refused.0),
                 }
@@ -3663,6 +3667,7 @@ impl RoomScreen for CurrencyRoom {
                             undo: done.undo,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     },
                     Err(refused) => {
                         self.confirming = false;
@@ -3783,6 +3788,7 @@ impl RoomScreen for CheckpointForm {
                             undo: done.undo,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     },
                     Err(refused) => Outcome::refuse(&refused.0),
                 }
@@ -3850,6 +3856,7 @@ impl RoomScreen for TrashAccountConfirm {
                         undo: done.undo,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -4507,6 +4514,7 @@ impl RoomScreen for CategoryMergeConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -4756,6 +4764,7 @@ impl RoomScreen for PurgeConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -4804,6 +4813,7 @@ impl RoomScreen for EmptyTrashConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };

@@ -906,6 +906,7 @@ impl RoomScreen for NewCalendarForm {
                             undo: true,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     },
                     Err(refused) => Outcome::refuse(&refused.0),
                 }
@@ -972,6 +973,7 @@ impl RoomScreen for TrashCalendarConfirm {
                         undo: done.undo,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -1361,6 +1363,7 @@ impl RoomScreen for EventDetailRoom {
                         undo: done.undo,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -1835,6 +1838,7 @@ impl RoomScreen for EventForm {
                                 undo: done.undo,
                                 refused: false,
                             }),
+                            ..Outcome::default()
                         }
                     }
                     Err(refused) => Outcome::refuse(&refused.0),
@@ -1944,6 +1948,7 @@ impl RoomScreen for ImportIcsRoom {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 }
             }
             _ => Outcome::default(),
@@ -2066,6 +2071,7 @@ impl RoomScreen for EmptyTrashConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -2114,6 +2120,7 @@ impl RoomScreen for PurgeConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };

@@ -805,6 +805,8 @@ message RoomEvent {
     RoomChange change = 2;
     RoomScrolled scrolled = 3;
     RoomCanvasEvent canvas = 4;
+    // The answer to a `ShellEffect` this room asked for (app-plane §17).
+    ShellEffectResult effect_result = 5;
   }
 }
 
@@ -917,6 +919,8 @@ message RoomRequest {
 // Zero shown when nothing the shell draws changed (a scroll report, a stale selector).
 message RoomResponse {
   repeated RoomShown shown = 1;
+  // What the event asks the shell to do on the phone, in order (app-plane §17).
+  repeated ShellEffect effects = 2;
 }
 
 // The device store (app-plane §10), through the core's key registry: a key that is not listed, or a
@@ -947,12 +951,177 @@ message DeviceResponse {
   string value = 2;
 }
 
+// THE SHELL-EFFECT CHANNEL (app-plane §17). The one way a room or the core asks a shell to do
+// something only the phone can: read a store, ask the OS, open a picker or a sheet. A room asks
+// with `Outcome::effect`; it comes back in `RoomResponse.effects`, and the answer returns as
+// `RoomEvent.effect_result` to the room that asked. The core asks on its own through `Event.effect`.
+// Field names are meaning, never layout; a shell names no command and no screen.
+message ShellEffect {
+  // Unique per core. The answer names it.
+  uint64 effect_id = 1;
+  oneof kind {
+    ShellStoreRead store_read = 2;
+    ShellPhoneWatch phone_watch = 3;
+    ShellOpenSettings open_settings = 4;
+    ShellReleaseGrant release_grant = 5;
+    ShellOwnerCheck owner_check = 6;
+    ShellShare share = 7;
+    ShellSaveFile save_file = 8;
+    ShellPickFile pick_file = 9;
+    ShellPickPhoto pick_photo = 10;
+    ShellScanDocument scan_document = 11;
+    ShellClipboardCopy clipboard_copy = 12;
+    ShellPhotoDelete photo_delete = 13;
+    ShellModelDownload model_download = 14;
+    ShellPermissionStatus permission_status = 15;
+  }
+}
+
+// Read a phone store (app-plane §16). `ask_permission` is true only in the ask a member's tap made.
+// Answered with `FollowRequest{PASS, ask_id = effect_id}`, not with a result.
+message ShellStoreRead {
+  string system = 1;
+  bool ask_permission = 2;
+  // Calendar: days around the shell's clock. Health: `days_back` of day totals.
+  uint32 days_back = 3;
+  uint32 days_on = 4;
+  // Health: where this install's last read got to (empty is a complete read), the types, and the
+  // earliest workout start, epoch milliseconds.
+  string cursor = 5;
+  repeated string chosen = 6;
+  int64 workouts_since_ms = 7;
+  // Health Connect: also ask to read while the app is closed (only with `ask_permission`).
+  bool ask_background = 8;
+}
+
+// Start or stop watching a store; on each change the shell sends `FollowRequest{TRIGGER, system}`.
+message ShellPhoneWatch {
+  string system = 1;
+  bool on = 2;
+}
+
+// Open the OS settings page where the member can allow `system` (a store, `notifications`, `photos`
+// or `camera`); empty is the app's own page. Answered with `ShellDone`.
+message ShellOpenSettings {
+  string system = 1;
+}
+
+// Release the grant held for one followed folder (`ref`).
+message ShellReleaseGrant {
+  string ref = 1;
+}
+
+// The phone's own owner check (biometric, passcode as fallback). `reason` is the sentence the OS shows.
+// Answered with `ShellOwner`.
+message ShellOwnerCheck {
+  string reason = 1;
+}
+
+message ShellShareItem {
+  string name = 1;
+  string media_type = 2;
+  // One of: finished text, or a file the core materialised at `path` (bytes never cross as payloads).
+  string text = 3;
+  string path = 4;
+}
+
+// Hand items to the OS share sheet. Answered with `ShellDone`.
+message ShellShare {
+  repeated ShellShareItem items = 1;
+  string subject = 2;
+}
+
+// Offer a file the core wrote at `path` to the OS save sheet. Answered with `ShellDone`.
+message ShellSaveFile {
+  string path = 1;
+  string name = 2;
+  string media_type = 3;
+}
+
+// The system file picker. `types` are media types (empty: any). Answered with `ShellPicked`.
+message ShellPickFile {
+  repeated string types = 1;
+  bool multiple = 2;
+}
+
+// The system photo picker. Answered with `ShellPicked`.
+message ShellPickPhoto {
+  bool multiple = 1;
+  bool video = 2;
+}
+
+// The document scanner. Answered with `ShellPicked` (one page per item).
+message ShellScanDocument {}
+
+// Copy to the clipboard. `sealed` marks it sensitive; it is cleared after `lease_s` seconds if still ours.
+message ShellClipboardCopy {
+  string text = 1;
+  bool sealed = 2;
+  uint32 lease_s = 3;
+}
+
+// Delete originals from the phone's photo library (only what a gateway acknowledged). Answered with
+// `ShellDone` or `ShellFailed{cancelled}`.
+message ShellPhotoDelete {
+  repeated string ids = 1;
+}
+
+// Fetch the on-device model's file. Answered with `ShellDone` when it is on disk.
+message ShellModelDownload {
+  string name = 1;
+}
+
+// What the OS says about a grant (`notifications`, `photos`, `camera`, or a store). Answered with `ShellGrant`.
+message ShellPermissionStatus {
+  string kind = 1;
+}
+
+message ShellDone {}
+
+message ShellFailed {
+  FollowGrant grant = 1;
+  string reason = 2;
+  bool cancelled = 3;
+}
+
+message ShellPickedItem {
+  string path = 1;
+  string name = 2;
+  string media_type = 3;
+  uint64 size = 4;
+}
+
+message ShellPicked {
+  repeated ShellPickedItem items = 1;
+}
+
+message ShellGrant {
+  FollowGrant grant = 1;
+}
+
+message ShellOwner {
+  bool passed = 1;
+  // The phone has no passcode: the check goes ahead with a warning.
+  bool no_passcode = 2;
+}
+
+message ShellEffectResult {
+  uint64 effect_id = 1;
+  oneof outcome {
+    ShellDone done = 2;
+    ShellFailed failed = 3;
+    ShellPicked picked = 4;
+    ShellGrant grant = 5;
+    ShellOwner owner = 6;
+  }
+}
+
 // FOLLOWING A PHONE STORE (app-plane §16; following.md). The core decides when to read and whether
 // the OS may be asked; the shell reads the store and answers; the vault merges. `system` is one of
 // `contacts`, `calendar`, `reminders`, `files`, `health`, `camera_roll`.
 enum FollowVerb {
   FOLLOW_VERB_UNSPECIFIED = 0;
-  // The shell's answer to a `FollowAsk`: what the OS said (`grant`) and, when granted, the snapshot.
+  // The shell's answer to a `store_read` effect: what the OS said (`grant`) and, when granted, the snapshot.
   FOLLOW_VERB_PASS = 1;
   // Stop following: retires the store's origins and forgets this device's enrolment. Deletes nothing.
   FOLLOW_VERB_STOP = 2;
@@ -962,8 +1131,6 @@ enum FollowVerb {
   FOLLOW_VERB_TRIGGER = 4;
   // What a room says about the store: answered in `FollowResponse.status`.
   FOLLOW_VERB_STATUS = 5;
-  // The member tapped "Open Settings" on a refused store: core pushes an `OPEN_SETTINGS` ask.
-  FOLLOW_VERB_SETTINGS = 6;
 }
 
 // What the OS said to a read.
@@ -1031,41 +1198,6 @@ message FollowStatus {
   bool background_refused = 8;
   // An ask is waiting for the shell's answer.
   bool asking = 9;
-}
-
-enum FollowAskKind {
-  FOLLOW_ASK_KIND_UNSPECIFIED = 0;
-  // Read the store (asking the OS only if `ask_permission`) and answer with `FollowRequest{PASS}`.
-  FOLLOW_ASK_KIND_READ = 1;
-  // Watch the store and send `FollowRequest{TRIGGER, system}` each time it changes.
-  FOLLOW_ASK_KIND_WATCH_ON = 2;
-  FOLLOW_ASK_KIND_WATCH_OFF = 3;
-  // Open the OS settings page where the member can allow this store.
-  FOLLOW_ASK_KIND_OPEN_SETTINGS = 4;
-  // Release the grant held for one folder (`ref`).
-  FOLLOW_ASK_KIND_FORGET = 5;
-}
-
-// Pushed as `Event.follow`.
-message FollowAsk {
-  uint64 ask_id = 1;
-  string system = 2;
-  FollowAskKind kind = 3;
-  // True only in the ask a member's tap made; a trigger's ask never asks the OS.
-  bool ask_permission = 4;
-  // Calendar: the window around the shell's clock.
-  uint32 days_back = 5;
-  uint32 days_on = 6;
-  // Health: where the last read of this install got to (empty is a complete read), the types the
-  // member chose, and the window: day totals from `days_back` civil days ago in the phone's zone,
-  // workouts that started at or after `workouts_since_ms`.
-  string cursor = 7;
-  repeated string chosen = 8;
-  int64 workouts_since_ms = 9;
-  // Health Connect: also ask to read while the app is closed (only with `ask_permission`).
-  bool ask_background = 10;
-  // FORGET: the origin's `ref`.
-  string ref = 11;
 }
 
 // THE SHARE-IN DRAIN (app-plane §10, D2): file what the share extension and the receiver left in

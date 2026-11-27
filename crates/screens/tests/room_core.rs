@@ -291,10 +291,14 @@ fn a_follow_request_names_a_followed_store_and_a_verb() {
     };
     assert!(call("secrets", wire::FollowVerb::Enrol, "").is_err());
     assert!(call("contacts", wire::FollowVerb::Unspecified, "").is_err());
-    let stopped = call("contacts", wire::FollowVerb::Stop, "").expect("a stop of nothing is answered");
+    let stopped =
+        call("contacts", wire::FollowVerb::Stop, "").expect("a stop of nothing is answered");
     let Some(wire::response::Kind::Follow(answer)) = stopped.kind else {
         panic!("a follow answer");
     };
-    assert!(!answer.declined, "stopping what is not followed is nothing: {answer:?}");
+    assert!(
+        !answer.declined,
+        "stopping what is not followed is nothing: {answer:?}"
+    );
     assert_eq!(answer.output_json, r#"{"stopped":0}"#);
 }

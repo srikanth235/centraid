@@ -1,5 +1,5 @@
 //! Following a phone store over a real core, played as a shell plays it (app-plane §16): a room's
-//! tap enrols, triggers carry no data, the shell answers each `FollowAsk` with what the OS said.
+//! tap enrols, triggers carry no data, the shell answers each `store_read` with what the OS said.
 //! Every assertion counts reads and permission asks; none measures time.
 
 use std::sync::Arc;
@@ -82,21 +82,21 @@ impl<'a> Shell<'a> {
     }
 
     /// Everything the core pushed since the last look: the reads asked for, in order.
-    fn pump(&mut self) -> Vec<wire::FollowAsk> {
+    fn pump(&mut self) -> Vec<wire::ShellEffect> {
+        use wire::shell_effect::Kind as K;
         let mut reads = Vec::new();
         while let Ok(Some(event)) = self.handle.next_event(Duration::from_millis(20)) {
             match event.kind {
-                Some(wire::event::Kind::Follow(ask)) => match ask.kind() {
-                    wire::FollowAskKind::Read => {
+                Some(wire::event::Kind::Effect(effect)) => match effect.kind.clone() {
+                    Some(K::StoreRead(read)) => {
                         self.reads += 1;
-                        self.permission_asks += u32::from(ask.ask_permission);
-                        reads.push(ask);
+                        self.permission_asks += u32::from(read.ask_permission);
+                        reads.push(effect);
                     }
-                    wire::FollowAskKind::WatchOn => self.watches.push((ask.system, true)),
-                    wire::FollowAskKind::WatchOff => self.watches.push((ask.system, false)),
-                    wire::FollowAskKind::OpenSettings => self.settings.push(ask.system),
-                    wire::FollowAskKind::Forget => self.forgotten.push(ask.r#ref),
-                    wire::FollowAskKind::Unspecified => panic!("an ask names its kind"),
+                    Some(K::PhoneWatch(watch)) => self.watches.push((watch.system, watch.on)),
+                    Some(K::OpenSettings(open)) => self.settings.push(open.system),
+                    Some(K::ReleaseGrant(release)) => self.forgotten.push(release.r#ref),
+                    other => panic!("an effect the follower never asks: {other:?}"),
                 },
                 Some(wire::event::Kind::Room(shown)) => self.room = Some(*shown),
                 _ => {}
@@ -107,14 +107,14 @@ impl<'a> Shell<'a> {
 
     fn answer(
         &self,
-        ask: &wire::FollowAsk,
+        ask: &wire::ShellEffect,
         grant: wire::FollowGrant,
         input: serde_json::Value,
     ) -> wire::FollowResponse {
         self.call(wire::FollowRequest {
             verb: wire::FollowVerb::Pass as i32,
-            system: ask.system.clone(),
-            ask_id: ask.ask_id,
+            system: read_of(ask).system.clone(),
+            ask_id: ask.effect_id,
             grant: grant as i32,
             input_json: if input.is_null() {
                 String::new()
@@ -137,7 +137,9 @@ impl<'a> Shell<'a> {
             wire::room_request::Kind::Send(wire::RoomSend {
                 instance: shown.instance,
                 event: Some(wire::RoomEvent {
-                    kind: Some(wire::room_event::Kind::Tap(wire::RoomTap { selector_id: id })),
+                    kind: Some(wire::room_event::Kind::Tap(wire::RoomTap {
+                        selector_id: id,
+                    })),
                 }),
             }),
         );
@@ -168,7 +170,12 @@ impl<'a> Shell<'a> {
         self.room
             .as_ref()
             .and_then(|shown| shown.room.as_ref())
-            .map(|room| more_rows(room).into_iter().map(|(label, _)| label).collect())
+            .map(|room| {
+                more_rows(room)
+                    .into_iter()
+                    .map(|(label, _)| label)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -188,6 +195,13 @@ impl<'a> Shell<'a> {
 
     fn rendered(&self) -> String {
         snapshot::render(self.room.as_ref().unwrap().room.as_ref().unwrap())
+    }
+}
+
+fn read_of(effect: &wire::ShellEffect) -> &wire::ShellStoreRead {
+    match &effect.kind {
+        Some(wire::shell_effect::Kind::StoreRead(read)) => read,
+        other => panic!("not a read: {other:?}"),
     }
 }
 
@@ -253,7 +267,10 @@ fn a_tap_asks_the_phone_once_and_a_granted_read_is_followed_and_said() {
     shell.tap("Follow Contacts");
     let asks = shell.pump();
     assert_eq!(asks.len(), 1, "one tap, one ask");
-    assert!(asks[0].ask_permission, "the member's tap is the one place the OS is asked");
+    assert!(
+        read_of(&asks[0]).ask_permission,
+        "the member's tap is the one place the OS is asked"
+    );
     assert_eq!((shell.reads, shell.permission_asks), (1, 1));
 
     let done = shell.answer(
@@ -265,13 +282,30 @@ fn a_tap_asks_the_phone_once_and_a_granted_read_is_followed_and_said() {
     shell.pump();
     assert_eq!(shell.watches, [("contacts".to_owned(), true)]);
 
-    assert!(shell.labels().contains(&"Following Contacts".to_owned()), "{:?}", shell.labels());
-    assert!(shell.labels().contains(&"Stop following Contacts".to_owned()));
-    let status = shell.verb(wire::FollowVerb::Status, "contacts").status.unwrap();
-    assert!(status.enrolled && status.read && status.count == 2, "{status:?}");
+    assert!(
+        shell.labels().contains(&"Following Contacts".to_owned()),
+        "{:?}",
+        shell.labels()
+    );
+    assert!(
+        shell
+            .labels()
+            .contains(&"Stop following Contacts".to_owned())
+    );
+    let status = shell
+        .verb(wire::FollowVerb::Status, "contacts")
+        .status
+        .unwrap();
+    assert!(
+        status.enrolled && status.read && status.count == 2,
+        "{status:?}"
+    );
 
     let people = open_text(&handle, "people");
-    assert!(people.contains("Grace Hopper") && people.contains("Alan Turing"), "{people}");
+    assert!(
+        people.contains("Grace Hopper") && people.contains("Alan Turing"),
+        "{people}"
+    );
 }
 
 fn open_text(handle: &Handle, key: &str) -> String {
@@ -293,37 +327,63 @@ fn background_triggers_read_without_asking_and_a_store_not_enrolled_is_never_rea
     let handle = phone(dir.path());
     let mut shell = Shell::new(&handle);
 
-    assert_eq!(shell.verb(wire::FollowVerb::Trigger, "").asked, 0, "nothing enrolled, nothing read");
+    assert_eq!(
+        shell.verb(wire::FollowVerb::Trigger, "").asked,
+        0,
+        "nothing enrolled, nothing read"
+    );
     assert!(shell.pump().is_empty());
     assert_eq!(shell.reads, 0);
 
     people_enrolled(&mut shell);
     let (reads, asked_before) = (shell.reads, shell.permission_asks);
     for _ in 0..3 {
-        assert_eq!(shell.verb(wire::FollowVerb::Trigger, "").asked, 1, "only the enrolled store");
+        assert_eq!(
+            shell.verb(wire::FollowVerb::Trigger, "").asked,
+            1,
+            "only the enrolled store"
+        );
         let asks = shell.pump();
         assert_eq!(asks.len(), 1);
-        assert!(!asks[0].ask_permission, "a background pass never asks the OS");
-        shell.answer(&asks[0], wire::FollowGrant::Granted, contacts(&[("c1", "Grace Hopper")]));
+        assert!(
+            !read_of(&asks[0]).ask_permission,
+            "a background pass never asks the OS"
+        );
+        shell.answer(
+            &asks[0],
+            wire::FollowGrant::Granted,
+            contacts(&[("c1", "Grace Hopper")]),
+        );
     }
     assert_eq!(shell.reads, reads + 3);
-    assert_eq!(shell.permission_asks, asked_before, "background passes asked 0 times");
+    assert_eq!(
+        shell.permission_asks, asked_before,
+        "background passes asked 0 times"
+    );
 }
 
 #[test]
 fn a_refused_permission_says_so_makes_no_reads_after_and_offers_settings() {
     let dir = tempfile::tempdir().unwrap();
     let handle = phone(dir.path());
+    let handle = &handle;
     let mut shell = Shell::new(&handle);
     shell.open("people");
     shell.tap("Follow Contacts");
     let asks = shell.pump();
-    shell.answer(&asks[0], wire::FollowGrant::Refused, serde_json::Value::Null);
+    shell.answer(
+        &asks[0],
+        wire::FollowGrant::Refused,
+        serde_json::Value::Null,
+    );
     shell.pump();
 
     let labels = shell.labels();
     assert!(labels.contains(&"Contacts is off".to_owned()), "{labels:?}");
-    assert!(labels.contains(&"Follow Contacts".to_owned()), "a refusal can be tried again: {labels:?}");
+    assert!(
+        labels.contains(&"Follow Contacts".to_owned()),
+        "a refusal can be tried again: {labels:?}"
+    );
     let reads = shell.reads;
     for _ in 0..3 {
         assert_eq!(shell.verb(wire::FollowVerb::Trigger, "").asked, 0);
@@ -331,14 +391,58 @@ fn a_refused_permission_says_so_makes_no_reads_after_and_offers_settings() {
     assert!(shell.pump().is_empty());
     assert_eq!(shell.reads, reads, "a refusal makes 0 reads after");
 
-    shell.tap("Contacts is off");
-    shell.pump();
-    assert_eq!(shell.settings, ["contacts"], "the row links to the OS settings");
+    let shown = shell.room.clone().unwrap();
+    let id = more_rows(shown.room.as_ref().unwrap())
+        .into_iter()
+        .find(|(label, _)| label == "Contacts is off")
+        .unwrap()
+        .1;
+    let send = |kind: wire::room_event::Kind| match handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Room(wire::RoomRequest {
+                kind: Some(wire::room_request::Kind::Send(wire::RoomSend {
+                    instance: shown.instance,
+                    event: Some(wire::RoomEvent { kind: Some(kind) }),
+                })),
+            })),
+        })
+        .unwrap()
+        .kind
+    {
+        Some(wire::response::Kind::Room(answer)) => answer,
+        other => panic!("{other:?}"),
+    };
+    let answer = send(wire::room_event::Kind::Tap(wire::RoomTap {
+        selector_id: id,
+    }));
+    assert_eq!(
+        answer.effects.len(),
+        1,
+        "the tap asks the shell for one thing"
+    );
+    let effect = &answer.effects[0];
+    assert!(matches!(
+        &effect.kind,
+        Some(wire::shell_effect::Kind::OpenSettings(open)) if open.system == "contacts"
+    ));
+    let back = send(wire::room_event::Kind::EffectResult(
+        wire::ShellEffectResult {
+            effect_id: effect.effect_id,
+            outcome: Some(wire::shell_effect_result::Outcome::Done(wire::ShellDone {})),
+        },
+    ));
+    assert!(
+        back.effects.is_empty(),
+        "the answer returns to the room that asked"
+    );
 
     shell.tap("Follow Contacts");
     let again = shell.pump();
     assert_eq!(again.len(), 1);
-    assert!(again[0].ask_permission, "only the member's tap asks again");
+    assert!(
+        read_of(&again[0]).ask_permission,
+        "only the member's tap asks again"
+    );
     assert_eq!(shell.permission_asks, 2);
 }
 
@@ -351,12 +455,19 @@ fn a_grant_the_member_takes_back_later_ends_reading_until_the_next_tap() {
 
     shell.verb(wire::FollowVerb::Trigger, "contacts");
     let asks = shell.pump();
-    shell.answer(&asks[0], wire::FollowGrant::Refused, serde_json::Value::Null);
+    shell.answer(
+        &asks[0],
+        wire::FollowGrant::Refused,
+        serde_json::Value::Null,
+    );
     let reads = shell.reads;
     assert_eq!(shell.verb(wire::FollowVerb::Trigger, "").asked, 0);
     shell.pump();
     assert_eq!(shell.reads, reads);
-    let status = shell.verb(wire::FollowVerb::Status, "contacts").status.unwrap();
+    let status = shell
+        .verb(wire::FollowVerb::Status, "contacts")
+        .status
+        .unwrap();
     assert_eq!(status.blocked, wire::FollowGrant::Refused as i32);
 }
 
@@ -369,15 +480,33 @@ fn triggers_during_a_pass_queue_exactly_one_more_and_a_stale_answer_changes_noth
 
     assert_eq!(shell.verb(wire::FollowVerb::Trigger, "contacts").asked, 1);
     let first = shell.pump().remove(0);
-    assert_eq!(shell.verb(wire::FollowVerb::Trigger, "contacts").asked, 0, "joined the one in flight");
+    assert_eq!(
+        shell.verb(wire::FollowVerb::Trigger, "contacts").asked,
+        0,
+        "joined the one in flight"
+    );
     assert!(shell.pump().is_empty());
 
-    let done = shell.answer(&first, wire::FollowGrant::Granted, contacts(&[("c1", "Grace Hopper")]));
-    assert_eq!(done.asked, 1, "the queued trigger runs once after the answer");
+    let done = shell.answer(
+        &first,
+        wire::FollowGrant::Granted,
+        contacts(&[("c1", "Grace Hopper")]),
+    );
+    assert_eq!(
+        done.asked, 1,
+        "the queued trigger runs once after the answer"
+    );
     let second = shell.pump().remove(0);
     let late = shell.answer(&first, wire::FollowGrant::Granted, contacts(&[]));
-    assert!(late.stale, "an answer to an ask that is no longer current is ignored");
-    let done = shell.answer(&second, wire::FollowGrant::Granted, contacts(&[("c1", "Grace Hopper")]));
+    assert!(
+        late.stale,
+        "an answer to an ask that is no longer current is ignored"
+    );
+    let done = shell.answer(
+        &second,
+        wire::FollowGrant::Granted,
+        contacts(&[("c1", "Grace Hopper")]),
+    );
     assert_eq!(done.asked, 0, "no more than one was queued");
     assert!(shell.pump().is_empty());
 }
@@ -411,16 +540,37 @@ fn stopping_keeps_what_was_read_forgets_the_enrolment_and_ends_passes() {
         sheet.contains("Stop following Contacts?") && sheet.contains("What it already added stays"),
         "a stop asks first, in words that say nothing is deleted:\n{sheet}"
     );
-    assert_eq!(shell.verb(wire::FollowVerb::Status, "contacts").status.unwrap().enrolled, true);
+    assert_eq!(
+        shell
+            .verb(wire::FollowVerb::Status, "contacts")
+            .status
+            .unwrap()
+            .enrolled,
+        true
+    );
     shell.tap_id("confirm/no");
-    assert!(shell.verb(wire::FollowVerb::Status, "contacts").status.unwrap().enrolled, "cancel stops nothing");
+    assert!(
+        shell
+            .verb(wire::FollowVerb::Status, "contacts")
+            .status
+            .unwrap()
+            .enrolled,
+        "cancel stops nothing"
+    );
     shell.tap("Stop following Contacts");
     shell.tap_id("confirm/yes");
     shell.pump();
     assert_eq!(shell.watches.last(), Some(&("contacts".to_owned(), false)));
-    assert!(shell.labels().contains(&"Follow Contacts".to_owned()), "{:?}", shell.labels());
+    assert!(
+        shell.labels().contains(&"Follow Contacts".to_owned()),
+        "{:?}",
+        shell.labels()
+    );
     assert_eq!(shell.verb(wire::FollowVerb::Trigger, "").asked, 0);
-    assert!(shell.pump().is_empty(), "a stopped store is never read again");
+    assert!(
+        shell.pump().is_empty(),
+        "a stopped store is never read again"
+    );
 
     let people = open_text(&handle, "people");
     assert!(
@@ -437,9 +587,12 @@ fn health_resumes_from_the_cursor_the_origin_holds_and_never_asks_in_a_pass() {
     shell.open("health");
     shell.tap("Follow Health");
     let first = shell.pump().remove(0);
-    assert!(first.ask_permission && first.cursor.is_empty(), "a first read is complete");
-    assert_eq!(first.days_back, 365);
-    assert_eq!(first.workouts_since_ms, NOW - 90 * 86_400_000);
+    assert!(
+        read_of(&first).ask_permission && read_of(&first).cursor.is_empty(),
+        "a first read is complete"
+    );
+    assert_eq!(read_of(&first).days_back, 365);
+    assert_eq!(read_of(&first).workouts_since_ms, NOW - 90 * 86_400_000);
 
     let snapshot = |cursor: &str| {
         json!({ "workouts": {
@@ -455,12 +608,16 @@ fn health_resumes_from_the_cursor_the_origin_holds_and_never_asks_in_a_pass() {
 
     shell.verb(wire::FollowVerb::Trigger, "health");
     let second = shell.pump().remove(0);
-    assert!(!second.ask_permission);
-    assert_eq!(second.cursor, "anchors-1", "the next read resumes where the vault says it stopped");
+    assert!(!read_of(&second).ask_permission);
+    assert_eq!(
+        read_of(&second).cursor,
+        "anchors-1",
+        "the next read resumes where the vault says it stopped"
+    );
     shell.answer(&second, wire::FollowGrant::Granted, snapshot("anchors-2"));
     shell.pump();
     shell.verb(wire::FollowVerb::Trigger, "health");
-    assert_eq!(shell.pump().remove(0).cursor, "anchors-2");
+    assert_eq!(read_of(&shell.pump().remove(0)).cursor, "anchors-2");
     assert_eq!(shell.permission_asks, 1);
 }
 
@@ -472,10 +629,16 @@ fn reminders_that_the_phone_does_not_have_say_so_and_are_never_read() {
     shell.open("reminders");
     shell.tap("Follow Reminders");
     let asks = shell.pump();
-    shell.answer(&asks[0], wire::FollowGrant::Unavailable, serde_json::Value::Null);
+    shell.answer(
+        &asks[0],
+        wire::FollowGrant::Unavailable,
+        serde_json::Value::Null,
+    );
     shell.pump();
     assert!(
-        shell.labels().contains(&"Reminders isn’t on this phone".to_owned()),
+        shell
+            .labels()
+            .contains(&"Reminders isn’t on this phone".to_owned()),
         "{:?}",
         shell.labels()
     );
@@ -496,7 +659,12 @@ fn the_more_sheet_of_each_owning_app_offers_its_store() {
         ("photos", "Follow Camera roll"),
     ] {
         shell.open(key);
-        assert!(shell.labels().contains(&row.to_owned()), "{key}: {:?}\n{}", shell.labels(), shell.rendered());
+        assert!(
+            shell.labels().contains(&row.to_owned()),
+            "{key}: {:?}\n{}",
+            shell.labels(),
+            shell.rendered()
+        );
     }
 }
 
@@ -508,7 +676,10 @@ fn a_followed_folder_is_stopped_from_its_page_and_its_grant_is_released() {
     shell.open("docs");
     shell.tap("Follow a folder");
     let ask = shell.pump().remove(0);
-    assert!(ask.ask_permission, "the picker is the ask, and only the tap opens it");
+    assert!(
+        read_of(&ask).ask_permission,
+        "the picker is the ask, and only the tap opens it"
+    );
     let done = shell.answer(
         &ask,
         wire::FollowGrant::Granted,
@@ -516,9 +687,13 @@ fn a_followed_folder_is_stopped_from_its_page_and_its_grant_is_released() {
     );
     assert!(!done.declined, "{done:?}");
     shell.pump();
-    assert_eq!(shell.verb(wire::FollowVerb::Trigger, "").asked, 1, "the folder is read on a trigger");
+    assert_eq!(
+        shell.verb(wire::FollowVerb::Trigger, "").asked,
+        1,
+        "the folder is read on a trigger"
+    );
     let pass = shell.pump().remove(0);
-    assert!(!pass.ask_permission);
+    assert!(!read_of(&pass).ask_permission);
     shell.answer(&pass, wire::FollowGrant::Granted, json!({ "origin": { "ref": "/Documents/Taxes", "label": "Taxes" }, "records": [], "complete": true }));
 
     shell.open("docs/followed");
@@ -526,6 +701,14 @@ fn a_followed_folder_is_stopped_from_its_page_and_its_grant_is_released() {
     shell.open("follow/stop/files:/Documents/Taxes");
     shell.tap_id("confirm/yes");
     shell.pump();
-    assert_eq!(shell.forgotten, ["/Documents/Taxes"], "the shell releases the folder's grant");
-    assert_eq!(shell.verb(wire::FollowVerb::Trigger, "").asked, 0, "no folder left, no pass");
+    assert_eq!(
+        shell.forgotten,
+        ["/Documents/Taxes"],
+        "the shell releases the folder's grant"
+    );
+    assert_eq!(
+        shell.verb(wire::FollowVerb::Trigger, "").asked,
+        0,
+        "no folder left, no pass"
+    );
 }

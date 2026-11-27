@@ -1,7 +1,7 @@
 //! THE FOLLOWER (app-plane §16, D13): when the phone's own stores are read into the vault.
 //!
 //! A room's tap enrols a store, a shell's trigger (the app came forward, a watch fired, a window
-//! opened) carries no data, and the shell answers a `FollowAsk` with what the OS said and what it
+//! opened) carries no data, and the shell answers a `store_read` with what the OS said and what it
 //! read. This module holds every decision between them: whether this device enrolled the store,
 //! whether the OS may be asked (only in the ask a member's tap made), that a refusal ends reading,
 //! that one ask is in flight per store and later triggers queue exactly one more, and what a pass
@@ -182,9 +182,9 @@ impl crate::handle::HandleState {
             .unwrap_or_else(|| "this-phone".to_owned())
     }
 
-    fn follow_push(&self, ask: wire::FollowAsk) {
+    fn follow_push(&self, ask: wire::ShellEffect) {
         self.events().push(wire::Event {
-            kind: Some(wire::event::Kind::Follow(ask)),
+            kind: Some(wire::event::Kind::Effect(ask)),
         });
     }
 
@@ -214,7 +214,9 @@ impl crate::handle::HandleState {
         origins
             .rows
             .into_iter()
-            .find(|row| row.retired_at.is_none() && row.device_id.as_deref() == Some(install.as_str()))
+            .find(|row| {
+                row.retired_at.is_none() && row.device_id.as_deref() == Some(install.as_str())
+            })
             .and_then(|row| row.cursor)
             .unwrap_or_default()
     }
@@ -223,7 +225,7 @@ impl crate::handle::HandleState {
         centraid_domain::read::Reader::open(self.path()).map_err(|error| refused(error.to_string()))
     }
 
-    fn follow_ask(&self, store: Store, ask_permission: bool) -> wire::FollowAsk {
+    fn follow_ask(&self, store: Store, ask_permission: bool) -> wire::ShellEffect {
         let id = {
             let mut inner = self.follower.lock();
             inner.next += 1;
@@ -231,28 +233,30 @@ impl crate::handle::HandleState {
             inner.current.insert(store, id);
             id
         };
-        let mut ask = wire::FollowAsk {
-            ask_id: id,
+        let mut read = wire::ShellStoreRead {
             system: store.key().to_owned(),
-            kind: wire::FollowAskKind::Read as i32,
             ask_permission,
             ..Default::default()
         };
         match store {
             Store::Calendar => {
-                ask.days_back = CALENDAR_DAYS_BACK;
-                ask.days_on = CALENDAR_DAYS_ON;
+                read.days_back = CALENDAR_DAYS_BACK;
+                read.days_on = CALENDAR_DAYS_ON;
             }
             Store::Health => {
-                ask.days_back = HEALTH_DAYS_BACK;
-                ask.chosen = HEALTH_TYPES.iter().map(|&t| t.to_owned()).collect();
-                ask.workouts_since_ms = crate::rooms::RoomCtx::now_ms(self) - WORKOUT_DAYS * DAY_MS;
-                ask.cursor = self.follow_cursor(store);
-                ask.ask_background = ask_permission;
+                read.days_back = HEALTH_DAYS_BACK;
+                read.chosen = HEALTH_TYPES.iter().map(|&t| t.to_owned()).collect();
+                read.workouts_since_ms =
+                    crate::rooms::RoomCtx::now_ms(self) - WORKOUT_DAYS * DAY_MS;
+                read.cursor = self.follow_cursor(store);
+                read.ask_background = ask_permission;
             }
             _ => {}
         }
-        ask
+        wire::ShellEffect {
+            effect_id: id,
+            kind: Some(wire::shell_effect::Kind::StoreRead(read)),
+        }
     }
 
     fn follow_watch(&self, store: Store, on: bool) {
@@ -270,14 +274,14 @@ impl crate::handle::HandleState {
                 return;
             }
         }
-        self.follow_push(wire::FollowAsk {
-            system: store.key().to_owned(),
-            kind: if on {
-                wire::FollowAskKind::WatchOn
-            } else {
-                wire::FollowAskKind::WatchOff
-            } as i32,
-            ..Default::default()
+        self.follow_push(wire::ShellEffect {
+            effect_id: 0,
+            kind: Some(wire::shell_effect::Kind::PhoneWatch(
+                wire::ShellPhoneWatch {
+                    system: store.key().to_owned(),
+                    on,
+                },
+            )),
         });
     }
 
@@ -289,8 +293,7 @@ impl crate::handle::HandleState {
             enrolled,
             blocked: report
                 .blocked
-                .map_or(wire::FollowGrant::Unspecified, |grant| grant)
-                as i32,
+                .map_or(wire::FollowGrant::Unspecified, |grant| grant) as i32,
             read: report.read.is_some(),
             count: report.read.unwrap_or_default(),
             doubted: report.doubted,
@@ -303,10 +306,15 @@ impl crate::handle::HandleState {
 
     /// A shell's follow request: the member's tap, a trigger, the answer to an ask, a stop, or a
     /// room's question about where a store stands.
-    pub(crate) fn follow_call(&self, request: &wire::FollowRequest) -> Result<wire::FollowResponse> {
-        let verb = wire::FollowVerb::try_from(request.verb).unwrap_or(wire::FollowVerb::Unspecified);
+    pub(crate) fn follow_call(
+        &self,
+        request: &wire::FollowRequest,
+    ) -> Result<wire::FollowResponse> {
+        let verb =
+            wire::FollowVerb::try_from(request.verb).unwrap_or(wire::FollowVerb::Unspecified);
         let store = |system: &str| {
-            Store::of_key(system).ok_or_else(|| refused(format!("`{system}` is not a followed store")))
+            Store::of_key(system)
+                .ok_or_else(|| refused(format!("`{system}` is not a followed store")))
         };
         match verb {
             wire::FollowVerb::Enrol => self.follow_enrol(store(&request.system)?),
@@ -320,18 +328,6 @@ impl crate::handle::HandleState {
             }
             wire::FollowVerb::Pass => self.follow_answer(store(&request.system)?, request),
             wire::FollowVerb::Stop => self.follow_stop(store(&request.system)?, request),
-            wire::FollowVerb::Settings => {
-                let store = store(&request.system)?;
-                self.follow_push(wire::FollowAsk {
-                    system: store.key().to_owned(),
-                    kind: wire::FollowAskKind::OpenSettings as i32,
-                    ..Default::default()
-                });
-                Ok(wire::FollowResponse {
-                    asked: 1,
-                    ..Default::default()
-                })
-            }
             wire::FollowVerb::Status => Ok(wire::FollowResponse {
                 status: Some(self.follow_status(store(&request.system)?)),
                 ..Default::default()
@@ -411,7 +407,9 @@ impl crate::handle::HandleState {
         };
         match grant {
             wire::FollowGrant::Unspecified => {
-                return Err(refused("a follow answer names what the phone said".to_owned()));
+                return Err(refused(
+                    "a follow answer names what the phone said".to_owned(),
+                ));
             }
             wire::FollowGrant::Cancelled => {}
             blocked if is_blocking(blocked) => {
@@ -456,7 +454,10 @@ impl crate::handle::HandleState {
         };
         let mut passes: Vec<(&str, Value)> = Vec::new();
         if store == Store::Health {
-            for (part, command) in [("workouts", "follow.health"), ("readings", "follow.health_readings")] {
+            for (part, command) in [
+                ("workouts", "follow.health"),
+                ("readings", "follow.health_readings"),
+            ] {
                 if let Some(input) = snapshot.get(part) {
                     passes.push((command, input.clone()));
                 }
@@ -465,7 +466,8 @@ impl crate::handle::HandleState {
             passes.push((store.command(), snapshot));
         }
         let install = self.follow_install();
-        let (mut count, mut doubted, mut incomplete) = (0u32, 0u32, grant == wire::FollowGrant::Limited);
+        let (mut count, mut doubted, mut incomplete) =
+            (0u32, 0u32, grant == wire::FollowGrant::Limited);
         let mut outputs = Vec::new();
         for (command, mut input) in passes {
             if let Some(origin) = input.get_mut("origin").and_then(Value::as_object_mut)
@@ -562,11 +564,13 @@ impl crate::handle::HandleState {
             }
             stopped += 1;
             if store == Store::Files {
-                self.follow_push(wire::FollowAsk {
-                    system: store.key().to_owned(),
-                    kind: wire::FollowAskKind::Forget as i32,
-                    r#ref: origin.r#ref.clone(),
-                    ..Default::default()
+                self.follow_push(wire::ShellEffect {
+                    effect_id: 0,
+                    kind: Some(wire::shell_effect::Kind::ReleaseGrant(
+                        wire::ShellReleaseGrant {
+                            r#ref: origin.r#ref.clone(),
+                        },
+                    )),
                 });
             }
         }

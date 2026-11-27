@@ -689,6 +689,7 @@ impl RoomScreen for NewListForm {
                             undo: done.undo,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     },
                     Err(refused) => Outcome::refuse(&refused.0),
                 }
@@ -755,6 +756,7 @@ impl RoomScreen for TrashListConfirm {
                         undo: done.undo,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -1175,6 +1177,7 @@ impl RoomScreen for TaskDetailRoom {
                         undo: done.undo,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -1591,6 +1594,7 @@ impl RoomScreen for TaskForm {
                                 undo: done.undo,
                                 refused: false,
                             }),
+                            ..Outcome::default()
                         }
                     }
                     Err(refused) => Outcome::refuse(&refused.0),
@@ -1716,6 +1720,7 @@ impl RoomScreen for EmptyTrashConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -1764,6 +1769,7 @@ impl RoomScreen for PurgeConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };

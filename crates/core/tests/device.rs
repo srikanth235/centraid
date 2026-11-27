@@ -57,7 +57,17 @@ fn every_key_is_listed_once() {
         assert!(
             matches!(
                 decl.d,
-                "D1" | "D2" | "D3" | "D4" | "D6" | "D7" | "D8" | "D9" | "D10" | "D11" | "D12" | "D13"
+                "D1" | "D2"
+                    | "D3"
+                    | "D4"
+                    | "D6"
+                    | "D7"
+                    | "D8"
+                    | "D9"
+                    | "D10"
+                    | "D11"
+                    | "D12"
+                    | "D13"
             ),
             "{} names no device-store row",
             decl.name

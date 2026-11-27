@@ -302,6 +302,7 @@ impl RoomHost for RoomRuntime {
         };
         Ok(wire::RoomResponse {
             shown: shown.iter().map(super::rooms::Shown::wire).collect(),
+            effects: rooms.take_effects(),
         })
     }
 
