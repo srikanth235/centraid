@@ -395,7 +395,7 @@ impl RoomScreen for RemindersRoot {
         let mut content = vec![smart_choice];
         if filtered.is_empty() && !first::holds(b, "task") {
             let by_hand = !b.door.reminders_source();
-            let refused = (!by_hand && b.door.permission_refused("reminders")).then(|| {
+            let refused = (!by_hand && first::refused(b.door, "reminders")).then(|| {
                 (
                     home_words::refused_reminders_title(EN),
                     home_words::refused_reminders_body(EN),
@@ -418,7 +418,7 @@ impl RoomScreen for RemindersRoot {
                     hue: "",
                     sentence: home_words::first_open_reminders(EN),
                     action: Some((
-                        Handler::Tag(format!("{}reminders", first::IMPORT_TAG)),
+                        first::import("reminders"),
                         home_words::first_open_import_reminders(EN),
                     )),
                     tail: first::Tail::OrWrite,
