@@ -187,6 +187,7 @@ impl<'a> Shell<'a> {
                     key: key.to_owned(),
                     tab: key.to_owned(),
                     root: true,
+                    ..Default::default()
                 }),
             )
             .remove(0),
@@ -315,6 +316,7 @@ fn open_text(handle: &Handle, key: &str) -> String {
             key: key.to_owned(),
             tab: key.to_owned(),
             root: true,
+            ..Default::default()
         }),
     )
     .remove(0);
@@ -710,5 +712,30 @@ fn a_followed_folder_is_stopped_from_its_page_and_its_grant_is_released() {
         shell.verb(wire::FollowVerb::Trigger, "").asked,
         0,
         "no folder left, no pass"
+    );
+}
+
+#[test]
+fn a_first_open_import_enrols_through_the_one_door_and_asks_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = phone(dir.path());
+    let mut shell = Shell::new(&handle);
+    shell.open("people");
+    shell.tap_id("first/people/action");
+    let asks = shell.pump();
+    assert_eq!(asks.len(), 1, "one tap, one read");
+    assert!(read_of(&asks[0]).ask_permission);
+    assert_eq!(read_of(&asks[0]).system, "contacts");
+    shell.answer(
+        &asks[0],
+        wire::FollowGrant::Refused,
+        serde_json::Value::Null,
+    );
+    shell.pump();
+    shell.open("people");
+    assert!(
+        shell.rendered().contains("Open Settings"),
+        "{}",
+        shell.rendered()
     );
 }
