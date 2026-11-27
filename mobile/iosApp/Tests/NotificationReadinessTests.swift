@@ -10,11 +10,7 @@ import os
 final class NotificationReadinessTests: XCTestCase {
     func testColdStoreIsPublishedOnlyAfterOneSuccessfulSnapshot() async {
         let oldStore = BackgroundPasses.store
-        let oldWatcher = LibraryWatcher.shared.onChange
-        defer {
-            BackgroundPasses.store = oldStore
-            LibraryWatcher.shared.onChange = oldWatcher
-        }
+        defer { BackgroundPasses.store = oldStore }
         BackgroundPasses.store = nil
         let core = NotificationTestCore(holdSnapshot: true)
         let store = ScreenStore(core: core)
@@ -41,11 +37,7 @@ final class NotificationReadinessTests: XCTestCase {
 
     func testFailedSnapshotDoesNotPublishColdStore() async {
         let oldStore = BackgroundPasses.store
-        let oldWatcher = LibraryWatcher.shared.onChange
-        defer {
-            BackgroundPasses.store = oldStore
-            LibraryWatcher.shared.onChange = oldWatcher
-        }
+        defer { BackgroundPasses.store = oldStore }
         BackgroundPasses.store = nil
         let core = NotificationTestCore(failSnapshot: true)
         let store = ScreenStore(core: core)
@@ -57,8 +49,6 @@ final class NotificationReadinessTests: XCTestCase {
     }
 
     func testOnlyExactPerformedAnswerCompletesCallback() async {
-        let oldWatcher = LibraryWatcher.shared.onChange
-        defer { LibraryWatcher.shared.onChange = oldWatcher }
         let core = NotificationTestCore()
         let performer = NotificationTestPerformer(heldCalls: [4])
         let store = ScreenStore(core: core, scheduleNotifications: performer.perform)
@@ -96,8 +86,6 @@ final class NotificationReadinessTests: XCTestCase {
     }
 
     func testConcurrentCallbacksDoNotReleaseEachOtherAndDuplicateAcknowledgementIsSafe() async {
-        let oldWatcher = LibraryWatcher.shared.onChange
-        defer { LibraryWatcher.shared.onChange = oldWatcher }
         let core = NotificationTestCore()
         let performer = NotificationTestPerformer(heldCalls: [1, 2])
         let store = ScreenStore(core: core, scheduleNotifications: performer.perform)

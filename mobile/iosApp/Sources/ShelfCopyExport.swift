@@ -58,7 +58,7 @@ enum ShelfCopyExport {
         guard !originals.isEmpty else { return exported(.noneHere) }
         switch export.mode {
         case .send:
-            guard let files = await prepare(originals, keepLocation: export.keepLocation, export: export, full: full) else {
+            guard let files = await prepare(originals, keepLocation: false, export: export, full: full) else {
                 return exported(full.seen ? .storageFull : .locationNotRemovable)
             }
             let handoff = await withCheckedContinuation { (done: CheckedContinuation<Handoff, Never>) in
@@ -281,11 +281,10 @@ enum ShelfCopyExport {
         }
     }
 
-    /// `Photo 1.jpg`, `Video 2.mov`: the stems are Rust's (`ExportOriginals`), the
-    /// extension from the media type the byte door reported, because the
-    /// vault's own file is named by its hash.
+    /// `Photo 1.jpg`, `Video 2.mov`: the extension from the media type the byte door
+    /// reported, because the vault's own file is named by its hash.
     private static func name(for original: LocatedOriginal, index: Int, export: Centraid_Core_V1_ExportOriginals) -> String {
-        let stem = original.isVideo ? export.videoStem : export.photoStem
+        let stem = original.isVideo ? "Video" : "Photo"
         let fallback = original.isVideo ? "mov" : "jpg"
         let ext = UTType(mimeType: original.mediaType)?.preferredFilenameExtension ?? fallback
         return "\(stem) \(index + 1).\(ext)"

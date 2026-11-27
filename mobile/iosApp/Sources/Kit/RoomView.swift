@@ -1,5 +1,14 @@
 import SwiftUI
 
+/// THE FRAME BEFORE A ROOM HAS DRAWN: the page and nothing on it.
+struct BarePaper: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Theme.color("bg", scheme).ignoresSafeArea()
+    }
+}
+
 struct RoomHostView: View {
     @ObservedObject var store: RoomStore
 

@@ -1,16 +1,13 @@
 import SwiftUI
 
 /// THE PAGE'S HEADER (#1173): the title at 34 bold, and under it at most one line of scope at
-/// 13 (Notes' notebook, Money's month, "Trash · 3"). A scope the member can clear carries an
-/// X; one that opens something carries a chevron. The keys are the system bar's, above this.
+/// 13 ("Trash · 3"). The keys are the system bar's, above this.
 ///
 /// Drawn in the page and not in the bar so every app's title is one size in one place, and so
 /// the page's own colour runs under it. It is a heading for VoiceOver.
 struct KitHeader: View {
     let title: String
-    var subtitle: SubtitleSlot? = nil
-    /// A plain scope line that is just words ("All apps", "Trash · 3"), for a page with no
-    /// `SubtitleSlot`.
+    /// A plain scope line that is just words ("All apps", "Trash · 3").
     var meta: String = ""
 
     var body: some View {
@@ -27,9 +24,7 @@ struct KitHeader: View {
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("kit-header-title")
             }
-            if let subtitle {
-                scope(subtitle)
-            } else if !meta.isEmpty {
+            if !meta.isEmpty {
                 Text(meta)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
@@ -41,47 +36,6 @@ struct KitHeader: View {
         .padding(.horizontal, CentraidGeometry.pageMargin + 2)
         .padding(.top, 2)
         .padding(.bottom, 8)
-    }
-
-    @ViewBuilder
-    private func scope(_ slot: SubtitleSlot) -> some View {
-        HStack(spacing: 4) {
-            if slot.subtitle.tappable {
-                Button(action: slot.onTap) { words(slot).modifier(SubtitleHitArea()) }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, -SubtitleHitArea.growth)
-                    .accessibilityLabel(slot.subtitle.spoken)
-                    .accessibilityIdentifier("room-subtitle")
-            } else {
-                words(slot)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(slot.subtitle.spoken)
-                    .accessibilityAddTraits(.isStaticText)
-                    .accessibilityIdentifier("room-subtitle")
-            }
-            if slot.subtitle.clearable {
-                Button(action: slot.onClear) {
-                    CentraidIconView(iconKey: "X", tint: Surface.meta, size: 12)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(slot.subtitle.clearSpoken_p)
-                .accessibilityIdentifier("room-subtitle-clear")
-            }
-        }
-    }
-
-    private func words(_ slot: SubtitleSlot) -> some View {
-        HStack(spacing: 2) {
-            Text(slot.subtitle.label)
-                .kitType(.meta)
-                .foregroundStyle(Surface.meta)
-                .kitLineLimit(1)
-            if slot.subtitle.tappable {
-                CentraidIconView(iconKey: "ChevronDown", tint: Surface.meta, size: 12)
-            }
-        }
     }
 }
 
@@ -110,18 +64,5 @@ struct KitAccentKey: View {
         .disabled(!enabled)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
-    }
-}
-
-/// A SUBTITLE THAT OPENS SOMETHING (Money's month) IS A 44 PT TARGET AND DRAWS AS SMALL AS EVER
-/// (#1202): the label is padded inside the button, which is the button's own hit area, and the
-/// caller takes the same padding back outside so the header does not grow.
-struct SubtitleHitArea: ViewModifier {
-    static let growth: CGFloat = 14
-
-    func body(content: Content) -> some View {
-        content
-            .padding(.vertical, Self.growth)
-            .contentShape(Rectangle())
     }
 }
