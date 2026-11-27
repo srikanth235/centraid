@@ -13,6 +13,7 @@ use crate::error::Result;
 use super::custody::{
     ITEM_LIVE_CHECK, NONE, assert_fresh_id, assert_key_generation, assert_sealed_cell, sentence_of,
 };
+use super::fields::SEALED_VALUE_BUDGET_BYTES;
 use super::schema::SEALED_PLACEHOLDER;
 use super::{count, definition};
 
@@ -43,6 +44,15 @@ fn refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }
     if let Err(error) = assert_sealed_cell("private_key", input.private_key.as_deref()) {
         return Ok(Some(sentence_of(error)));
+    }
+    if input
+        .private_key
+        .as_deref()
+        .is_some_and(|key| key.len() > SEALED_VALUE_BUDGET_BYTES)
+    {
+        return Ok(Some(format!(
+            "that value is over the {SEALED_VALUE_BUDGET_BYTES}-byte budget for a sealed field"
+        )));
     }
     if let Err(error) = assert_key_generation(input.key_id.as_deref(), sealing_value(&input), ctx) {
         return Ok(Some(sentence_of(error)));

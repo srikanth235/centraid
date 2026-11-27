@@ -155,7 +155,7 @@ fn pre_live_person(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 /// A sentence when this is not a form a person row can be (`person_form`).
 fn form_refusal(connection: &Connection, form: &str) -> Result<Option<String>> {
     let known: bool = connection.query_row(
-        "SELECT EXISTS (SELECT 1 FROM person_form WHERE code = ?1)",
+        "SELECT EXISTS (SELECT 1 FROM vocab WHERE domain = 'person_form' AND code = ?1)",
         [form],
         |row| row.get(0),
     )?;
@@ -1129,7 +1129,7 @@ fn write_points(
             "INSERT OR IGNORE INTO contact_point (id, person_id, kind, value, normalized, label, preferred, position)
              SELECT ?1, ?2, k.code, ?4, ?5, ?6, 0,
                     (SELECT COALESCE(MAX(position), 0) + 1 FROM contact_point WHERE person_id = ?2)
-               FROM contact_point_kind k WHERE k.code = ?3",
+               FROM vocab k WHERE k.domain = 'contact_point_kind' AND k.code = ?3",
             rusqlite::params![ctx.next_id(), person, point.kind, point.value.trim(), key, point.label],
         )?;
     }

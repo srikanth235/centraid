@@ -979,3 +979,49 @@ fn an_items_type_can_change_and_a_field_the_new_type_lacks_stays_as_an_extra_fie
         .contains("spaceship")
     );
 }
+
+#[test]
+fn a_custom_field_cannot_take_the_id_another_items_built_in_field_would_have() {
+    let w = world("locker_foreign_field_id");
+    let (a, b) = (item_id(&w), item_id(&w));
+    add(&w, &a, "login", "A", vec![]);
+    add(&w, &b, "login", "B", vec![]);
+    let taken = id_of(&b, "password");
+    let sentence = w.refused(
+        "locker.edit_item",
+        json!({ "item_id": a, "fields": [{ "field_id": taken, "label": "Mine", "kind": "text", "value": "x" }] }),
+    );
+    assert!(sentence.contains("id"), "{sentence}");
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM locker_item_field WHERE id = ?1",
+            &[&taken]
+        ),
+        0
+    );
+}
+
+#[test]
+fn a_passkeys_private_key_is_held_to_the_budget_of_every_other_sealed_value() {
+    let w = world("locker_passkey_budget");
+    let item = item_id(&w);
+    add(&w, &item, "login", "One", vec![]);
+    let id = w.mint();
+    let oversized = seal(&w, &id, &"k".repeat(200 * 1024));
+    let sentence = w.refused(
+        "locker.set_passkey",
+        json!({ "item_id": item, "passkey_id": id, "rp_id": "bank.example",
+                "private_key": oversized, "key_id": key_id(&w) }),
+    );
+    assert!(
+        sentence.contains("byte budget for a sealed field"),
+        "{sentence}"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM locker_item_passkey WHERE id = ?1",
+            &[&id]
+        ),
+        0
+    );
+}

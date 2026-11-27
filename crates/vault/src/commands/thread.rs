@@ -243,7 +243,7 @@ fn pre_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 /// quotes neither (the turn is sealed).
 fn pre_lookups(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let answer = &turn(ctx)["answer"];
-    for (key, table, sentence) in [
+    for (key, domain, sentence) in [
         (
             "refusal",
             "message_refusal",
@@ -259,7 +259,7 @@ fn pre_lookups(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             continue;
         };
         let known: bool = ctx.connection().query_row(
-            &format!("SELECT EXISTS (SELECT 1 FROM {table} WHERE code = ?1)"),
+            &format!("SELECT EXISTS (SELECT 1 FROM vocab WHERE domain = '{domain}' AND code = ?1)"),
             [code],
             |row| row.get(0),
         )?;
