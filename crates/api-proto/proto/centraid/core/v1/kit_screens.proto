@@ -142,7 +142,7 @@ message TransferView {
   // A read or a write is under way: the rows and buttons are drawn but do nothing.
   bool busy = 8;
   StatusLine status = 9;
-  // THE READ, for a page that reads the vault (Reconnect): loading, or failed with Retry. Unset
+  // THE READ, for a page that reads the vault: loading, or failed with Retry. Unset
   // is ready, for the pages that read nothing (an export's choices, a file's import).
   PageState page = 10;
 }

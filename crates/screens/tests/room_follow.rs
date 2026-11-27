@@ -738,3 +738,26 @@ fn a_first_open_import_enrols_through_the_one_door_and_asks_once() {
         shell.rendered()
     );
 }
+
+#[test]
+fn android_has_no_reminders_source_and_its_first_open_offers_no_import() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = phone(dir.path());
+    let open = |platform: &str| {
+        let shown = room_call(
+            &handle,
+            wire::room_request::Kind::Open(wire::RoomOpen {
+                key: "reminders".to_owned(),
+                tab: "reminders".to_owned(),
+                root: true,
+                platform: platform.to_owned(),
+            }),
+        )
+        .remove(0);
+        snapshot::render(shown.room.as_ref().unwrap())
+    };
+    let android = open("android");
+    assert!(!android.contains("#first/reminders/action"), "{android}");
+    let ios = open("ios");
+    assert!(ios.contains("#first/reminders/action"), "{ios}");
+}

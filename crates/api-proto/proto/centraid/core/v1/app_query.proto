@@ -132,7 +132,7 @@ message AppQueryResponse {
     Holdings holdings = 1540;
     // The shell's own answers (lane I: the followed folders a vault holds).
     // The phone stores the vault was following, with the device that last did (#1185):
-    // `shell.followed-stores`, read by the Reconnect screen.
+    // `shell.followed-stores`,.
     // What the phone says that differs from a followed row (#1183): `shell.phone-differences`.
     // A record's earlier values, a page (#1185): `shell.earlier-versions`, and how many it
     // holds, `shell.earlier-count`.
