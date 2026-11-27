@@ -1,8 +1,10 @@
 {
   "artifact": "Debug APK",
+  "source_commit": "50510fd0befe4002643d5553d76af652e7064551",
   "path": "mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
-  "sha256": "17f2af9df2c5f3c0b0d05c01f5f5e58971f77bd12d025de83341236032c61080",
-  "bytes": 198099416,
+  "download_path": "mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-e20e17a0.apk",
+  "sha256": "f0417406f077050c248600304cc25e180f89fcedd4f736f45eb15aac6d8e1c01",
+  "bytes": 197707943,
   "min_sdk": 24,
   "target_sdk": 36,
   "compile_sdk": 36,
@@ -11,8 +13,9 @@
   ],
   "native_api_level": 24,
   "core_library": "mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so",
-  "core_sha256": "4521b246fdb5227b2c2f3320dd67f4e39e7160bb029f612420014469cf8d93ca",
-  "embedded_core_sha256": "4521b246fdb5227b2c2f3320dd67f4e39e7160bb029f612420014469cf8d93ca",
+  "core_sha256": "e20e17a0ca3c42779d75d97994edd1d18ee6e6c6dbe2b2760f01a9da346f1d16",
+  "embedded_core_sha256": "e20e17a0ca3c42779d75d97994edd1d18ee6e6c6dbe2b2760f01a9da346f1d16",
+  "host_ffi_sha256": "9fc58e9695514b2c4251e8cba3f5abf492a10a2bd9522a763a4a99eb2edd0ef8",
   "core_exports": [
     "centraid_call",
     "centraid_close",
@@ -30,7 +33,11 @@
     "version": "2.1.5",
     "verified_j_dollar_time_classes_in_dex": true
   },
+  "signing_certificate_sha256": "90c42bb21431aa4523e0b5e97ae5e739f5bc5d3454c3b8d98aea9ab67783d0be",
+  "signer_matches_previous_debug_apk": true,
+  "download_and_default_files_identical": true,
   "device_run": false,
   "embedded_core_path": "lib/arm64-v8a/libcentraid_core_ffi.so",
-  "status": "Superseded by the shared Core foreground-routing fix; replacement build pending. These hashes identify the earlier APK only."
+  "zip_alignment_verified": true,
+  "status": "Current fixed-Core Debug APK; prior Android debug APK had stale foreground-vault room routing."
 }

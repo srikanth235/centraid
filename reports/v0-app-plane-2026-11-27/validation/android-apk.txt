@@ -1,25 +1,41 @@
+Fixed-Core Android Debug APK
+
+Source: `50510fd0befe4002643d5553d76af652e7064551`
+Build command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:assembleDebug --no-daemon`
+Result: `BUILD SUCCESSFUL`. The APK is package `dev.centraid`, minSdk 24 / targetSdk 36, and arm64-v8a only. The embedded Core SHA matches the local API 24 library. `apksigner` confirms the signing certificate SHA-256 matches the previous debug APK, so the package can upgrade without clearing app data. The unique download filename and `androidApp-debug.apk` are identical hardlinks with SHA-256 `f0417406f077050c248600304cc25e180f89fcedd4f736f45eb15aac6d8e1c01` (197,707,943 bytes).
+
+Download: `mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-e20e17a0.apk`
+Default output: `mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk`
+
+The first incremental package was 371,139,947 bytes because an obsolete zero-filled ZIP region remained between entries. I removed only the two generated APK output names and reran `assembleDebug`; the clean package has no multi-megabyte ZIP gaps and is 197,707,943 bytes. ZIP alignment verification passed. No source packaging changes were made.
+
+Build logs: `/tmp/centraid-android-fixed-apk-build.log` and `/tmp/centraid-android-fixed-apk-repackage.log`. `device_run` is false; no phone or emulator was used.
+
+Captured command output:
+
 Picked up JAVA_TOOL_OPTIONS: -Duser.home=/tmp/centraid-robolectric-home
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
 Daemon will be stopped at the end of the build 
+> Task :androidApp:preBuild UP-TO-DATE
 > Task :core:androidPreBuild UP-TO-DATE
+> Task :androidApp:preDebugBuild UP-TO-DATE
 > Task :core:preAndroidMainBuild UP-TO-DATE
+> Task :androidApp:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :androidApp:generateDebugResources UP-TO-DATE
 > Task :core:generateAndroidMainEmptyResourceFiles UP-TO-DATE
+> Task :androidApp:packageDebugResources UP-TO-DATE
 > Task :core:kmpPartiallyResolvedDependenciesChecker
 > Task :core:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :core:generateCommonMainProtos UP-TO-DATE
 > Task :core:compileAndroidMain UP-TO-DATE
 > Task :core:bundleAndroidMainClassesToCompileJar UP-TO-DATE
 > Task :core:processAndroidMainJavaRes UP-TO-DATE
+> Task :core:bundleLibRuntimeToDirAndroidMain UP-TO-DATE
 > Task :core:writeAndroidMainAarMetadata UP-TO-DATE
 > Task :core:processAndroidMainManifest UP-TO-DATE
-> Task :core:mergeAndroidMainJniLibFolders
+> Task :core:mergeAndroidMainJniLibFolders UP-TO-DATE
 > Task :core:mergeAndroidMainNativeLibs NO-SOURCE
-> Task :core:copyAndroidMainJniLibsProjectOnly
-> Task :androidApp:preBuild UP-TO-DATE
-> Task :androidApp:preDebugBuild UP-TO-DATE
-> Task :androidApp:mergeDebugNativeDebugMetadata NO-SOURCE
-> Task :androidApp:generateDebugResources UP-TO-DATE
-> Task :androidApp:packageDebugResources UP-TO-DATE
+> Task :core:copyAndroidMainJniLibsProjectOnly UP-TO-DATE
 > Task :androidApp:processDebugNavigationResources UP-TO-DATE
 > Task :androidApp:parseDebugLocalResources UP-TO-DATE
 > Task :androidApp:generateDebugRFile UP-TO-DATE
@@ -28,15 +44,15 @@ Daemon will be stopped at the end of the build
 > Task :androidApp:compileDebugJavaWithJavac NO-SOURCE
 > Task :androidApp:generateDebugAssets UP-TO-DATE
 > Task :androidApp:mergeDebugAssets UP-TO-DATE
-> Task :androidApp:compressDebugAssets
-> Task :core:bundleLibRuntimeToDirAndroidMain
-> Task :androidApp:generateDebugGlobalSynthetics
+> Task :androidApp:compressDebugAssets UP-TO-DATE
+> Task :androidApp:generateDebugGlobalSynthetics UP-TO-DATE
+> Task :androidApp:l8DexDesugarLibDebug UP-TO-DATE
 > Task :androidApp:processDebugJavaRes UP-TO-DATE
-> Task :androidApp:checkDebugDuplicateClasses
-> Task :androidApp:mergeDebugJavaResource
-> Task :androidApp:desugarDebugFileDependencies
-> Task :androidApp:l8DexDesugarLibDebug
-> Task :androidApp:mergeExtDexDebug
+> Task :androidApp:mergeDebugJavaResource UP-TO-DATE
+> Task :androidApp:checkDebugDuplicateClasses UP-TO-DATE
+> Task :androidApp:desugarDebugFileDependencies UP-TO-DATE
+> Task :androidApp:mergeExtDexDebug UP-TO-DATE
+> Task :androidApp:mergeLibDexDebug UP-TO-DATE
 > Task :androidApp:checkDebugAarMetadata UP-TO-DATE
 > Task :androidApp:mapDebugSourceSetPaths UP-TO-DATE
 > Task :androidApp:compileDebugNavigationResources UP-TO-DATE
@@ -47,24 +63,18 @@ Daemon will be stopped at the end of the build
 > Task :androidApp:processDebugManifest UP-TO-DATE
 > Task :androidApp:processDebugManifestForPackage UP-TO-DATE
 > Task :androidApp:processDebugResources UP-TO-DATE
-> Task :androidApp:mergeLibDexDebug
-> Task :androidApp:dexBuilderDebug
-> Task :androidApp:mergeProjectDexDebug
-> Task :androidApp:mergeDebugJniLibFolders
-> Task :androidApp:validateSigningDebug
-> Task :androidApp:writeDebugAppMetadata
-> Task :androidApp:writeDebugSigningConfigVersions
-> Task :androidApp:mergeDebugNativeLibs
-
-> Task :androidApp:stripDebugDebugSymbols
-Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libcentraid_core_ffi.so, libimage_processing_util_jni.so, libjnidispatch.so, libsurface_util_jni.so. Run with --info option to learn more.
-
+> Task :androidApp:dexBuilderDebug UP-TO-DATE
+> Task :androidApp:mergeProjectDexDebug UP-TO-DATE
+> Task :androidApp:mergeDebugJniLibFolders UP-TO-DATE
+> Task :androidApp:mergeDebugNativeLibs UP-TO-DATE
+> Task :androidApp:stripDebugDebugSymbols UP-TO-DATE
+> Task :androidApp:validateSigningDebug UP-TO-DATE
+> Task :androidApp:writeDebugAppMetadata UP-TO-DATE
+> Task :androidApp:writeDebugSigningConfigVersions UP-TO-DATE
 > Task :androidApp:packageDebug
-> Task :androidApp:createDebugApkListingFileRedirect
+> Task :androidApp:createDebugApkListingFileRedirect UP-TO-DATE
 > Task :androidApp:assembleDebug
 
-BUILD SUCCESSFUL in 2m 15s
-48 actionable tasks: 22 executed, 26 up-to-date
+BUILD SUCCESSFUL in 20s
+48 actionable tasks: 2 executed, 46 up-to-date
 Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html
-
-Band contrast update: `:androidApp:assembleDebug --no-daemon` passed after updating the band tint. Artifact metadata/hash refreshed in `android-artifact.json`; the APK embeds the unchanged API 24 arm64 core library.
