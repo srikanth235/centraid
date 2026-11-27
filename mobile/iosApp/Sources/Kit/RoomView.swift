@@ -411,7 +411,7 @@ private struct RoomSubtitleBar: View {
             Text(header.subtitle)
                 .kitType(.meta)
                 .foregroundStyle(Surface.meta)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
             if !header.subtitleClearSelectorID.isEmpty {
                 Button { onTap(header.subtitleClearSelectorID) } label: {
                     CentraidIconView(iconKey: "X", tint: Surface.meta, size: 12)

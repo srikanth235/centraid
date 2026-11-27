@@ -108,6 +108,7 @@ final class AccessibilityAuditTests: XCTestCase {
             let end = Date().addingTimeInterval(15)
             while homeShowing(app) && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
             guard !(homeShowing(app)) else {
+                print("OPEN-DIAG|\(root.name)|\(String(app.debugDescription.prefix(5000)))")
                 XCTFail("\(mode) / \(root.name): the page did not open (Home is still showing)")
                 continue
             }

@@ -922,7 +922,7 @@ struct RoomTilesBlock: View {
                             .kitType(.row)
                             .fontWeight(.semibold)
                             .foregroundStyle(Surface.ink)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: false, vertical: true)
                         if !tile.subtitle.isEmpty {
                             Text(tile.subtitle)
                                 .kitType(.meta)
