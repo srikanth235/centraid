@@ -657,6 +657,7 @@ scrim-heavy = { light = "rgba(0,0,0,0.5)", dark = "rgba(0,0,0,0.5)" }
 
 # Shadows: black under a card or a sheet. Heavier in dark, because a dark surface needs more to read.
 shadow-sheet = { light = "rgba(0,0,0,0.10)", dark = "rgba(0,0,0,0.5)" }
+shadow-lift = { light = "rgba(0,0,0,0.14)", dark = "rgba(0,0,0,0.5)" }
 shadow-flat = { light = "rgba(0,0,0,0.12)", dark = "rgba(0,0,0,0.12)" }
 shadow-text = { light = "rgba(0,0,0,0.4)", dark = "rgba(0,0,0,0.5)" }
 shadow-card = { light = "rgba(0,0,0,0.08)", dark = "rgba(0,0,0,0.5)" }

@@ -33,12 +33,14 @@ CREATE TABLE concept_kind (
   UNIQUE (code, takes_color)
 ) STRICT, WITHOUT ROWID;
 
--- One table for every closed vocabulary that is only a list of codes; the rest of a vocabulary's shape
--- lives in its own table above. A column that takes a code carries a generated `<col>_domain` constant
--- and a composite key into `(domain, code)`, the way a kind row keys into `entity`.
+-- The vocabularies that grow and are only a list of codes share one table, so a new one is a seed
+-- row, not a table; a vocabulary with more columns keeps its own. A column that takes a code carries a
+-- generated `<col>_domain` constant and a composite key into `(code, domain)`, as a kind row does.
 CREATE TABLE vocab (
   domain TEXT NOT NULL CHECK (domain GLOB '[a-z]*' AND domain NOT GLOB '*[^a-z_]*'),
   code   TEXT NOT NULL CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*'),
+  CHECK (domain NOT IN ('palette','arrival_via','contact_point_kind','photo_form','person_form')
+         OR code NOT GLOB '*[^a-z]*'),
   PRIMARY KEY (domain, code)
 ) STRICT, WITHOUT ROWID;
 

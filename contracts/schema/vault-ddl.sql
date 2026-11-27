@@ -1223,6 +1223,8 @@ CREATE TABLE vault (
 CREATE TABLE vocab (
   domain TEXT NOT NULL CHECK (domain GLOB '[a-z]*' AND domain NOT GLOB '*[^a-z_]*'),
   code   TEXT NOT NULL CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*'),
+  CHECK (domain NOT IN ('palette','arrival_via','contact_point_kind','photo_form','person_form')
+         OR code NOT GLOB '*[^a-z]*'),
   PRIMARY KEY (domain, code)
 ) STRICT, WITHOUT ROWID;
 
