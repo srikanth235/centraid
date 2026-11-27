@@ -1,0 +1,12 @@
+Android band ground goldens
+
+Updated the three snapshots rendered through `Modifier.bandGround`: `mobile/androidApp/src/test/snapshots/blocks/slot_band.png`, `slot_search.png`, and `slot_selection.png`. Roborazzi record mode changed only these three. Visual comparison confirmed icons/text and placement remain aligned; only the shared floating plate's heavy shadow was removed while retaining the fine rim.
+
+Record command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true -Droborazzi.test.record=true :androidApp:testDebugUnitTest --tests '*RoomBlockGoldensTest' --rerun-tasks --no-daemon`
+Result: BUILD SUCCESSFUL.
+
+Focused verification command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true -Droborazzi.test.verify=true :androidApp:testDebugUnitTest --tests '*RoomBlockGoldensTest' --no-daemon`
+Result: BUILD SUCCESSFUL; `allBlocksAndSlotsMatchGoldens` passes.
+
+Full verification command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:testDebugUnitTest -Droborazzi.test.verify=true --no-daemon`
+Result: BUILD SUCCESSFUL; 52 suites, 212 tests, 0 failures, 0 errors, 2 expected opt-in capture skips. See `android-unit-summary.json`.

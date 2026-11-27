@@ -192,6 +192,8 @@ actor Core {
         let raw = self.raw
         let sink = updateSink
         let roomSink = self.roomSink
+        let effectStream = self.effectSink
+        let changeStream = self.changeSink
         let notifySink = self.notifySink
         let stopping = stoppingPump
         let pending = pendingCalls
@@ -216,9 +218,9 @@ actor Core {
                     case .room(let shown)?:
                         roomSink.yield(shown)
                     case .effect(let effect)?:
-                        effectSink.yield(effect)
+                        effectStream.yield(effect)
                     case .change(let change)?:
-                        changeSink.yield(change)
+                        changeStream.yield(change)
                     case .notify(let schedule)?:
                         notifySink.yield(schedule)
                     default:
@@ -228,8 +230,8 @@ actor Core {
             }
             sink.finish()
             roomSink.finish()
-            effectSink.finish()
-            changeSink.finish()
+            effectStream.finish()
+            changeStream.finish()
             notifySink.finish()
         }
         thread.name = "dev.centraid.core.events"

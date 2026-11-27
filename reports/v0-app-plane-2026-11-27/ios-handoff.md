@@ -75,7 +75,7 @@ Simulator images do not replace the physical-device checks for owner authenticat
 
 The PR's macOS job now builds both simulator and device Rust targets, runs the simulator unit/UI tests, requires the five light/dark screenshot attachments, exports PNGs from the result bundle, and builds the generic iPhone app with code signing disabled. An unsigned build verifies compilation; it does not install on or exercise an iPhone. The share extension still needs a real host-app/share-sheet flow and is not covered by these screenshot assertions.
 
-The first runner attempt built the simulator Core successfully, then found an invalid `Result` failure type in the picker/scanner bridge. That was replaced with a local Swift error type while retaining the same cancellation/failure reasons. The retry's actual outcome must be recorded before claiming SDK/XCTest or device-build success.
+On [hosted iOS run 46028285993](https://github.com/srikanth235/centraid/actions/runs/46028285993), the simulator and device Rust Core builds passed, but Swift 6 compilation failed in `Core.startPump` on four implicit property captures (`effectSink`/`changeSink` at lines 219, 221, 231, and 232). XCTest did not run, the screenshot assertions were not reached, and the unsigned generic iPhone build was skipped. A local-stream-constant fix is now in the source and still needs a successful hosted rerun. The prior hosted run 46024313714's `String: Error` picker/scanner bridge issue was fixed with a local Swift error type; that run also does not establish a green end-to-end iOS result. Full attempt details are in [validation/ios-runner-attempts.txt](validation/ios-runner-attempts.txt).
 
 ## Linux checks already completed
 

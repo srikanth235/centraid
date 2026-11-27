@@ -1,6 +1,6 @@
 {
   "total": {
-    "tests": 210,
+    "tests": 212,
     "failures": 0,
     "errors": 0,
     "skipped": 2
@@ -72,6 +72,13 @@
     {
       "name": "dev.centraid.android.kit.BackupTokenStoreSpec",
       "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "dev.centraid.android.kit.BandGlassContrastTest",
+      "tests": 2,
       "failures": 0,
       "errors": 0,
       "skipped": 0

@@ -1,0 +1,11 @@
+iOS hosted runner attempt evidence (read-only workflow logs)
+
+Latest attempt: [run 46028285993](https://github.com/srikanth235/centraid/actions/runs/46028285993), commit `ab834644510584ebdf378cc02a71b4392989f663`, iOS job `140605336152`, Xcode 26.3 / Swift 6.2.4.
+
+- “Build the actual simulator and device cores with llama” passed for both Rust targets.
+- “Compile Swift 6 app and run XCTest” failed in `mobile/iosApp/Sources/Core.swift` inside `Core.startPump` because the closure used stored properties without explicit capture/local binding: `effectSink.yield(effect)` at line 219, `changeSink.yield(change)` at 221, `effectSink.finish()` at 231, and `changeSink.finish()` at 232.
+- XCTest did not run, the screenshot assertions were not reached, and “Build unsigned iPhone app for a generic device” was skipped. This attempt supplies no iOS screenshot or unsigned-app-build proof.
+- The source now uses local stream constants to make the closure captures explicit. That fix has not yet been validated by a subsequent hosted run.
+- The earlier hosted run [46024313714](https://github.com/srikanth235/centraid/actions/runs/46024313714) had a `String: Error` picker/scanner bridge compile failure; the bridge was changed to a local Swift error type. That correction did not result in an end-to-end passing attempt.
+
+No physical device, native owner authentication, or share-extension host-app/share-sheet flow is proven by these attempts. M1, M3, and M4 remain unticked pending owner review.
