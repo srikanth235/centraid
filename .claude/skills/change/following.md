@@ -63,4 +63,4 @@ The shell also sends `TRIGGER` with no `system` each time the app comes forward 
 
 - `crates/screens/tests/room_follow.rs` plays the shell over a real core and asserts on counts of reads and permission asks, never on time: a tap asks once, a background pass asks 0 times, a refusal makes 0 reads after, a stop keeps the rows and ends passes, a cursor resumes, triggers queue exactly one more, a stale answer changes nothing.
 - `crates/screens/tests/room_core.rs` holds the follow request's verbs; `crates/vault/tests/follow_*.rs`, `calendar_follow.rs` and `arrival.rs` cover the merge, retire and arrival. See [tests](../land/tests.md).
-- Not built (target): the native adapters above, and a reconnect page for a restored vault (a restored phone enrols each store once, by tap).
+- Not built (target): the native adapters above. A restored phone enrols each store once, by tap, and no ruling asks for a reconnect page.
