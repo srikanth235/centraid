@@ -1,0 +1,23 @@
+room editor key="notes/note/01900000-0000-7000-8000-000000001020"
+  header title="Trip Plan"
+    back "Notes" #back
+    key menu sym="MoreHoriz" "More" #header/more
+      menu #header/menu
+        section
+          item "Unpin" #header/menu/pin
+          item "Earlier versions" #header/menu/versions
+          item "Share" #header/menu/share
+          item "Move to trash" destructive #header/menu/trash
+  ready
+    note_editor #editor title="Trip Plan" base="1" focused
+      body "Pack boots, map, and call [[Priya Nair]]."
+      autosave clean
+    earlier_versions "1 earlier version" count=1 #earlier
+    attachments "Attachments"
+      menu #attach/add
+        section
+          item "Scan" #attach/add/scan
+          item "Choose file" #attach/add/file
+          item "Photo" #attach/add/photo
+    mentioned_in "Mentioned in"
+      row #backlink/01900000-0000-7000-8000-000000001030 "Reading List"

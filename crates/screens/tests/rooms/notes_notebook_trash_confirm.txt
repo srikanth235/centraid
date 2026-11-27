@@ -1,0 +1,4 @@
+room sheet key="notes/notebook/01900000-0000-7000-8000-000000001010/trash-confirm"
+  header title="Move notebook to trash?"
+  ready
+    confirm outlined "Move notebook to trash?" body="“Field Notes” and its 2 notes move to trash. Restore brings them back." yes="Move to trash"#confirm/yes no="Cancel"#confirm/no

@@ -1,0 +1,30 @@
+room app_place key="docs"
+  header title="Docs" subtitle="1 document"
+    key add sym="Plus" "Add" #header/add
+    filter clear=#filter/clear
+      menu #docs-filter-menu
+        section "Show"
+          item "Starred" #filter/starred
+        section "Sort"
+          item "Recently updated" checked #sort/updated
+          item "Name" #sort/title
+  band home=#band/home search=#band/search more=#band/more
+    tab "Docs" sym="FileText" selected #tab/docs
+    tab "Folders" sym="Folder" #tab/folders
+    menu #band/more/menu
+      section
+        item "Followed folders" #more/followed
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    section #section/documents "Documents"
+      row #doc/01900000-0000-7000-8000-000000002030 "Lease Summary" meta="2026-11-26 · 1.2 KB" mark=glyph:FileText swipe="Move to trash" #doc/01900000-0000-7000-8000-000000002030/swipe
+        menu #doc/01900000-0000-7000-8000-000000002030/menu
+          section
+            item "Open" #doc/01900000-0000-7000-8000-000000002030/menu/open
+            item "Star" #doc/01900000-0000-7000-8000-000000002030/menu/star
+            item "Share" #doc/01900000-0000-7000-8000-000000002030/menu/share
+            item "Select" #doc/01900000-0000-7000-8000-000000002030/menu/select
+            item "Move to trash" destructive #doc/01900000-0000-7000-8000-000000002030/menu/trash
+  search placeholder="Search docs" #search
+  selection

@@ -1,0 +1,4 @@
+room sheet key="photos/place/01900000-0000-7000-8000-000000003060/merge/01900000-0000-7000-8000-000000003050"
+  header title="Merge places?"
+  ready
+    confirm outlined "Merge places?" body="Everything at “Baker Beach West” moves to “Baker Beach”, and “Baker Beach West” is erased. This cannot be undone." yes="Merge places"#confirm/yes no="Cancel"#confirm/no

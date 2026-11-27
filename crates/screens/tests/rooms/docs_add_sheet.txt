@@ -1,0 +1,9 @@
+room sheet key="docs/add"
+  header title="Add"
+  ready
+    menu #add/menu
+      section
+        item "Scan" #add/scan
+        item "Choose file" #add/file
+        item "New text document" #add/text
+        item "New folder" #add/folder

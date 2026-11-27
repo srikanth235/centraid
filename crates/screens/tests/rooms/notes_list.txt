@@ -1,13 +1,50 @@
-room app_place key="notes" secure
-  header title="Notes"
+room app_place key="notes"
+  header title="Notes" subtitle="3 notes"
+    key add sym="Plus" "New note" #header/add
     filter clear=#filter/clear
-      menu #filter
+      menu #notes-filter-menu
         section "Show"
-          item "Starred" #filter/starred
+          item "Pinned" #filter/pinned
+          item "Journal" #filter/journal
+        section "Sort"
+          item "Recently updated" checked #sort/updated
+          item "Title" #sort/title
+  band home=#band/home search=#band/search more=#band/more
+    tab "Notes" sym="Journal" selected #tab/notes
+    tab "Notebooks" sym="Book" #tab/notebooks
+    tab "Journal" sym="Calendar" #tab/journal
+    menu #band/more/menu
+      section
+        item "Tags" #more/tags
+        item "Import Markdown" #more/import
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
   ready
-    section #section/lens "View"
-      trailing "Week" #lens/week
-    row #row/n1 "Bread" swipe="Move to trash" #row/n1/trash
-    row #row/n2 "Banana bread" swipe="Move to trash" #row/n2/trash
-    row #row/n3 "Taxes" swipe="Move to trash" #row/n3/trash
+    section #section/pinned "Pinned"
+      row #pinned/01900000-0000-7000-8000-000000001020 "Trip Plan" meta="2026-11-26" chips="Pinned":accent mark=glyph:Journal swipe="Move to trash" #pinned/01900000-0000-7000-8000-000000001020/swipe
+        menu #pinned/01900000-0000-7000-8000-000000001020/menu
+          section
+            item "Open" #pinned/01900000-0000-7000-8000-000000001020/menu/open
+            item "Unpin" #pinned/01900000-0000-7000-8000-000000001020/menu/pin
+            item "Share" #pinned/01900000-0000-7000-8000-000000001020/menu/share
+            item "Select" #pinned/01900000-0000-7000-8000-000000001020/menu/select
+            item "Move to trash" destructive #pinned/01900000-0000-7000-8000-000000001020/menu/trash
+    section #section/notes "Notes"
+      row #note/01900000-0000-7000-8000-000000001040 "Morning Walk" meta="2026-11-26" chips="Journal" mark=glyph:Journal swipe="Move to trash" #note/01900000-0000-7000-8000-000000001040/swipe
+        menu #note/01900000-0000-7000-8000-000000001040/menu
+          section
+            item "Open" #note/01900000-0000-7000-8000-000000001040/menu/open
+            item "Pin" #note/01900000-0000-7000-8000-000000001040/menu/pin
+            item "Share" #note/01900000-0000-7000-8000-000000001040/menu/share
+            item "Select" #note/01900000-0000-7000-8000-000000001040/menu/select
+            item "Move to trash" destructive #note/01900000-0000-7000-8000-000000001040/menu/trash
+      row #note/01900000-0000-7000-8000-000000001030 "Reading List" meta="2026-11-26" mark=glyph:Journal swipe="Move to trash" #note/01900000-0000-7000-8000-000000001030/swipe
+        menu #note/01900000-0000-7000-8000-000000001030/menu
+          section
+            item "Open" #note/01900000-0000-7000-8000-000000001030/menu/open
+            item "Pin" #note/01900000-0000-7000-8000-000000001030/menu/pin
+            item "Share" #note/01900000-0000-7000-8000-000000001030/menu/share
+            item "Select" #note/01900000-0000-7000-8000-000000001030/menu/select
+            item "Move to trash" destructive #note/01900000-0000-7000-8000-000000001030/menu/trash
   search placeholder="Search notes" #search
+  selection
