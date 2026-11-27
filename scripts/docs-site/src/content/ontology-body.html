@@ -30,7 +30,7 @@
     <div class="hero-kv">
       <div><b data-count="kinds">25</b>kinds</div>
       <div><b data-count="relations">7</b>edge relations</div>
-      <div><b data-count="tables">78</b>tables</div>
+      <div><b data-count="tables">69</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
@@ -129,7 +129,8 @@
 <div class="colrow"><span class="cn">starred_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">pinned_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">archived_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">arrived_via</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ arrival_via_kind.via</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">arrived_via</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">arrived_via_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">arrived_label</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">topless</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity_kind.may_be_top</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">named</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity_kind.may_be_named</span><span class="cnote">generated</span></div>
@@ -218,14 +219,17 @@
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ concept_kind.code</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">key</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">color</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ palette.key</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">color</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">color_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">colored</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ concept_kind.takes_color</span><span class="cnote">generated</span></div>
 </div></div>
 <div class="tbl rv in" data-group="words" data-table="container"><header><h4>container</h4><p class="tp">A thing that holds things: a notebook, folder, album, list, task list or calendar. What it holds is the `parent_id` of the rows in it; an album's photos and a list's people are `contains` edges.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ entity.kind</span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">color</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ palette.key</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">kind_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
+<div class="colrow"><span class="cn">color</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">color_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">icon</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">cover</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ blob.hash</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">position</span><span class="ct">real</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
@@ -235,7 +239,8 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
-<div class="colrow"><span class="cn">form</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ person_form.code</span><span class="cnote">default 'person'</span></div>
+<div class="colrow"><span class="cn">form</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ vocab.code</span><span class="cnote">default 'person'</span></div>
+<div class="colrow"><span class="cn">form_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">sort_name</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">given</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">family</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -261,7 +266,8 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">person_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ person.id</span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ contact_point_kind.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">kind_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">value</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">normalized</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">label</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -394,7 +400,8 @@
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">blob</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ blob.hash</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">media_type</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">form</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ photo_form.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">form</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">form_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">taken_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">offset_min</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">width</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -413,7 +420,8 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
-<div class="colrow"><span class="cn">type</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ account_type.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">type</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">type_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">currency</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">opening_minor</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">opening_on</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -539,8 +547,10 @@
 <div class="colrow"><span class="cn">role</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">text</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">outcome</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">refusal</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ message_refusal.code</span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">notice</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ message_notice.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">refusal</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">refusal_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
+<div class="colrow"><span class="cn">notice</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">notice_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">updated_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
@@ -616,7 +626,8 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
-<div class="colrow"><span class="cn">type</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ locker_type.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">type</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">type_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">compromised</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">last_used_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
@@ -671,6 +682,11 @@
 <div class="colrow"><span class="cn">may_be_named</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">may_be_unnamed</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
+<div class="tbl rv in" data-group="vocabulary" data-table="vocab"><header><h4>vocab</h4><p class="tp">The closed lists of codes a column may take: container kinds, colours, ways an arrival came in, contact point kinds, photo forms, account types, Locker item types, assistant refusals and notices, person forms.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">domain</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+</div></div>
 <div class="tbl rv in" data-group="vocabulary" data-table="home_shape"><header><h4>home_shape</h4><p class="tp">Which kind of home each kind may sit in.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity_kind.code</span><span class="cnote"></span></div>
@@ -682,21 +698,10 @@
 <div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity_kind.code</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">takes_color</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="container_kind"><header><h4>container_kind</h4><p class="tp">The kinds of thing that holds other things.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity_kind.code</span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="palette"><header><h4>palette</h4><p class="tp">The colours a tag, list or calendar may wear.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">key</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="arrival_via"><header><h4>arrival_via</h4><p class="tp">The ways a one-time arrival came in: vCard, CSV, upload, picker, Markdown, scan.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
 <div class="tbl rv in" data-group="vocabulary" data-table="arrival_via_kind"><header><h4>arrival_via_kind</h4><p class="tp">Which kind of item each one-time arrival brings in: a vCard a person, an upload a document, a CSV a person, a Locker item or a line.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">via</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ arrival_via.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">via</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ vocab.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">via_domain</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ vocab.domain</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">entity_kind</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity_kind.code</span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="vocabulary" data-table="origin_system"><header><h4>origin_system</h4><p class="tp">The stores that can be followed, the kind of home each fills, and whether each can be stopped.</p></header>
@@ -715,34 +720,6 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">has_out</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="contact_point_kind"><header><h4>contact_point_kind</h4><p class="tp">The kinds of contact point a person may have.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="photo_form"><header><h4>photo_form</h4><p class="tp">What a photograph row is: a photograph, a video or a scan.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="account_type"><header><h4>account_type</h4><p class="tp">The kinds of account money may be held in.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="locker_type"><header><h4>locker_type</h4><p class="tp">The kinds of Locker item, each with its built-in fields.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="message_refusal"><header><h4>message_refusal</h4><p class="tp">The reasons the assistant gives for declining.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="message_notice"><header><h4>message_notice</h4><p class="tp">The notices an assistant turn may carry.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="vocabulary" data-table="person_form"><header><h4>person_form</h4><p class="tp">What a person row may be: a person, an organisation, a group or a pet.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="vocabulary" data-table="person_date_kind"><header><h4>person_date_kind</h4><p class="tp">The kinds of date a person has, and whether a person may have only one.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -816,7 +793,7 @@
 <div class="colrow"><span class="cn">tokenizer</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">built_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="78" data-columns="462">78 tables and 462 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="69" data-columns="466">69 tables and 466 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">
