@@ -1,0 +1,8 @@
+Independent unsigned iPhone build condition
+
+The ios job's generic-device build now runs when the ios_core step succeeded and the job was not cancelled, including after simulator verification failed. The simulator step retains its failure outcome; no continue-on-error or test exemptions were added.
+
+Validation: actionlint 1.7.12 .github/workflows/gate.yml
+Result: passed (exit 0, no findings).
+The executable archive was checked before running against the GitHub release asset digest:
+sha256:8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8

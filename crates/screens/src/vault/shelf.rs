@@ -59,6 +59,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, Weak};
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_core::rooms::RoomCtx as _;
 use centraid_core::vaults::{HeldVault, SHELF_TABLE, Vaults};
 use centraid_core::{Core, CoreConfig, EventQueue, Handle, Seed};
 
@@ -633,8 +634,11 @@ impl Shelf {
             keyed,
             marker,
         });
-        self.set_foreground(&mut inner, Some(vault_id));
+        let resume = self.set_foreground(&mut inner, Some(vault_id));
         drop(inner);
+        if let Some(core) = resume {
+            core.resume_follow();
+        }
         self.announce();
         Effected {
             value: Found::Made(named),
@@ -671,6 +675,12 @@ impl Shelf {
         else {
             return Effected::new(false);
         };
+        if inner.foreground.as_deref() == Some(vault_id)
+            && let Some(core) = inner.holdings[at].core.as_ref()
+        {
+            let _ = core.locker_lock();
+            self.push_follow_boundary_effects(core.suspend_follow());
+        }
         let going = inner.holdings.remove(at);
         if let Some(core) = &going.core {
             shut(core);
@@ -700,12 +710,17 @@ impl Shelf {
                 .holdings
                 .first()
                 .map(|holding| holding.vault_id.clone());
-            self.set_foreground(&mut inner, next.clone());
+            let mut resume = self.set_foreground(&mut inner, next.clone());
             if let Some(next) = next {
-                self.wake_locked(&mut inner, &next);
+                resume = self.wake_locked(&mut inner, &next).or(resume);
             }
+            drop(inner);
+            if let Some(core) = resume {
+                core.resume_follow();
+            }
+        } else {
+            drop(inner);
         }
-        drop(inner);
         self.announce();
         Effected {
             value: true,
@@ -861,6 +876,7 @@ impl Shelf {
         }
         let mut added = 0;
         let mut rekey = false;
+        let mut resume = None;
         for file in files {
             let RestoredFile {
                 path,
@@ -902,12 +918,15 @@ impl Shelf {
                 marker: None,
             });
             if inner.foreground.is_none() {
-                self.set_foreground(&mut inner, Some(vault_id));
+                resume = self.set_foreground(&mut inner, Some(vault_id));
             }
             added += 1;
         }
         inner.restored |= added > 0;
         drop(inner);
+        if let Some(core) = resume {
+            core.resume_follow();
+        }
         if rekey {
             self.rekey();
         }
@@ -1040,11 +1059,42 @@ impl Shelf {
 
     // ---- plumbing --------------------------------------------------------
 
-    fn set_foreground(&self, inner: &mut Inner, vault_id: Option<String>) {
+    fn set_foreground(&self, inner: &mut Inner, vault_id: Option<String>) -> Option<Handle> {
+        if inner.foreground == vault_id {
+            return None;
+        }
+        let old = inner
+            .foreground
+            .as_ref()
+            .and_then(|front| inner.holdings.iter().find(|h| &h.vault_id == front))
+            .and_then(|holding| holding.core.clone());
+        if let Some(old) = old {
+            let _ = old.locker_lock();
+            self.push_follow_boundary_effects(old.suspend_follow());
+        }
+        let target = vault_id
+            .as_ref()
+            .and_then(|id| inner.holdings.iter().find(|h| &h.vault_id == id))
+            .and_then(|holding| holding.core.clone());
+        if let Some(target) = &target {
+            let _ = target.locker_lock();
+        }
         if let Some(front) = self.front.get() {
             files::write_foreground(&front.dir, vault_id.as_deref());
         }
         inner.foreground = vault_id;
+        target
+    }
+
+    fn push_follow_boundary_effects(&self, effects: Vec<wire::ShellEffect>) {
+        let Some(front) = self.front.get() else {
+            return;
+        };
+        for effect in effects {
+            let _ = front.events.push(wire::Event {
+                kind: Some(wire::event::Kind::Effect(effect)),
+            });
+        }
     }
 
     /// Reopen a RESTING holding, or answer the core it already has. Called with
@@ -1321,20 +1371,17 @@ impl Vaults for Shelf {
 
     fn bring_to_front(&self, vault_id: &str) -> bool {
         let mut inner = self.lock();
-        if self.wake_locked(&mut inner, vault_id).is_none() {
+        let Some(_target) = self.wake_locked(&mut inner, vault_id) else {
             return false;
-        }
+        };
         if inner.foreground.as_deref() != Some(vault_id) {
-            // THE VAULT LEFT IS RELOCKED: an unlocked Locker is a fact about the
-            // vault the member is looking at.
-            if let Some(_core) = inner
-                .foreground
-                .as_ref()
-                .and_then(|front| inner.holdings.iter().find(|h| &h.vault_id == front))
-                .and_then(|holding| holding.core.as_ref())
-            {}
-            self.set_foreground(&mut inner, Some(vault_id.to_owned()));
+            let resume = self.set_foreground(&mut inner, Some(vault_id.to_owned()));
             drop(inner);
+            if let Some(core) = resume {
+                // Trigger only after dropping the shelf lock so event
+                // forwarding cannot contend with a held foreground transition.
+                core.resume_follow();
+            }
             self.announce();
         }
         true

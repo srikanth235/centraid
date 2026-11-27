@@ -255,6 +255,70 @@ impl Rooms {
             .collect()
     }
 
+    /// Drop every room instance before another vault is allowed to render through this runtime.
+    ///
+    /// This intentionally does not call room close actions: entries belong to the outgoing
+    /// vault, while `door` already points at the incoming one. Pending exports are only removed
+    /// through the core's generated-path cleanup, which checks the owning awake vault.
+    pub fn reset_for_vault(&mut self, door: &dyn Door, old_vault_id: &str) -> Vec<Shown> {
+        let tabs: Vec<String> = if self.stacks.is_empty() {
+            vec![super::host::DEFAULT_TAB.to_owned()]
+        } else {
+            self.stacks.keys().cloned().collect()
+        };
+        let pending_owner_checks = self
+            .stacks
+            .values()
+            .flatten()
+            .flat_map(|entry| entry.pending.iter())
+            .filter(|(_, tag)| tag.as_str() == "locker:unlock")
+            .count();
+
+        for entry in self.stacks.values().flatten() {
+            for tag in entry.pending.values() {
+                super::export::cleanup_pending(door, tag);
+            }
+        }
+        self.stacks.clear();
+
+        let mut shown = Vec::with_capacity(tabs.len());
+        for tab in tabs {
+            shown.push(
+                self.open(door, "home", &tab, true)
+                    .expect("Home is registered"),
+            );
+        }
+
+        let Some(tab) = shown.first().map(|room| room.tab.as_str()) else {
+            return shown;
+        };
+        let entry = self
+            .stacks
+            .get_mut(tab)
+            .and_then(|stack| stack.last_mut())
+            .expect("reset created a Home entry");
+        for _ in 0..pending_owner_checks {
+            queue_boundary_effect(
+                entry,
+                wire::shell_effect::Kind::OwnerCheck(wire::ShellOwnerCheck {
+                    cancel: true,
+                    ..Default::default()
+                }),
+            );
+        }
+        if !old_vault_id.is_empty() {
+            queue_boundary_effect(
+                entry,
+                wire::shell_effect::Kind::ClipboardCopy(wire::ShellClipboardCopy {
+                    owner_vault_id: old_vault_id.to_owned(),
+                    clear_owned: true,
+                    ..Default::default()
+                }),
+            );
+        }
+        shown
+    }
+
     /// The depth of a tab's stack.
     #[must_use]
     pub fn depth(&self, tab: &str) -> usize {
@@ -530,6 +594,14 @@ impl Rooms {
             })
             .collect()
     }
+}
+
+fn queue_boundary_effect(entry: &mut Entry, kind: wire::shell_effect::Kind) {
+    entry.asked += 1;
+    entry.outbox.push(wire::ShellEffect {
+        effect_id: (entry.id << 32) | entry.asked,
+        kind: Some(kind),
+    });
 }
 
 fn handle(entry: &mut Entry, event: &wire::RoomEvent, door: &dyn Door) -> Then {

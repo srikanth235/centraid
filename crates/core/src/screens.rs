@@ -714,18 +714,36 @@ impl crate::rooms::RoomCtx for HandleState {
     }
 
     fn stage_room_file(&self, bytes: &[u8]) -> Result<String> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return ScreenCtx::stage_room_file(&*front, bytes);
+        }
         ScreenCtx::stage_room_file(self, bytes)
     }
 
     fn stage_room_archive(&self) -> Result<String> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return ScreenCtx::stage_room_archive(&*front);
+        }
         ScreenCtx::stage_room_archive(self)
     }
 
     fn held_bytes(&self, hash: &str, max_bytes: u64) -> Result<Vec<u8>> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return ScreenCtx::held_bytes(&*front, hash, max_bytes);
+        }
         ScreenCtx::held_bytes(self, hash, max_bytes)
     }
 
     fn remove_room_file(&self, path: &str) {
+        if let Some(vaults) = HandleState::vaults(self).cloned() {
+            // A save sheet may finish after the foreground changes. Ask each
+            // awake child to apply its own staging-root and generated-name
+            // checks; only the child that created this path can remove it.
+            for front in vaults.awake() {
+                ScreenCtx::remove_room_file(&*front, path);
+            }
+            return;
+        }
         ScreenCtx::remove_room_file(self, path)
     }
 
@@ -734,18 +752,25 @@ impl crate::rooms::RoomCtx for HandleState {
     }
 
     fn device(&self) -> Result<std::sync::Arc<crate::device::Checked<crate::device::DirStore>>> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return HandleState::device(&front);
+        }
         HandleState::device(self)
     }
 
     fn vault_id(&self) -> String {
-        self.device_vault_id()
+        self.foreground_if_shelved()
+            .map_or_else(|| self.device_vault_id(), |front| front.device_vault_id())
     }
 
     fn reader(&self) -> Result<centraid_domain::read::Reader> {
-        centraid_domain::read::Reader::open(self.path()).map_err(|error| {
-            crate::error::CoreError::InvalidRequest {
-                detail: error.to_string(),
-            }
+        let reader = if let Some(front) = self.foreground_if_shelved() {
+            centraid_domain::read::Reader::open(front.path())
+        } else {
+            centraid_domain::read::Reader::open(self.path())
+        };
+        reader.map_err(|error| crate::error::CoreError::InvalidRequest {
+            detail: error.to_string(),
         })
     }
 
@@ -753,6 +778,9 @@ impl crate::rooms::RoomCtx for HandleState {
         &self,
         request: &centraid_search::EachRequest,
     ) -> Result<Vec<centraid_search::Target>> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::search(&*front, request);
+        }
         use centraid_search::{Principal, Search as _};
         self.with_vault(|vault| {
             let result = vault
@@ -783,6 +811,9 @@ impl crate::rooms::RoomCtx for HandleState {
         &self,
         request: &centraid_search::SearchRequest,
     ) -> Result<centraid_search::Answer> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::search_page(&*front, request);
+        }
         use centraid_search::{Principal, Search as _};
         self.with_vault(|vault| {
             let result = vault
@@ -821,6 +852,9 @@ impl crate::rooms::RoomCtx for HandleState {
         query: &str,
         thin: bool,
     ) -> Result<Option<String>> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::search_correction(&*front, kinds, query, thin);
+        }
         use centraid_search::{Principal, Search as _};
         let kinds: Vec<&str> = kinds.iter().map(String::as_str).collect();
         self.with_vault(|vault| {
@@ -852,6 +886,9 @@ impl crate::rooms::RoomCtx for HandleState {
     }
 
     fn locker_unlocked(&self) -> bool {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::locker_unlocked(&*front);
+        }
         self.locker_session
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -859,10 +896,17 @@ impl crate::rooms::RoomCtx for HandleState {
     }
 
     fn locker_epoch(&self) -> u64 {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::locker_epoch(&*front);
+        }
         self.locker_epoch.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     fn locker_cancel_check(&self) {
+        if let Some(front) = self.foreground_if_shelved() {
+            crate::rooms::RoomCtx::locker_cancel_check(&*front);
+            return;
+        }
         self.locker_epoch.store(
             crate::handle::next_locker_epoch(),
             std::sync::atomic::Ordering::SeqCst,
@@ -870,6 +914,9 @@ impl crate::rooms::RoomCtx for HandleState {
     }
 
     fn locker_unlock(&self) -> Result<(u32, Option<String>)> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::locker_unlock(&*front);
+        }
         use std::sync::atomic::Ordering;
         let epoch = self.locker_epoch.load(Ordering::SeqCst);
         let keyring =
@@ -945,6 +992,9 @@ impl crate::rooms::RoomCtx for HandleState {
     }
 
     fn locker_unlock_failed(&self) -> Result<u32> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::locker_unlock_failed(&*front);
+        }
         use std::sync::atomic::Ordering;
         {
             let mut vault = self
@@ -986,6 +1036,9 @@ impl crate::rooms::RoomCtx for HandleState {
     }
 
     fn locker_failed_unlocks(&self) -> Result<(u32, Option<String>)> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::locker_failed_unlocks(&*front);
+        }
         let vault = self
             .vault
             .lock()
@@ -1001,6 +1054,9 @@ impl crate::rooms::RoomCtx for HandleState {
     }
 
     fn locker_lock(&self) -> Result<()> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::locker_lock(&*front);
+        }
         use std::sync::atomic::Ordering;
         self.locker_epoch
             .store(crate::handle::next_locker_epoch(), Ordering::SeqCst);
@@ -1016,6 +1072,9 @@ impl crate::rooms::RoomCtx for HandleState {
         item_id: &str,
         field_id: &str,
     ) -> Result<zeroize::Zeroizing<String>> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::locker_reveal_field(&*front, item_id, field_id);
+        }
         use std::sync::atomic::Ordering;
         let (key, expected_key_id, epoch) = {
             let session = self
@@ -1100,6 +1159,9 @@ impl crate::rooms::RoomCtx for HandleState {
     }
 
     fn locker_seal_field(&self, field_id: &str, plaintext: &str) -> Result<(String, String)> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return crate::rooms::RoomCtx::locker_seal_field(&*front, field_id, plaintext);
+        }
         use std::sync::atomic::Ordering;
         let (key, key_id, epoch) = {
             let session = self
@@ -1134,6 +1196,12 @@ impl crate::rooms::RoomCtx for HandleState {
     fn push(&self, shown: wire::RoomShown) {
         self.events().push(wire::Event {
             kind: Some(wire::event::Kind::Room(Box::new(shown))),
+        });
+    }
+
+    fn push_effect(&self, effect: wire::ShellEffect) {
+        self.events().push(wire::Event {
+            kind: Some(wire::event::Kind::Effect(effect)),
         });
     }
 }

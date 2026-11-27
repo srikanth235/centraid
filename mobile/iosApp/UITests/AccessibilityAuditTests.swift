@@ -924,8 +924,8 @@ final class AccessibilityAuditTests: XCTestCase {
         case "Calendar": proof = ("calendar_grid", "cal/grid")
         case "Notes Add": proof = ("note_editor", "editor")
         case "Photos": proof = ("photo_grid", "photo-grid")
-        case "People": proof = ("people_root", "header/add")
-        case "Money": proof = ("money_root", "header/add")
+        case "People": proof = ("people_root", "key/add")
+        case "Money": proof = ("money_root", "key/add")
         default: proof = nil
         }
         guard let proof else { return }

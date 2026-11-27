@@ -3,7 +3,7 @@
 //! context, through which a tap runs a catalogue action and a room reads the backup status.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::error::{CoreError, Result};
@@ -30,8 +30,16 @@ pub struct RoomRuntime {
     rooms: Mutex<Rooms>,
     keys: AtomicU64,
     last: Mutex<Option<UndoRecord>>,
+    vault: Mutex<Option<VaultBinding>>,
     platform: Mutex<String>,
     time_zone: Mutex<Option<String>>,
+}
+
+type RoomDevice = Arc<centraid_core::device::Checked<centraid_core::device::DirStore>>;
+
+struct VaultBinding {
+    id: String,
+    device: Option<RoomDevice>,
 }
 
 impl RoomRuntime {
@@ -41,9 +49,57 @@ impl RoomRuntime {
             rooms: Mutex::new(Rooms::new(registry)),
             keys: AtomicU64::new(1),
             last: Mutex::new(None),
+            vault: Mutex::new(None),
             platform: Mutex::new(String::new()),
             time_zone: Mutex::new(None),
         }
+    }
+
+    /// Detect a shelf foreground change while the room lock serializes all runtime entry points.
+    /// Kept drafts are device data, so clear only the outgoing vault's registered D1 family.
+    fn transition_vault(
+        &self,
+        ctx: &dyn RoomCtx,
+        rooms: &mut Rooms,
+    ) -> Option<Vec<super::rooms::Shown>> {
+        let current_id = ctx.vault_id();
+        let current_device = ctx.device().ok();
+        let old = {
+            let mut binding = self.vault.lock().unwrap_or_else(PoisonError::into_inner);
+            match binding.as_mut() {
+                None => {
+                    *binding = Some(VaultBinding {
+                        id: current_id,
+                        device: current_device,
+                    });
+                    return None;
+                }
+                Some(previous) if previous.id == current_id => {
+                    if previous.device.is_none() {
+                        previous.device = current_device;
+                    }
+                    return None;
+                }
+                Some(_) => binding.replace(VaultBinding {
+                    id: current_id,
+                    device: current_device,
+                }),
+            }
+        };
+        let old = old.expect("a changed vault binding had a previous value");
+        if !old.id.is_empty()
+            && let Some(device) = old.device
+            && let Ok(keys) = device.list(&format!("draft.{}.", old.id))
+        {
+            for key in keys {
+                let _ = device.delete(&key);
+            }
+        }
+        self.last
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        Some(rooms.reset_for_vault(&CtxDoor { ctx, runtime: self }, &old.id))
     }
 }
 
@@ -429,6 +485,14 @@ impl RoomHost for RoomRuntime {
         use wire::room_request::Kind as K;
         let door = CtxDoor { ctx, runtime: self };
         let mut rooms = self.rooms.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(shown) = self.transition_vault(ctx, &mut rooms) {
+            for effect in rooms.take_effects() {
+                ctx.push_effect(effect);
+            }
+            if !matches!(&request.kind, Some(K::Open(_))) {
+                return Ok(response(ctx, shown, Vec::new()));
+            }
+        }
         let shown = match &request.kind {
             Some(K::Open(open)) => {
                 if !open.platform.is_empty() {
@@ -490,33 +554,47 @@ impl RoomHost for RoomRuntime {
         }) {
             ctx.locker_cancel_check();
         }
-        let secure_epoch = ctx.locker_epoch();
-        let shown = shown
+        Ok(response(ctx, shown, effects))
+    }
+
+    fn changed(&self, ctx: &dyn RoomCtx, tables: &[String]) {
+        let door = CtxDoor { ctx, runtime: self };
+        let (shown, effects) = {
+            let mut rooms = self.rooms.lock().unwrap_or_else(PoisonError::into_inner);
+            if let Some(shown) = self.transition_vault(ctx, &mut rooms) {
+                (shown, rooms.take_effects())
+            } else {
+                let shown = rooms.changed(&door, tables.iter().map(String::as_str));
+                (shown, Vec::new())
+            }
+        };
+        for effect in effects {
+            ctx.push_effect(effect);
+        }
+        for each in shown {
+            let mut shown = each.wire();
+            shown.secure_epoch = ctx.locker_epoch();
+            ctx.push(shown);
+        }
+    }
+}
+
+fn response(
+    ctx: &dyn RoomCtx,
+    shown: Vec<super::rooms::Shown>,
+    effects: Vec<wire::ShellEffect>,
+) -> wire::RoomResponse {
+    let secure_epoch = ctx.locker_epoch();
+    wire::RoomResponse {
+        shown: shown
             .iter()
             .map(|entry| {
                 let mut shown = entry.wire();
                 shown.secure_epoch = secure_epoch;
                 shown
             })
-            .collect();
-        Ok(wire::RoomResponse {
-            shown,
-            effects,
-            secure_epoch,
-        })
-    }
-
-    fn changed(&self, ctx: &dyn RoomCtx, tables: &[String]) {
-        let door = CtxDoor { ctx, runtime: self };
-        let (shown, secure_epoch) = {
-            let mut rooms = self.rooms.lock().unwrap_or_else(PoisonError::into_inner);
-            let shown = rooms.changed(&door, tables.iter().map(String::as_str));
-            (shown, ctx.locker_epoch())
-        };
-        for each in shown {
-            let mut shown = each.wire();
-            shown.secure_epoch = secure_epoch;
-            ctx.push(shown);
-        }
+            .collect(),
+        effects,
+        secure_epoch,
     }
 }

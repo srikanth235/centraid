@@ -31,5 +31,6 @@
     "verified_j_dollar_time_classes_in_dex": true
   },
   "device_run": false,
-  "embedded_core_path": "lib/arm64-v8a/libcentraid_core_ffi.so"
+  "embedded_core_path": "lib/arm64-v8a/libcentraid_core_ffi.so",
+  "status": "Superseded by the shared Core foreground-routing fix; replacement build pending. These hashes identify the earlier APK only."
 }

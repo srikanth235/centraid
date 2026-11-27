@@ -4,7 +4,7 @@ The phone's own stores (contacts, calendars, reminders, a picked folder, the hea
 
 ## The three layers
 
-- **Shell reader (target).** It reads the store when the core asks and answers with what the OS said and a snapshot. It decides nothing and names no command.
+- **Native reader (implemented).** iOS handles `store_read` and `phone_watch` in `mobile/iosApp/Sources/RoomStore.swift`; Android routes room effects in `mobile/androidApp/src/main/kotlin/dev/centraid/android/room/RoomClient.kt` to the session shell effects and store readers. The adapters answer only a core ask with what the OS said and a snapshot. They decide nothing and name no command. Their implementation source does not verify physical OS behavior.
 - **The follower** (`crates/core/src/follow/mod.rs`). It decides when to ask the shell to read, whether the OS may be asked, what the last pass said, and runs the vault command with the snapshot. The rooms read its state; they never decide it.
 - **Vault command** (`crates/vault/src/commands/follow/`). It merges the snapshot. The merge is the vault's alone.
 
@@ -18,6 +18,7 @@ The phone's own stores (contacts, calendars, reminders, a picked folder, the hea
   - `PASS` (the shell's answer): an answer to an ask that is not the store's current one is `stale` and ignored. `GRANTED` and `LIMITED` run `follow.<system>` with `input_json`; Calendar and Files may pass multiple existing per-origin snapshots in one `{"snapshots":[...]}` envelope under the same `ask_id`. The core runs one follow command per snapshot, stamps `device_id`, and assigns distinct invoke keys. `REFUSED`, `RESTRICTED` and `UNAVAILABLE` block the store (no trigger asks again until the member taps `ENROL`); `CANCELLED` changes nothing.
   - `STOP`: runs `follow.stop` for each live origin of the store (or the one `{"ref"}`), forgets the habit, pushes `phone_watch` off and, for a folder, `release_grant`. Deletes nothing.
   - `STATUS`: what a room says (`FollowStatus`). A refused row's "Open Settings" is the room's own `open_settings` effect (app-plane section 17).
+- Follow asks use process-unique IDs, so a late answer from one vault cannot be accepted after another vault becomes current. When a vault leaves the foreground, its pending and queued asks are invalidated and its native watchers are turned off; its enrolment and merged rows remain. Returning refreshes the enrolled stores the phone has not refused and turns their watchers back on, without asking permission or enrolling them again.
 - A cursor lives on the origin row. Health's ask carries the cursor this install's origin holds (`entity.followed_stores`, the row whose `device_id` is this install; none or another install's is empty, a complete read). The answer's command input carries the new one in `origin.cursor`; the core sets `origin.device_id` itself, so it moves in the same commit as the records. A shell keeps no cursor.
 - The window an ask places: Calendar 7 days back and 62 on; Health 365 days of totals and 90 days of workouts (`days_back`, `workouts_since_ms`). The shell reads the days in the phone's zone.
 - After every request that changes a store's state the core pushes a change of the table `follow`; a room that built a follow row watches it and redraws.
@@ -26,9 +27,9 @@ The phone's own stores (contacts, calendars, reminders, a picked folder, the hea
 
 `crates/screens/src/room/follow.rs` builds the rows and the stop confirm for every owning app's More: People `contacts`, Calendar `calendar`, Reminders `reminders`, Docs `files`, Health `health`, Photos `camera_roll`. A row is one of: "Follow Contacts" (not enrolled), "Following Contacts" with its read line and a destructive "Stop following Contacts" (enrolled; the stop opens a sheet `follow/stop/<store>` that says nothing is deleted), "Contacts is off" with the OS's sentence and an "Open Settings" tap (refused; "Follow Contacts" again tries once more), "Your phone doesn't allow Contacts" (restricted), or "Reminders isn't on this phone" (unavailable). A doubted or partial pass replaces the read line with the one sentence every store shares. Docs' "Followed folders" page stops one folder through `follow/stop/files:<ref>`.
 
-## What each shell performs (target: the native lane builds these)
+## What each shell performs (native adapters implemented; physical OS checks remain)
 
-The channel and every other variant are app-plane section 17; the performers are the existing `ScreenPlatform.swift` and `kit/ScreenEffects.kt` families. For following:
+The effect channel is described in app-plane section 17. iOS follow effects are handled by `RoomStore.swift`; Android effect routing is in `room/RoomClient.kt` and the native implementations are in `session/ShellEffects.kt`, `FollowReaders.kt`, `CameraRollFollowReader.kt`, and `HealthFollowReader.kt`. For following:
 
 | Effect (`Event.effect` or a room response) | The shell does |
 | --- | --- |
@@ -62,5 +63,6 @@ The shell also sends `TRIGGER` with no `system` each time the app comes forward 
 ## Tests
 
 - `crates/screens/tests/room_follow.rs` plays the shell over a real core and asserts on counts of reads and permission asks, never on time: a tap asks once, a background pass asks 0 times, a refusal makes 0 reads after, a stop keeps the rows and ends passes, a cursor resumes, triggers queue exactly one more, a stale answer changes nothing.
+- `crates/screens/tests/room_front_shelf_follow.rs::a_late_contacts_pass_cannot_cross_vaults_and_returning_reasks` verifies the cross-vault late-answer refusal and permission-free refresh on return (1/1 passed).
 - `crates/screens/tests/room_core.rs` holds the follow request's verbs; `crates/vault/tests/follow_*.rs`, `calendar_follow.rs` and `arrival.rs` cover the merge, retire and arrival. See [tests](../land/tests.md).
-- Not built (target): the native adapters above. A restored phone enrols each store once, by tap, and no ruling asks for a reconnect page.
+- The native adapters above are implemented. The latest hosted iOS unit run passed 173 tests, but the UI suite still had 18 failures; this is not an all-green app verification. Physical-device store permissions, background delivery, native pickers, and owner behavior remain unverified. A restored phone enrols each store once, by tap, and no ruling asks for a reconnect page.

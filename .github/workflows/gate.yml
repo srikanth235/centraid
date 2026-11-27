@@ -48,6 +48,7 @@ jobs:
       - name: Install the native generators
         run: brew install xcodegen protobuf swift-protobuf
       - name: Build the actual simulator and device cores with llama
+        id: ios_core
         run: |
           set -euo pipefail
           mkdir -p target/ios-verification
@@ -57,6 +58,7 @@ jobs:
       - name: Compile Swift 6 app and run XCTest
         run: bash mobile/scripts/verify-ios.sh
       - name: Build unsigned iPhone app for a generic device
+        if: ${{ !cancelled() && steps.ios_core.outcome == 'success' }}
         working-directory: mobile/iosApp
         run: |
           set -euo pipefail

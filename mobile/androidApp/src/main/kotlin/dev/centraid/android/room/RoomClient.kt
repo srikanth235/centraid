@@ -38,6 +38,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.ZoneId
 import java.util.LinkedHashSet
+import java.util.concurrent.atomic.AtomicLong
 
 internal class RoomClient internal constructor(
     private val eventStream: Flow<Event>?,
@@ -51,6 +52,9 @@ internal class RoomClient internal constructor(
     private val sendLock = Mutex()
     private val effectClaimLock = Any()
     private val claimedRoomEffects = LinkedHashSet<Pair<Long, Long>>()
+    private val claimedGlobalControls = LinkedHashSet<Long>()
+    /** Invalidates a pending native owner prompt before its cancelled callback can reach Core. */
+    private val ownerPromptCancellationRevision = AtomicLong(0)
     private val byTab = MutableStateFlow<Map<String, RoomShown>>(emptyMap())
     private val selectedTab = MutableStateFlow(DEFAULT_TAB)
     private val appearanceState = MutableStateFlow(APPEARANCE_SYSTEM)
@@ -251,21 +255,39 @@ internal class RoomClient internal constructor(
                         effect.clipboard_copy?.sealed_ == true
                     )
             }
+            if (effects.any { it.owner_check?.cancel == true }) {
+                ownerPromptCancellationRevision.incrementAndGet()
+            }
             val instance = asker ?: room?.shown?.lastOrNull()?.instance
             if (effects.isNotEmpty() && instance != null) {
-                performRoomEffects(instance, effects, room?.secure_epoch ?: minimumSecureEpoch)
+                performRoomEffects(
+                    instance,
+                    effects,
+                    room?.secure_epoch ?: minimumSecureEpoch,
+                    ownerPromptCancellationRevision.get(),
+                )
             }
             CoreOutcome.Answered(Unit)
         }
     }
 
-    private fun performRoomEffects(instance: Long, effects: List<ShellEffect>, responseEpoch: Long) {
+    private fun performRoomEffects(
+        instance: Long,
+        effects: List<ShellEffect>,
+        responseEpoch: Long,
+        ownerRevisionAtResponse: Long,
+    ) {
         scope.launch {
             effects.forEach { effect ->
                 if (!claimRoomEffect(instance, effect.effect_id)) return@forEach
                 // The epoch may advance after the response was accepted but before this coroutine
                 // reaches the platform. Never open a stale Locker prompt or restore its clipboard.
                 if (isSecureEffect(effect) && responseEpoch < minimumSecureEpoch) return@forEach
+                // A front-core cancel can arrive after the response but before this queued prompt
+                // starts. Do not briefly reopen a prompt whose old room has already been evicted.
+                if (effect.owner_check != null && !effect.owner_check!!.cancel &&
+                    ownerRevisionAtResponse != ownerPromptCancellationRevision.get()
+                ) return@forEach
                 if (effect.store_read != null) {
                     val answer = try {
                         followReadPerformer?.invoke(effect)
@@ -288,10 +310,24 @@ internal class RoomClient internal constructor(
                     val outcome = callCore(Envelope(request_id = 0, request = Request(follow = answer)))
                     followNotice(outcome)?.let { noticeState.value = listOf(it) }
                 } else {
-                    roomEffectDispatcher.answer(instance, effect) { target, event -> send(target, event) }
+                    answerRoomEffect(instance, effect, ownerRevisionAtResponse)
                 }
             }
         }
+    }
+
+    private suspend fun answerRoomEffect(instance: Long, effect: ShellEffect, ownerRevisionAtResponse: Long) {
+        val ownerRevision = if (effect.owner_check != null && !effect.owner_check!!.cancel) {
+            ownerRevisionAtResponse
+        } else {
+            null
+        }
+        if (ownerRevision != null && ownerPromptCancellationRevision.get() != ownerRevision) return
+        val result = roomEffectDispatcher.perform(effect)
+        // A vault switch or relock can cancel a native prompt while this performer is suspended.
+        // Its callback belongs to the evicted room and must not be sent into the new foreground.
+        if (ownerRevision != null && ownerPromptCancellationRevision.get() != ownerRevision) return
+        send(instance, ShellEffectAnswers.roomResult(effect, result))
     }
 
     private fun isSecureEffect(effect: ShellEffect): Boolean =
@@ -318,9 +354,24 @@ internal class RoomClient internal constructor(
         }
 
     private fun performCoreEffect(effect: ShellEffect) {
+        val ownerCancel = effect.owner_check?.cancel == true
+        val clearOwnedClipboard = effect.clipboard_copy?.clear_owned == true
+        if (ownerCancel || clearOwnedClipboard) {
+            // These are one-way controls from the front core, not room asks. Their IDs are
+            // allocated by the originating Home entry; ignore a replay but never dedupe the
+            // ID-zero PhoneWatch/ReleaseGrant updates that share this event stream.
+            if (effect.effect_id != 0L && !claimGlobalControl(effect.effect_id)) return
+            if (ownerCancel) ownerPromptCancellationRevision.incrementAndGet()
+        }
         scope.launch {
             if (effect.store_read == null) {
-                shellEffectPerformer?.invoke(effect)
+                try {
+                    shellEffectPerformer?.invoke(effect)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Out-of-band controls have no result channel to send a failure on.
+                }
                 return@launch
             }
             val answer = try {
@@ -344,6 +395,14 @@ internal class RoomClient internal constructor(
             val outcome = callCore(Envelope(request_id = 0, request = Request(follow = answer)))
             followNotice(outcome)?.let { noticeState.value = listOf(it) }
         }
+    }
+
+    private fun claimGlobalControl(effectId: Long): Boolean = synchronized(effectClaimLock) {
+        if (!claimedGlobalControls.add(effectId)) return@synchronized false
+        while (claimedGlobalControls.size > MAX_CLAIMED_ROOM_EFFECTS) {
+            claimedGlobalControls.remove(claimedGlobalControls.first())
+        }
+        true
     }
 
     private fun applyShown(shown: RoomShown) {

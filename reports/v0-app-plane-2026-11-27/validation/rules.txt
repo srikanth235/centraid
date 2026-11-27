@@ -1,13 +1,13 @@
-  ok      sql-confinement — 493 file(s) scanned, clean (305 in the allowed crates, 38 in the rule runner)
+  ok      sql-confinement — 496 file(s) scanned, clean (305 in the allowed crates, 38 in the rule runner)
   ok      abi-five-symbols — 10 file(s) scanned, clean
-  ok      no-listening-socket — 797 file(s) scanned, clean (38 in the rule runner, 1 named in the listener allowlist)
+  ok      no-listening-socket — 800 file(s) scanned, clean (38 in the rule runner, 1 named in the listener allowlist)
   ok      commonmain-no-platform-import — 6 file(s) scanned, clean
   ok      gateway-harness-out-of-release — 24 file(s) scanned, clean
   ok      vault-connections-do-not-checkpoint — 4 file(s) scanned, clean
-  ok      no-kmp-shared — 348 file(s) scanned, clean
+  ok      no-kmp-shared — 350 file(s) scanned, clean
   ok      sqlite-page-flag — 175 file(s) scanned, clean
   ok      no-command-request — 31 file(s) scanned, clean
-  ok      native-accessibility — 281 file(s) scanned, clean
+  ok      native-accessibility — 283 file(s) scanned, clean
   ok      no-tasks-namespace — 195 file(s) scanned, clean
   ok      native-spells-no-screen-id — 192 file(s) scanned, clean (9 registered screen id(s))
   ok      native-names-no-command — 203 file(s) scanned, clean (147 registered command(s))

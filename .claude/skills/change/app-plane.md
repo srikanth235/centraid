@@ -448,7 +448,7 @@ Proof is in [land](../land/SKILL.md): room-tree text snapshots, the registry tes
 
 ## 16. Following a phone store (D13)
 
-The member turns a phone store on from the More of the app that owns it; the core asks the shell to read it; the vault merges what the shell read. The rooms say the state, the core owns every decision about when to read and whether to ask, and a shell reads and answers. Nothing is written back to the phone. What a member is promised is [arrive-take-out](../product/rulings/arrive-take-out.md); the page that lists what each shell performs is [following](following.md).
+The member turns a phone store on from the More of the app that owns it; the core asks the shell to read it; the vault merges what the shell read. The rooms say the state, the core owns every decision about when to read and whether to ask, and a shell reads and answers. Nothing is written back to the phone. What a member is promised is [arrive-take-out](../product/rulings/arrive-take-out.md); the per-store wire is described in [following](following.md).
 
 | Store (`system`) | Owner and row in its More | The shell reads | May ask the OS |
 | --- | --- | --- | --- |
@@ -458,6 +458,8 @@ The member turns a phone store on from the More of the app that owns it; the cor
 | `files` | Docs: "Follow a folder" | a folder the member picks (the picker is the ask) | the picker, on the member's tap |
 | `health` | Health: "Follow Health" | the health store, read permission only; windows and a cursor | on the member's tap |
 | `camera_roll` | Photos: "Follow camera roll" | the grant only (the camera-roll walk stays the pass service's) | on the member's tap |
+
+The iOS and Android follow adapters are implemented. They request and read their supported stores only when asked, turn changes into `TRIGGER`s, and send results to the core; Android Reminders deliberately remains `UNAVAILABLE`. Physical permission prompts, OS store contents, background refresh, and real picker/grant behavior are still unverified on devices. Source code and fixture tests do not establish those OS flows.
 
 **The wire** is `FollowRequest`/`FollowResponse` and the shell-effect channel of section 17 (`ShellStoreRead`, `ShellPhoneWatch`, `ShellOpenSettings`, `ShellReleaseGrant`, pushed as `Event.effect`). Field numbers are additive.
 
@@ -480,32 +482,31 @@ The member turns a phone store on from the More of the app that owns it; the cor
 
 **D13: the enrolment key.** `follow.<store>` (`contacts`, `calendar`, `reminders`, `files`, `health`, `camera_roll`): `{"v":1,"on":true,"chosen":[…]}` (`chosen` is Health's types), core-owned, in the device store beside the vault.
 
-**Not built (target).** The native adapters (Swift, Kotlin) that perform the following effects and send `FollowRequest`; until they land a shell that sends nothing leaves every store as it is. A background-window pass for Health (Android only) waits on the same adapters.
-
 ## 17. The shell-effect channel
 
-A room never touches the phone. When a tap needs the phone, its screen returns `Outcome::effect(tag, kind)`; the runtime gives the effect an id, answers the event with it in `RoomResponse.effects`, and routes the shell's answer (`RoomEvent.effect_result`, carrying the id) back to the same room as `Input::Effect` under `tag`. The core asks on its own through `Event.effect` (following does); an answer to those is a request of its own (`FollowRequest{PASS}`), not a room event. The wire is `ShellEffect` and `ShellEffectResult` in [`room.proto`](../../../crates/api-proto/proto/centraid/core/v1/room.proto); every variant is defined now so the native lanes are briefed once. Bytes never cross: a file is a path the core wrote or a shell picked. A shell names no command and no screen, and does only what an effect says.
+A room never touches the phone. When a tap needs the phone, its screen returns `Outcome::effect(tag, kind)`; the runtime gives the effect an id, answers the event in `RoomResponse.effects`, and routes the shell's answer (`RoomEvent.effect_result`, carrying the id) back to the same room as `Input::Effect` under `tag`. The core also pushes effects on `Event.effect` (following does); answers to those are their own protocol, such as `FollowRequest{PASS}`, not room events. The wire is `ShellEffect` and `ShellEffectResult` in [`room.proto`](../../../crates/api-proto/proto/centraid/core/v1/room.proto). Bytes never cross: a file is a path the core wrote or a shell picked. A shell names no command and no screen, and does only what an effect says.
 
-The old performers are the intended homes: iOS `ScreenPlatform.swift`, `LockerClipboardLease.swift`, `ShelfCopyExport.swift`, `Chat/ChatModelDownload.swift`; Android `kit/ScreenEffects.kt`, `kit/OwnerPrompt.kt`.
+**One-way lifecycle controls.** On a vault identity transition, after the source Room has been retired, Core sends `CoreEvent.effect` controls: `owner_check{cancel:true}` dismisses the outstanding owner prompt, and `clipboard_copy{clear_owned:true,owner_vault_id:OLD}` asks the shell to clear only clipboard content owned by the old vault. The native performer cancels or clears owned state and sends no Room reply. `phone_watch` and `release_grant` are also one-way controls. These controls do not change the ordinary `RoomResponse.effects` → `RoomEvent.effect_result` reply contract for room-requested effects.
 
-| Effect (answer) | iOS | Android | Used by |
+The native performers are implemented in iOS `ScreenPlatform.swift`, `LockerClipboardLease.swift`, `ShelfCopyExport.swift` and `Chat/ChatModelDownload.swift`, and Android `kit/ScreenEffects.kt`, `kit/OwnerPrompt.kt`, `RoomShellEffectPerformer.kt` and the store-specific readers. Their source implementation does not prove the physical OS interaction; native device checks remain outstanding.
+
+| Effect (answer) | iOS | Android | Implementation status and remaining proof |
 | --- | --- | --- | --- |
-| `store_read` (a `FollowRequest{PASS}`) | `CNContactStore`, `EKEventStore` events and reminders, `HKHealthStore` read-only, the document picker with a security-scoped bookmark, `PHPhotoLibrary` authorization | `ContactsContract`, `CalendarContract`, Health Connect `HealthConnectClient`, `ACTION_OPEN_DOCUMENT_TREE`, `READ_MEDIA_IMAGES`; Reminders answers `UNAVAILABLE` | Following (performers are target) |
-| `phone_watch` (none) | `EKEventStoreChanged`, `CNContactStoreDidChange` | content observers (`PhoneWatchers.kt`) | Following (target) |
-| `open_settings` (`ShellDone`) | `UIApplication.openSettingsURLString` | `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`, or the notification channel page for `notifications` | Following and Notifications (target) |
-| `release_grant` (none) | drop the folder's bookmark | release the persisted tree URI permission | Following (target) |
-| `owner_check` (`ShellOwner`) | `LAContext` `deviceOwnerAuthentication` | `BiometricPrompt` with device credential (`OwnerPrompt.kt`) | Locker, every `export*`, recovery key, restore (target) |
-| `share` (`ShellDone`) | `UIActivityViewController` | `Intent.ACTION_SEND` through a `FileProvider` | A single item's Share (target) |
-| `save_file` (`ShellDone`) | `UIDocumentPickerViewController` export | `ACTION_CREATE_DOCUMENT` | Export (target) |
-| `pick_file` (`ShellPicked`) | `UIDocumentPickerViewController` open | `ACTION_OPEN_DOCUMENT` | Docs, imports (target) |
-| `pick_photo` (`ShellPicked`) | `PHPickerViewController` | the photo picker | Photos (target) |
-| `scan_document` (`ShellPicked`) | `VNDocumentCameraViewController` | the document scanner | Docs, Money (target) |
-| `clipboard_copy` (`ShellDone`) | `UIPasteboard` with `localOnly` and an expiry, the lease in `LockerClipboardLease.swift` | `ClipboardManager` with `EXTRA_IS_SENSITIVE`, cleared at the lease | Locker (target) |
-| `photo_delete` (`ShellDone` or `ShellFailed{cancelled}`) | `PHAssetChangeRequest.deleteAssets` | `MediaStore.createDeleteRequest` | Photos Free up space (target) |
-| `model_download` (`ShellDone`) | a background `URLSession` download (`ChatModelDownload.swift`) | `DownloadManager` or `WorkManager` | Chat (target) |
-| `permission_status` (`ShellGrant`) | `UNUserNotificationCenter`, `PHPhotoLibrary`, `AVCaptureDevice`, the store's own status | `NotificationManagerCompat`, `checkSelfPermission` | Settings, the More rows (target) |
+| `store_read` (a `FollowRequest{PASS}`) | `CNContactStore`, `EKEventStore` events and reminders, `HKHealthStore` read-only, the document picker with a security-scoped bookmark, `PHPhotoLibrary` authorization | `ContactsContract`, `CalendarContract`, Health Connect `HealthConnectClient`, `ACTION_OPEN_DOCUMENT_TREE`, `READ_MEDIA_IMAGES`; Reminders answers `UNAVAILABLE` | Following adapters are implemented for supported stores. Permission and read flows need physical-device verification. |
+| `phone_watch` (none) | `EKEventStoreChanged`, `CNContactStoreDidChange` and photo-library changes | Content observers, including MediaStore and followed-folder references | Implemented; change delivery and background behavior remain device checks. |
+| `open_settings` (`ShellDone`) | `UIApplication.openSettingsURLString` | `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`, or the notification channel page for `notifications` | Implemented; verify the destination on each OS. |
+| `release_grant` (none) | Drop the folder's bookmark | Release the persisted tree URI permission | Implemented; physical grant lifecycle remains unverified. |
+| `owner_check` (`ShellOwner`) | `LAContext` `deviceOwnerAuthentication` | `BiometricPrompt` with device credential (`OwnerPrompt.kt`) | Implemented; physical owner authentication and prompt cancellation remain device checks. |
+| `share` (`ShellDone`) | `UIActivityViewController` | `Intent.ACTION_SEND` through a `FileProvider` | Implemented; native share-sheet completion is unverified. The incoming share-extension host-app flow remains unverified. |
+| `save_file` (`ShellDone`) | `UIDocumentPickerViewController` export | `ACTION_CREATE_DOCUMENT` | Implemented; native save-sheet completion is unverified. |
+| `pick_file` (`ShellPicked`) | `UIDocumentPickerViewController` open | `ACTION_OPEN_DOCUMENT` | Implemented; native picker and security-scoped/persisted grant behavior need device checks. |
+| `pick_photo` (`ShellPicked`) | `PHPickerViewController` | The photo picker | Implemented; OS selection and permission behavior remain unverified on devices. |
+| `scan_document` (`ShellPicked`) | `VNDocumentCameraViewController` | The document scanner | Implemented; an actual camera scan remains unverified on devices. |
+| `clipboard_copy` (`ShellDone`) | `UIPasteboard` with `localOnly` and an expiry; the lease in `LockerClipboardLease.swift` | `ClipboardManager` with `EXTRA_IS_SENSITIVE`, cleared at the lease | Implemented; physical expiry, vault-switch clearing and clipboard ownership remain device checks. |
+| `photo_delete` (`ShellDone` or `ShellFailed{cancelled}`) | `PHAssetChangeRequest.deleteAssets` | `MediaStore.createDeleteRequest` | Performer exists, but Photos Free up space is hidden from the room. |
+| `model_download` (`ShellDone`) | A background `URLSession` download (`ChatModelDownload.swift`) | `DownloadManager` or `WorkManager` | Download performers are implemented. Chat Send remains unavailable; assistant data work is excluded. |
+| `permission_status` (`ShellGrant`) | `UNUserNotificationCenter`, `PHPhotoLibrary`, `AVCaptureDevice`, the store's own status | `NotificationManagerCompat`, `checkSelfPermission` | Implemented; actual OS status and permission transitions need device checks. |
 
-A refused grant answers `ShellFailed{grant}` or `ShellGrant{grant}` with one of `REFUSED`, `RESTRICTED`, `LIMITED`, `UNAVAILABLE`; a dismissed sheet is `ShellFailed{cancelled}`. Core words every sentence the member reads. The effect channel is built; both shells still answer effects as unavailable, so every performer below is a (target).
+A refused grant answers `ShellFailed{grant}` or `ShellGrant{grant}` with one of `REFUSED`, `RESTRICTED`, `LIMITED`, `UNAVAILABLE`; a dismissed sheet is `ShellFailed{cancelled}`. Core words every sentence the member reads. Android Reminders deliberately answers `UNAVAILABLE`; Photos Free up space is hidden, and Photos place naming remains a target. Physical OS behavior, including owner authentication, clipboard expiry, pickers, saving, outgoing sharing, store permissions, and background transitions, is not verified by this source-level contract.
 
-**The door's three calls (lane W's seam).** `Door::enrol_store(store)` with `store` in `photos`, `calendar`, `reminders`, `people`, `health` sends `FollowRequest{ENROL}` for `camera_roll`, `calendar`, `reminders`, `contacts`, `health` (the tap that asks the OS once) and says "Waiting for your phone." `Door::open_settings(store)` adds an `open_settings` effect to the response. `Door::permission_refused(store)` is the follower's `STATUS.blocked == REFUSED`. The shell tells the core its platform with `RoomOpen.platform` (`ios` or `android`); `Door::reminders_source()` is false on `android`.
-
+**The door's three calls.** `Door::enrol_store(store)` with `store` in `photos`, `calendar`, `reminders`, `people`, `health` sends `FollowRequest{ENROL}` for `camera_roll`, `calendar`, `reminders`, `contacts`, `health` (the tap that asks the OS once) and says "Waiting for your phone." `Door::open_settings(store)` adds an `open_settings` effect to the response. `Door::permission_refused(store)` is the follower's `STATUS.blocked == REFUSED`. The shell tells the core its platform with `RoomOpen.platform` (`ios` or `android`); `Door::reminders_source()` is false on `android`.

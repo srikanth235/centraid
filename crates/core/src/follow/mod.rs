@@ -12,6 +12,7 @@
 //! covers; this device's id is set here, never by a shell.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use centraid_api_proto::core_v1 as wire;
@@ -47,6 +48,7 @@ pub const CALENDAR_DAYS_ON: u32 = 62;
 /// The Health window: a year of day totals and 90 days of workouts.
 pub const HEALTH_DAYS_BACK: u32 = 365;
 const DAY_MS: i64 = 86_400_000;
+static NEXT_FOLLOW_ASK_ID: AtomicU64 = AtomicU64::new(1);
 const WORKOUT_DAYS: i64 = 90;
 
 impl Store {
@@ -133,7 +135,6 @@ struct Report {
 }
 
 struct Inner {
-    next: u64,
     launch_nonce: u64,
     current: BTreeMap<Store, u64>,
     queued: BTreeSet<Store>,
@@ -147,7 +148,6 @@ pub struct Follower(Mutex<Inner>);
 impl Default for Follower {
     fn default() -> Self {
         Self(Mutex::new(Inner {
-            next: 0,
             launch_nonce: rand::random(),
             current: BTreeMap::new(),
             queued: BTreeSet::new(),
@@ -250,13 +250,11 @@ impl crate::handle::HandleState {
     }
 
     fn follow_ask(&self, store: Store, ask_permission: bool) -> wire::ShellEffect {
-        let id = {
+        let id = NEXT_FOLLOW_ASK_ID.fetch_add(1, Ordering::SeqCst);
+        {
             let mut inner = self.follower.lock();
-            inner.next += 1;
-            let id = inner.next;
             inner.current.insert(store, id);
-            id
-        };
+        }
         let mut read = wire::ShellStoreRead {
             system: store.key().to_owned(),
             ask_permission,
@@ -389,6 +387,40 @@ impl crate::handle::HandleState {
                 Err(refused("a follow request names a verb".to_owned()))
             }
         }
+    }
+
+    /// Invalidate asks owned by a vault that is leaving the foreground and stop
+    /// its native watchers. The vault's enrolments and merged rows stay intact.
+    pub fn suspend_follow(&self) -> Vec<wire::ShellEffect> {
+        let watched = {
+            let mut inner = self.follower.lock();
+            inner.current.clear();
+            inner.queued.clear();
+            std::mem::take(&mut inner.watching)
+        };
+        watched
+            .into_iter()
+            .map(|store| wire::ShellEffect {
+                effect_id: 0,
+                kind: Some(wire::shell_effect::Kind::PhoneWatch(
+                    wire::ShellPhoneWatch {
+                        system: store.key().to_owned(),
+                        on: false,
+                        folder_refs: if store == Store::Files {
+                            self.follow_folder_refs()
+                        } else {
+                            Vec::new()
+                        },
+                    },
+                )),
+            })
+            .collect()
+    }
+
+    /// Resume enrolled reads and native watches after this vault becomes the
+    /// foreground. These are permission-free refreshes, as on an app return.
+    pub fn resume_follow(&self) {
+        let _ = self.follow_trigger(&Store::ALL);
     }
 
     fn follow_enrol(&self, store: Store) -> Result<wire::FollowResponse> {

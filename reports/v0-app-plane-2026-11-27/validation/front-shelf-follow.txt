@@ -1,0 +1,9 @@
+   Compiling centraid-screens v1.0.0-alpha.0 (/workspace/centraid/crates/screens)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.68s
+     Running tests/room_front_shelf_follow.rs (target/debug/deps/room_front_shelf_follow-8cd6a8d25e2a88db)
+
+running 1 test
+test a_late_contacts_pass_cannot_cross_vaults_and_returning_reasks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+

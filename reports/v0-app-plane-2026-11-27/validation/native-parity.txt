@@ -1,34 +1,34 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.65s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
      Running unittests src/main.rs (target/debug/deps/xtask-be94fb2b4978fe5b)
 
 running 25 tests
-test native_parity::tests::a_comment_marker_inside_a_string_opens_no_comment ... ok
 test native_parity::tests::a_bare_member_reads_a_oneof_arm_and_nothing_else ... ok
-test native_parity::tests::a_census_over_too_little_fails_and_a_missing_subject_is_pending ... ok
-test native_parity::tests::a_field_neither_shell_reads_is_caught ... ok
+test native_parity::tests::a_comment_marker_inside_a_string_opens_no_comment ... ok
 test native_parity::tests::a_field_one_shell_reads_and_the_other_does_not_is_caught_both_ways ... ok
 test native_parity::tests::a_gap_that_closed_must_leave_the_register ... ok
+test native_parity::tests::a_field_neither_shell_reads_is_caught ... ok
+test native_parity::tests::a_census_over_too_little_fails_and_a_missing_subject_is_pending ... ok
 test native_parity::tests::a_gap_whose_missing_side_moved_is_caught ... ok
 test native_parity::tests::a_name_in_a_comment_is_not_a_read ... ok
-test native_parity::tests::a_platform_entry_holds_only_while_the_other_shell_reads_nothing ... ok
-test native_parity::tests::a_named_rust_only_entry_follows_the_collision_and_goes_stale_when_it_ends ... ok
 test native_parity::tests::a_register_entry_that_matches_what_the_census_sees_is_accepted ... ok
-test native_parity::tests::a_rust_only_or_runtime_entry_goes_stale_the_moment_a_shell_spells_the_field ... ok
+test native_parity::tests::a_platform_entry_holds_only_while_the_other_shell_reads_nothing ... ok
 test native_parity::tests::a_rust_only_entry_both_shells_read_must_leave_the_register ... ok
-test native_parity::tests::an_entry_naming_no_proto_item_and_a_duplicate_are_caught ... ok
+test native_parity::tests::a_named_rust_only_entry_follows_the_collision_and_goes_stale_when_it_ends ... ok
 test native_parity::tests::a_rust_only_or_runtime_entry_holds_while_no_shell_spells_the_field ... ok
+test native_parity::tests::a_rust_only_or_runtime_entry_goes_stale_the_moment_a_shell_spells_the_field ... ok
 test native_parity::tests::comments_are_cut_and_strings_and_lines_are_kept ... ok
 test native_parity::tests::a_tree_both_shells_read_is_clean_in_every_spelling ... ok
 test native_parity::tests::kotlin_reads_a_dot_a_named_argument_and_wires_underscore_but_not_a_local ... ok
-test native_parity::tests::generated_swift_tests_and_the_ios_main_set_are_not_a_shell_read ... ok
 test native_parity::tests::room_effect_and_block_arms_must_be_handled_by_both_shells ... ok
+test native_parity::tests::swift_reads_a_receiver_a_label_and_an_arm_but_not_a_bare_member_or_a_declaration ... ok
+test native_parity::tests::an_entry_naming_no_proto_item_and_a_duplicate_are_caught ... ok
+test native_parity::tests::generated_swift_tests_and_the_ios_main_set_are_not_a_shell_read ... ok
 test native_parity::tests::the_census_qualifies_nested_messages_and_skips_enums_reserved_and_options ... ok
 test native_parity::tests::the_register_is_well_formed ... ok
 test native_parity::tests::only_the_screens_protos_are_the_census ... ok
-test native_parity::tests::swift_reads_a_receiver_a_label_and_an_arm_but_not_a_bare_member_or_a_declaration ... ok
 test native_parity::tests::swiftprotobuf_spellings_resolve_initialisms_and_the_p_suffix ... ok
 
-test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 254 filtered out; finished in 0.03s
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 254 filtered out; finished in 0.01s
 
      Running tests/repo_root.rs (target/debug/deps/repo_root-66be27848f6f9070)
 

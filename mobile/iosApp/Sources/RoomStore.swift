@@ -104,6 +104,7 @@ final class RoomStore: ObservableObject {
     private var answeredEffectIDs: Set<UInt64> = []
     private var pumpTask: Task<Void, Never>?
     private var effectTask: Task<Void, Never>?
+    private var coreEffectTasks: [UUID: Task<Void, Never>] = [:]
     private var changeTask: Task<Void, Never>?
     private var started = false
     private var ownerContext: LAContext?
@@ -146,7 +147,11 @@ final class RoomStore: ObservableObject {
         effectTask = Task { [weak self] in
             for await effect in effects {
                 if Task.isCancelled { break }
-                await self?.answerCoreEffect(effect)
+                if case .storeRead? = effect.kind {
+                    self?.scheduleCoreEffect(effect)
+                } else {
+                    await self?.answerCoreEffect(effect)
+                }
             }
         }
         let changes = core.changes
@@ -167,6 +172,9 @@ final class RoomStore: ObservableObject {
         pumpTask = nil
         effectTask?.cancel()
         effectTask = nil
+        coreEffectTasks.values.forEach { $0.cancel() }
+        coreEffectTasks.removeAll()
+        cancelOwnerCheck()
         changeTask?.cancel()
         changeTask = nil
         phoneWatchTokens.values.forEach(NotificationCenter.default.removeObserver)
@@ -205,8 +213,7 @@ final class RoomStore: ObservableObject {
                 secureEpochFloor &+= 1
                 backgrounded = true
             }
-            ownerContext?.invalidate()
-            ownerContext = nil
+            cancelOwnerCheck()
             errorSentence = nil
             for tab in Array(stacks.keys) {
                 stacks[tab] = stacks[tab]?.map { $0.room.secure ? Self.maskSecureRoom($0) : $0 }
@@ -444,7 +451,44 @@ final class RoomStore: ObservableObject {
         )
     }
 
+    private static func isLifecycleControl(_ effect: Centraid_Core_V1_ShellEffect) -> Bool {
+        switch effect.kind {
+        case .ownerCheck(let check)?: return check.cancel
+        case .clipboardCopy(let copy)?: return copy.clearOwned_p
+        default: return false
+        }
+    }
+
+    private func scheduleCoreEffect(_ effect: Centraid_Core_V1_ShellEffect) {
+        let job = UUID()
+        coreEffectTasks[job] = Task { [weak self] in
+            guard let self else { return }
+            await self.answerCoreEffect(effect)
+            _ = self.coreEffectTasks.removeValue(forKey: job)
+        }
+    }
+
+    private func cancelOwnerCheck() {
+        let context = ownerContext
+        ownerContext = nil
+        context?.invalidate()
+    }
+
     func answerCoreEffect(_ effect: Centraid_Core_V1_ShellEffect) async {
+        guard !Task.isCancelled else { return }
+        if Self.isLifecycleControl(effect) {
+            guard claimedEffectIDs.insert(effect.effectID).inserted else { return }
+            if let shellEffectPerformer {
+                _ = await shellEffectPerformer(effect)
+            } else {
+                switch effect.kind {
+                case .ownerCheck?: cancelOwnerCheck()
+                case .clipboardCopy(let copy)?: Self.clearOwnedClipboard(vaultID: copy.ownerVaultID)
+                default: break
+                }
+            }
+            return
+        }
         switch effect.kind {
         case .storeRead(let read)?:
             let result: (Centraid_Core_V1_FollowGrant, String)
@@ -453,6 +497,7 @@ final class RoomStore: ObservableObject {
             } else {
                 result = await nativeSnapshot(read: read)
             }
+            guard !Task.isCancelled else { return }
             let grant = result.0
             let inputJSON = result.1
             guard let request = Self.followAnswer(effect, grant: grant, inputJSON: inputJSON) else { return }
@@ -1349,13 +1394,12 @@ final class RoomStore: ObservableObject {
         case .ownerCheck(let check)?:
             guard Self.allows(effect: effect, responseEpoch: responseEpoch, secureEpochFloor: secureEpochFloor) else { return }
             if check.cancel {
-                ownerContext?.invalidate()
-                ownerContext = nil
+                cancelOwnerCheck()
                 answer(effect, instance: instance, done: true)
                 return
             }
             let context = LAContext()
-            ownerContext?.invalidate()
+            cancelOwnerCheck()
             ownerContext = context
             var policyError: NSError?
             let available = context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &policyError)
@@ -1369,9 +1413,10 @@ final class RoomStore: ObservableObject {
             context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: check.reason) { [weak self] passed, error in
                 Task { @MainActor in
                     guard let self,
+                          self.ownerContext === context,
                           Self.allows(effect: effect, responseEpoch: responseEpoch, secureEpochFloor: self.secureEpochFloor)
                     else { return }
-                    if self.ownerContext === context { self.ownerContext = nil }
+                    self.ownerContext = nil
                     self.answer(effect, instance: instance, outcome: Self.ownerCheckOutcome(
                         available: true, errorCode: (error as? LAError)?.code.rawValue, passed: passed
                     ))

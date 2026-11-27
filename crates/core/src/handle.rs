@@ -1224,14 +1224,16 @@ impl HandleState {
     }
 
     /// Where `request` goes: the vault in front, unless it is the front's own
-    /// business — the screen runtime (it lives here and reads through the
-    /// vault in front), the words and a restore (they need no vault), the
+    /// business — the screen and room runtimes (they live here and read through
+    /// the vault in front), the words and a restore (they need no vault), the
     /// handshake, and the shelf's own read.
     fn foreground_for(&self, request: &wire::Request) -> Option<Handle> {
         use wire::request::Kind as K;
         self.vaults.get()?;
         match &request.kind {
-            None | Some(K::Hello(_) | K::Screen(_) | K::Phrase(_) | K::Restore(_)) => None,
+            None | Some(K::Hello(_) | K::Screen(_) | K::Room(_) | K::Phrase(_) | K::Restore(_)) => {
+                None
+            }
             Some(K::Load(load)) => self.foreground_for_load(load),
             Some(_) => self.foreground_if_shelved(),
         }

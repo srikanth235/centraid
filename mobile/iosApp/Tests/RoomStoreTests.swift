@@ -180,6 +180,61 @@ final class RoomStoreTests: XCTestCase {
         XCTAssertEqual(pass.inputJson, payload)
     }
 
+    func testVaultControlsBypassAnInFlightReaderAndNeverReplyToClosedRooms() async {
+        let core = RoomEffectTestCore()
+        let readStarted = expectation(description: "native reader is suspended")
+        let controlsFinished = expectation(description: "controls after duplicate events completed")
+        var resumeRead: CheckedContinuation<(Centraid_Core_V1_FollowGrant, String), Never>?
+        var performed: [UInt64] = []
+        let store = RoomStore(core: core, shellEffectPerformer: { effect in
+            performed.append(effect.effectID)
+            switch effect.kind {
+            case .ownerCheck(let check)?: XCTAssertTrue(check.cancel)
+            case .clipboardCopy(let copy)?:
+                XCTAssertTrue(copy.clearOwned_p)
+                XCTAssertEqual(copy.ownerVaultID, "previous-vault")
+            default: XCTFail("Only lifecycle controls reach this performer")
+            }
+            if effect.effectID == 504 { controlsFinished.fulfill() }
+            return .done(.init())
+        }, nativeFollowReader: { _ in
+            await withCheckedContinuation { continuation in
+                resumeRead = continuation
+                readStarted.fulfill()
+            }
+        })
+        defer {
+            store.stop()
+            resumeRead?.resume(returning: (.cancelled, ""))
+        }
+        await store.start()
+        await core.emitEffect(.with {
+            $0.effectID = 501
+            $0.kind = .storeRead(.with { $0.system = "contacts" })
+        })
+        await fulfillment(of: [readStarted], timeout: 2)
+        let cancel = Centraid_Core_V1_ShellEffect.with {
+            $0.effectID = 502
+            $0.kind = .ownerCheck(.with { $0.cancel = true })
+        }
+        let clear = Centraid_Core_V1_ShellEffect.with {
+            $0.effectID = 503
+            $0.kind = .clipboardCopy(.with {
+                $0.clearOwned_p = true
+                $0.ownerVaultID = "previous-vault"
+            })
+        }
+        for effect in [cancel, clear, cancel, clear] { await core.emitEffect(effect) }
+        await core.emitEffect(.with {
+            $0.effectID = 504
+            $0.kind = .ownerCheck(.with { $0.cancel = true })
+        })
+        await fulfillment(of: [controlsFinished], timeout: 2)
+        XCTAssertEqual(performed, [502, 503, 504])
+        let replies = await core.roomEffectAnswerCount()
+        XCTAssertEqual(replies, 0)
+    }
+
     func testFollowMergeRefusalShowsCoreSentence() async throws {
         let core = RoomEffectTestCore(followSentence: "The phone's contacts could not be added.")
         let store = RoomStore(core: core)
@@ -814,18 +869,21 @@ final class RoomStoreTests: XCTestCase {
 
 private actor RoomEffectTestCore: ScreenCore {
     nonisolated let updates: AsyncStream<Centraid_Core_V1_ScreenUpdate>
+    nonisolated let effects: AsyncStream<Centraid_Core_V1_ShellEffect>
     nonisolated let answers: AsyncStream<Centraid_Core_V1_ShellEffectResult>
     nonisolated let requests: AsyncStream<Centraid_Core_V1_Request>
     nonisolated let changes: AsyncStream<Centraid_Core_V1_ChangeEvent>
     private nonisolated let answerSink: AsyncStream<Centraid_Core_V1_ShellEffectResult>.Continuation
     private nonisolated let requestSink: AsyncStream<Centraid_Core_V1_Request>.Continuation
     private nonisolated let changeSink: AsyncStream<Centraid_Core_V1_ChangeEvent>.Continuation
+    private nonisolated let effectSink: AsyncStream<Centraid_Core_V1_ShellEffect>.Continuation
     private let followSentence: String?
     private let failShareIn: Bool
     private var appearance: String?
     private var stageCount = 0
     private var stageVerbs: [String] = []
     private var followTriggers = 0
+    private var roomAnswers = 0
 
     init(followSentence: String? = nil, appearance: String? = nil, failShareIn: Bool = false) {
         self.followSentence = followSentence
@@ -841,6 +899,9 @@ private actor RoomEffectTestCore: ScreenCore {
         let changes = AsyncStream<Centraid_Core_V1_ChangeEvent>.makeStream()
         self.changes = changes.stream
         changeSink = changes.continuation
+        let effects = AsyncStream<Centraid_Core_V1_ShellEffect>.makeStream()
+        self.effects = effects.stream
+        effectSink = effects.continuation
     }
 
     func call(_ request: Centraid_Core_V1_Request) async throws -> Centraid_Core_V1_Response {
@@ -883,6 +944,7 @@ private actor RoomEffectTestCore: ScreenCore {
            case .send(let send)? = room.kind,
            case .effectResult(let answer)? = send.event.kind
         {
+            roomAnswers += 1
             answerSink.yield(answer)
         }
         if case .follow? = request.kind, let followSentence {
@@ -903,6 +965,10 @@ private actor RoomEffectTestCore: ScreenCore {
     func stageRequestVerbs() -> [String] { stageVerbs }
 
     func followTriggerCount() -> Int { followTriggers }
+
+    func roomEffectAnswerCount() -> Int { roomAnswers }
+
+    func emitEffect(_ effect: Centraid_Core_V1_ShellEffect) { effectSink.yield(effect) }
 
     func emitChange(table: String) {
         var change = Centraid_Core_V1_ChangeEvent()

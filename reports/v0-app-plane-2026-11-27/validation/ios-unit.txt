@@ -1,0 +1,17 @@
+Hosted iOS verification — partial result, not a passing job
+
+Run: https://github.com/srikanth235/centraid/actions/runs/46045372411
+Commit: 5c1b94498abd5e7bbcee890fd5a767b8af9377ad
+iOS job: 140663294315
+Toolchain: Xcode 26.3 / Swift 6.2.4
+
+Both real llama-enabled Rust targets built successfully. Swift app/test compilation completed and XCTest executed 173 unit tests with 0 failures. The simulator app was installed and launched for the UI suite.
+
+UI outcome: 8 tests, 1 skipped, 18 failures. App taps stayed on Home and the visible error was "This version of Centraid can't do that." The shared Core router was forwarding Room requests from the front shelf to a foreground child without a RoomHost. The Core fix and its regression test are pending verification in a later run. The screenshot helper also used header/add for People/Money, while Rust supplies key/add; that test-only correction is pending the next batch.
+
+No required screenshot PNGs were exported. The exported UI Snapshot attachments are plist/debug data, not screenshots. The unsigned generic iPhone app build was skipped after the UI failure. No physical-device or share-extension host-app flow is proved.
+
+Artifact: ios-verification, ID 15224790855, 215318943 bytes.
+Downloaded archive SHA256: 9916cccfa4bb7b95ef23ff9116637273a91468f7a683cc446c43045f666a1e69
+Unit log: target/ios-verification/centraid-tests.log
+UI log: target/ios-verification/centraid-ui-tests.log

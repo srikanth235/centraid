@@ -135,6 +135,11 @@ pub trait RoomCtx {
 
     /// Show the shell a room.
     fn push(&self, shown: wire::RoomShown);
+
+    /// Ask the shell to perform a phone-side effect outside a request response.
+    /// Room lifecycle transitions use this to cancel prompts and clear data
+    /// that belongs to a vault that is no longer in front.
+    fn push_effect(&self, effect: wire::ShellEffect);
 }
 
 pub trait RoomHost: Send + Sync {
