@@ -573,12 +573,18 @@ fn process(ctx: &Ctx, step: &str, program: &str, args: &[&str]) -> Result<Outcom
         .lines()
         .rev()
         .find(|candidate| !candidate.trim().is_empty())
+        .map(str::to_owned)
         .or_else(|| {
-            stdout
-                .lines()
-                .find(|candidate| !candidate.trim().is_empty())
+            let mut lines = stdout.lines().filter(|line| !line.trim().is_empty());
+            let first = lines.next()?;
+            let more = lines.count();
+            Some(if more == 0 {
+                first.to_owned()
+            } else {
+                format!("[{} lines in stdout.log] {first}", more + 1)
+            })
         })
-        .unwrap_or("(no output)");
+        .unwrap_or_else(|| "(no output)".to_owned());
     let why: String = why.chars().take(160).collect();
     Ok(Outcome::Failed(format!(
         "`{label}` exited {} — {why} · artifact: {}",

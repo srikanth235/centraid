@@ -642,7 +642,7 @@ enum AssistStand {
 }
 
 enum AssistOffer {
-  ASSIST_OFFER_NONE = 0;
+  ASSIST_OFFER_UNSPECIFIED = 0;
   // The current model, and its adapter in the same download.
   ASSIST_OFFER_MODEL = 1;
   // The adapter alone: the model in use is the current one.
@@ -650,7 +650,7 @@ enum AssistOffer {
 }
 
 enum AssistPlanRefusal {
-  ASSIST_PLAN_REFUSAL_NONE = 0;
+  ASSIST_PLAN_REFUSAL_UNSPECIFIED = 0;
   ASSIST_PLAN_REFUSAL_NO_SPACE = 1;
   ASSIST_PLAN_REFUSAL_NO_MEMORY = 2;
   // On mobile data the member has not allowed: ask first.
