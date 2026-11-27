@@ -8,15 +8,21 @@
 
 pub mod blocks;
 pub mod calendar;
+pub mod chat;
+pub mod docs;
 pub mod door;
 pub mod field;
 pub mod form;
 pub mod frame;
+pub mod health;
 pub mod home;
 pub mod host;
+pub mod locker;
 pub mod money;
+pub mod notes;
 pub mod notify_words;
 pub mod people;
+pub mod photos;
 pub mod reminders;
 pub mod rooms;
 pub mod screen;

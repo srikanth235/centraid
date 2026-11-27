@@ -31,11 +31,17 @@ pub fn registry() -> Registry {
     Registry::new()
         .exact(SETTINGS, || Box::new(Settings))
         .exact(BACKUP, || Box::new(Backup))
-        .merge(super::home::registry())
         .merge(super::people::registry())
         .merge(super::money::registry())
         .merge(super::calendar::registry())
         .merge(super::reminders::registry())
+        .merge(super::notes::registry())
+        .merge(super::docs::registry())
+        .merge(super::photos::registry())
+        .merge(super::health::registry())
+        .merge(super::locker::registry())
+        .merge(super::chat::registry())
+        .merge(super::home::registry())
 }
 
 pub(super) fn backup_line_status(door: &dyn super::door::Door) -> String {
