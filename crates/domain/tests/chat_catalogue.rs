@@ -29,15 +29,15 @@ fn columns(connection: &Connection, table: &str) -> BTreeSet<String> {
 /// The words a CHECK list or a lookup table allows for `table.column`.
 fn allowed(connection: &Connection, table: &str, column: &str) -> Option<BTreeSet<String>> {
     let lookup = match (table, column) {
-        ("account", "type") => Some("account_type"),
-        ("locker_item", "type") => Some("locker_type"),
-        ("measurement", "metric") => Some("health_metric"),
+        ("account", "type") => Some("SELECT code FROM vocab WHERE domain = 'account_type'".to_owned()),
+        ("locker_item", "type") => Some("SELECT code FROM vocab WHERE domain = 'locker_type'".to_owned()),
+        ("measurement", "metric") => Some("SELECT code FROM health_metric".to_owned()),
         _ => None,
     };
     if let Some(lookup) = lookup {
         return Some(
             connection
-                .prepare(&format!("SELECT code FROM {lookup}"))
+                .prepare(&lookup)
                 .expect("a lookup")
                 .query_map([], |row| row.get::<_, String>(0))
                 .expect("rows")

@@ -363,7 +363,7 @@ mod tests {
         let declared: Vec<String> = vault
             .read(|connection| {
                 Ok(connection
-                    .prepare("SELECT code FROM locker_type ORDER BY code")?
+                    .prepare("SELECT code FROM vocab WHERE domain = 'locker_type' ORDER BY code")?
                     .query_map([], |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<_>>()?)
             })

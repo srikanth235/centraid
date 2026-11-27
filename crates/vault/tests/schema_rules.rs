@@ -2433,7 +2433,7 @@ fn a_chat_needs_a_title_and_a_message_is_a_state_machine_with_lookup_reasons() {
         ", 'doc_truncated'",
     ));
     // A lookup row a message uses is not taken away.
-    w.refuses("DELETE FROM message_refusal WHERE code = 'no_tool_fits'");
+    w.refuses("DELETE FROM vocab WHERE domain = 'message_refusal' AND code = 'no_tool_fits'");
     // A message holds no routing record and no card snapshot: a card is a row of its own.
     let columns: Vec<String> = w
         .scratch

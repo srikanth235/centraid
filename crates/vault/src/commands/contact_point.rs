@@ -258,7 +258,7 @@ fn pre_save(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }
     let (kind, value) = (ctx.required_str("kind")?, ctx.required_str("value")?);
     let known: bool = ctx.connection().query_row(
-        "SELECT EXISTS (SELECT 1 FROM contact_point_kind WHERE code = ?1)",
+        "SELECT EXISTS (SELECT 1 FROM vocab WHERE domain = 'contact_point_kind' AND code = ?1)",
         [kind],
         |row| row.get(0),
     )?;

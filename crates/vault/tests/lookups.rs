@@ -79,10 +79,21 @@ fn nothing_writes_a_lookup_table_after_founding() {
                 )?)
             })
             .expect("a column");
+        let columns: Vec<String> = scratch
+            .vault
+            .read(|c| {
+                Ok(
+                    c.prepare(&format!("SELECT name FROM pragma_table_info('{table}')"))?
+                        .query_map([], |r| r.get(0))?
+                        .collect::<rusqlite::Result<_>>()?,
+                )
+            })
+            .expect("columns");
+        let columns = columns.join(", ");
         for (verb, sql) in [
             (
                 "insert",
-                format!("INSERT INTO {table} SELECT * FROM {table} LIMIT 1"),
+                format!("INSERT INTO {table} ({columns}) SELECT {columns} FROM {table} LIMIT 1"),
             ),
             ("update", format!("UPDATE {table} SET {first} = {first}")),
             ("delete", format!("DELETE FROM {table}")),
@@ -124,7 +135,10 @@ fn kind_is_the_entity_kind_lookup_and_its_attributes() {
         rust_words(Kind::CONCEPTS.map(Kind::as_str))
     );
     assert_eq!(
-        words(&scratch, "SELECT code FROM container_kind"),
+        words(
+            &scratch,
+            "SELECT code FROM vocab WHERE domain = 'container_kind'"
+        ),
         rust_words(Kind::CONTAINERS.map(Kind::as_str))
     );
 }
@@ -142,7 +156,10 @@ fn rel_is_the_set_of_relations_edge_shape_holds() {
 fn a_photo_form_is_the_photo_form_lookup() {
     let scratch = common::Scratch::empty("lookups_photo_form").expect("a vault");
     assert_eq!(
-        words(&scratch, "SELECT code FROM photo_form"),
+        words(
+            &scratch,
+            "SELECT code FROM vocab WHERE domain = 'photo_form'"
+        ),
         rust_words(centraid_vault::commands::photo::Form::ALL.map(|form| form.code()))
     );
 }
@@ -150,7 +167,7 @@ fn a_photo_form_is_the_photo_form_lookup() {
 #[test]
 fn a_label_colour_is_a_palette_key() {
     let scratch = common::Scratch::empty("lookups_palette").expect("a vault");
-    let palette = words(&scratch, "SELECT key FROM palette");
+    let palette = words(&scratch, "SELECT code FROM vocab WHERE domain = 'palette'");
     for color in centraid_vault::commands::tag::LABEL_COLORS {
         assert!(palette.contains(color), "{color} is not a palette key");
     }
@@ -286,4 +303,57 @@ fn a_database_that_is_not_ours_at_the_index_path_is_refused_and_left_alone() {
         "left byte-identical"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The vocabulary table: a column takes only a code of its own domain
+// ---------------------------------------------------------------------------------------------
+
+fn refused_by_the_foreign_key(scratch: &common::Scratch, sql: &str) {
+    let why = scratch
+        .vault
+        .commit(|tx| {
+            tx.connection().execute(sql, [])?;
+            Ok(())
+        })
+        .expect_err(sql)
+        .to_string();
+    assert!(why.contains("FOREIGN KEY"), "{sql}: {why}");
+}
+
+#[test]
+fn a_vocabulary_column_refuses_an_unknown_code_and_a_code_of_another_domain() {
+    let scratch = common::Scratch::empty("lookups_vocab_fk").expect("a vault");
+    for sql in [
+        "UPDATE container SET color = 'zebra'",
+        "UPDATE container SET color = 'notebook'",
+    ] {
+        refused_by_the_foreign_key(&scratch, sql);
+    }
+    let w = common::locker::world("lookups_vocab_fk_locker");
+    let item = common::locker::item_id(&w);
+    common::locker::add(&w, &item, "login", "One", vec![]);
+    let person = w.ok("person.add", serde_json::json!({ "title": "Ada" }))["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    for (table, column, id) in [("locker_item", "type", &item), ("person", "form", &person)] {
+        for code in ["zebra", "blue"] {
+            let why = w
+                .vault()
+                .commit(|tx| {
+                    tx.connection().execute(
+                        &format!("UPDATE {table} SET {column} = ?1 WHERE id = ?2"),
+                        [code, id],
+                    )?;
+                    Ok(())
+                })
+                .expect_err(code)
+                .to_string();
+            assert!(
+                why.contains("FOREIGN KEY"),
+                "{table}.{column} {code}: {why}"
+            );
+        }
+    }
 }

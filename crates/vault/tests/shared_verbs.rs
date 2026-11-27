@@ -1292,7 +1292,7 @@ fn the_flags_the_arrivals_and_the_colours_are_what_the_founded_file_holds() {
     // The ways a one-time arrival comes in are the `arrival_via` rows.
     // The macro every command's schema takes lists exactly them; which kind each brings in is
     // `arrival_via_kind`, which `arrival::record` reads and `entity`'s own key holds.
-    let via = words("SELECT code FROM arrival_via");
+    let via = words("SELECT code FROM vocab WHERE domain = 'arrival_via'");
     let offered: BTreeSet<String> = [
         "picker", "vcard", "markdown", "csv", "scan", "upload", "share", "ics",
     ]
@@ -1301,7 +1301,7 @@ fn the_flags_the_arrivals_and_the_colours_are_what_the_founded_file_holds() {
     .collect();
     assert_eq!(offered, via);
     // Every colour a command offers or reads is a key of the palette.
-    let palette = words("SELECT key FROM palette");
+    let palette = words("SELECT code FROM vocab WHERE domain = 'palette'");
     for color in LIST_COLORS
         .iter()
         .chain(&PHONE_CALENDAR_COLORS)
@@ -1311,7 +1311,7 @@ fn the_flags_the_arrivals_and_the_colours_are_what_the_founded_file_holds() {
     }
     // The kinds of container and concept are the rows of their lookups, with the Rust enum.
     assert_eq!(
-        words("SELECT code FROM container_kind"),
+        words("SELECT code FROM vocab WHERE domain = 'container_kind'"),
         Kind::CONTAINERS
             .iter()
             .map(|k| k.as_str().to_owned())

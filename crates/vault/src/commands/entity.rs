@@ -936,7 +936,7 @@ fn is_capture(connection: &Connection, found: &Found) -> Result<bool> {
     }
     Ok(connection.query_row(
         "SELECT EXISTS (SELECT 1 FROM entity e JOIN entity_kind k ON k.code = e.parent_kind
-                         WHERE e.id = ?1 AND e.parent_kind NOT IN (SELECT code FROM container_kind))",
+                         WHERE e.id = ?1 AND e.parent_kind NOT IN (SELECT code FROM vocab WHERE domain = 'container_kind'))",
         [&found.id],
         |row| row.get(0),
     )?)
