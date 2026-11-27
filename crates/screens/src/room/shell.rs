@@ -20,7 +20,7 @@ use crate::strings::{
 
 pub const HOME: &str = "home";
 pub const SETTINGS: &str = "settings";
-pub const SETTINGS_RECOVERY_KEY: &str = "settings/recovery-key";
+pub const SETTINGS_RECOVERY: &str = "settings/recovery-key";
 pub const BACKUP: &str = "backup";
 pub const BACKUP_PAIR: &str = "backup/pair";
 
@@ -36,7 +36,7 @@ pub const DETAILS_KEY: &str = "settings.details";
 pub fn registry() -> Registry {
     Registry::new()
         .exact(SETTINGS, || Box::new(Settings))
-        .exact(SETTINGS_RECOVERY_KEY, || Box::new(RecoveryKeyConfirm))
+        .exact(SETTINGS_RECOVERY, || Box::new(RecoveryKeyConfirm))
         .exact(BACKUP, || Box::new(Backup))
         .exact(BACKUP_PAIR, || Box::new(BackupPair))
         .merge(super::people::registry())
@@ -189,7 +189,7 @@ impl RoomScreen for Settings {
             &mut b.sel,
             "row/recovery-key",
             &settings_words::settings_recovery_key(EN),
-            Handler::Open(SETTINGS_RECOVERY_KEY.to_owned()),
+            Handler::Open(SETTINGS_RECOVERY.to_owned()),
         )
         .meta(&settings_words::settings_show_recovery_key(EN))
         .into_block();
@@ -400,7 +400,7 @@ struct RecoveryKeyConfirm;
 
 impl RoomScreen for RecoveryKeyConfirm {
     fn key(&self) -> String {
-        SETTINGS_RECOVERY_KEY.to_owned()
+        SETTINGS_RECOVERY.to_owned()
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
@@ -417,7 +417,7 @@ impl RoomScreen for RecoveryKeyConfirm {
                 cancel: Handler::Back,
             },
         );
-        room(wire::RoomKind::Sheet, SETTINGS_RECOVERY_KEY)
+        room(wire::RoomKind::Sheet, SETTINGS_RECOVERY)
             .title(&settings_words::settings_recovery_key(EN))
             .ready(vec![confirm])
             .build()
