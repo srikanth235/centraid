@@ -568,11 +568,17 @@ fn process(ctx: &Ctx, step: &str, program: &str, args: &[&str]) -> Result<Outcom
     fs::write(dir.join("stdout.log"), &output.stdout)?;
     fs::write(dir.join("stderr.log"), &output.stderr)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
     let why = stderr
         .lines()
         .rev()
         .find(|candidate| !candidate.trim().is_empty())
-        .unwrap_or("(no stderr)");
+        .or_else(|| {
+            stdout
+                .lines()
+                .find(|candidate| !candidate.trim().is_empty())
+        })
+        .unwrap_or("(no output)");
     let why: String = why.chars().take(160).collect();
     Ok(Outcome::Failed(format!(
         "`{label}` exited {} — {why} · artifact: {}",
