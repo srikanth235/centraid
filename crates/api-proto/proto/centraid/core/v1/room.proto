@@ -947,22 +947,56 @@ message DeviceResponse {
   string value = 2;
 }
 
-// FOLLOWING A PHONE STORE (app-plane §10; following.md): the shell reads the store and sends the
-// snapshot; the core runs the store's follow command, which merges it. `system` is one of
-// `contacts`, `calendar`, `files`, `camera_roll`, `reminders`, `health`, `health_readings`,
-// `statement`. A stop retires the origin and deletes nothing.
+// FOLLOWING A PHONE STORE (app-plane §16; following.md). The core decides when to read and whether
+// the OS may be asked; the shell reads the store and answers; the vault merges. `system` is one of
+// `contacts`, `calendar`, `reminders`, `files`, `health`, `camera_roll`.
 enum FollowVerb {
   FOLLOW_VERB_UNSPECIFIED = 0;
+  // The shell's answer to a `FollowAsk`: what the OS said (`grant`) and, when granted, the snapshot.
   FOLLOW_VERB_PASS = 1;
+  // Stop following: retires the store's origins and forgets this device's enrolment. Deletes nothing.
   FOLLOW_VERB_STOP = 2;
+  // The member tapped "Follow <store>": core pushes an ask with `ask_permission` true.
+  FOLLOW_VERB_ENROL = 3;
+  // The app came forward, a watch fired or a window opened. Carries no data and never asks the OS.
+  FOLLOW_VERB_TRIGGER = 4;
+  // What a room says about the store: answered in `FollowResponse.status`.
+  FOLLOW_VERB_STATUS = 5;
+  // The member tapped "Open Settings" on a refused store: core pushes an `OPEN_SETTINGS` ask.
+  FOLLOW_VERB_SETTINGS = 6;
+}
+
+// What the OS said to a read.
+enum FollowGrant {
+  FOLLOW_GRANT_UNSPECIFIED = 0;
+  FOLLOW_GRANT_GRANTED = 1;
+  // The member said no (Settings can change it).
+  FOLLOW_GRANT_REFUSED = 2;
+  // A policy blocks it; no button here can change it.
+  FOLLOW_GRANT_RESTRICTED = 3;
+  // Some of the store was readable: the snapshot is merged and the room says it is partial.
+  FOLLOW_GRANT_LIMITED = 4;
+  // This phone has no such store (Android's Reminders, Health Connect not installed).
+  FOLLOW_GRANT_UNAVAILABLE = 5;
+  // The member dismissed the picker or the sheet: nothing changed.
+  FOLLOW_GRANT_CANCELLED = 6;
 }
 
 message FollowRequest {
   FollowVerb verb = 1;
   string system = 2;
-  // The command's input, as JSON: the snapshot of a pass, or the origin of a stop.
+  // PASS: the follow command's input as JSON (`origin`, `records`, `complete`, `since`, `gone`; for
+  // Health `{"workouts": …, "readings": …}`). STOP: `{"ref": …}` to stop one origin, empty for all.
   string input_json = 3;
   string invoke_key = 4;
+  // PASS: the ask this answers. An answer to an ask that is no longer the store's current one is stale.
+  uint64 ask_id = 5;
+  // PASS: what the OS said.
+  FollowGrant grant = 6;
+  // PASS (Health): the types the OS refused.
+  repeated string refused = 7;
+  // PASS (Health on Android): Health Connect would not read in the background.
+  bool background_refused = 8;
 }
 
 message FollowResponse {
@@ -971,6 +1005,67 @@ message FollowResponse {
   // The vault declined it, in its own sentence.
   bool declined = 2;
   string sentence = 3;
+  // ENROL, TRIGGER: how many asks were pushed.
+  uint32 asked = 4;
+  // PASS: it answered an ask that is no longer current and changed nothing.
+  bool stale = 5;
+  // STATUS.
+  FollowStatus status = 6;
+}
+
+// Where a store stands on this device, as a room says it.
+message FollowStatus {
+  // This device enrolled the store (the member tapped Follow and the OS said yes).
+  bool enrolled = 1;
+  // UNSPECIFIED while nothing blocks reading; REFUSED, RESTRICTED or UNAVAILABLE when the last
+  // answer was one of those (no trigger asks again until the member taps the row).
+  FollowGrant blocked = 2;
+  // A pass has read the store since launch, and how many records it held.
+  bool read = 3;
+  uint32 count = 4;
+  // Followed rows the vault doubted in the last pass, and whether it read only part of the store.
+  uint32 doubted = 5;
+  bool incomplete = 6;
+  // Health: the types the OS refused, and whether Health Connect refused background reading.
+  repeated string refused = 7;
+  bool background_refused = 8;
+  // An ask is waiting for the shell's answer.
+  bool asking = 9;
+}
+
+enum FollowAskKind {
+  FOLLOW_ASK_KIND_UNSPECIFIED = 0;
+  // Read the store (asking the OS only if `ask_permission`) and answer with `FollowRequest{PASS}`.
+  FOLLOW_ASK_KIND_READ = 1;
+  // Watch the store and send `FollowRequest{TRIGGER, system}` each time it changes.
+  FOLLOW_ASK_KIND_WATCH_ON = 2;
+  FOLLOW_ASK_KIND_WATCH_OFF = 3;
+  // Open the OS settings page where the member can allow this store.
+  FOLLOW_ASK_KIND_OPEN_SETTINGS = 4;
+  // Release the grant held for one folder (`ref`).
+  FOLLOW_ASK_KIND_FORGET = 5;
+}
+
+// Pushed as `Event.follow`.
+message FollowAsk {
+  uint64 ask_id = 1;
+  string system = 2;
+  FollowAskKind kind = 3;
+  // True only in the ask a member's tap made; a trigger's ask never asks the OS.
+  bool ask_permission = 4;
+  // Calendar: the window around the shell's clock.
+  uint32 days_back = 5;
+  uint32 days_on = 6;
+  // Health: where the last read of this install got to (empty is a complete read), the types the
+  // member chose, and the window: day totals from `days_back` civil days ago in the phone's zone,
+  // workouts that started at or after `workouts_since_ms`.
+  string cursor = 7;
+  repeated string chosen = 8;
+  int64 workouts_since_ms = 9;
+  // Health Connect: also ask to read while the app is closed (only with `ask_permission`).
+  bool ask_background = 10;
+  // FORGET: the origin's `ref`.
+  string ref = 11;
 }
 
 // THE SHARE-IN DRAIN (app-plane §10, D2): file what the share extension and the receiver left in

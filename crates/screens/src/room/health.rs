@@ -10,7 +10,7 @@ use super::door::Door;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
-use super::selector::{Act, Handler, Sel};
+use super::selector::{Act, Handler};
 use super::shell::UNITS_KEY;
 use crate::strings::{Locale, fill, health as words, shared};
 
@@ -235,7 +235,9 @@ fn owner_id(b: &mut Build<'_>) -> Result<String, super::door::Refused> {
         .unwrap_or_default())
 }
 
-fn health_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
+fn health_band(b: &mut Build<'_>, active_tab: &str) -> wire::RoomBand {
+    let follow_rows = super::follow::items(b, "health");
+    let sel = &mut b.sel;
     let tabs = vec![
         frame::tab(
             sel,
@@ -266,13 +268,7 @@ fn health_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         Handler::Open(TRASH.to_owned()),
     );
     more_trash.secondary = shared::trash_entry_meta(EN);
-    let more_items = vec![
-        blocks::menu_item(
-            sel,
-            "more/following",
-            &words::more_following(EN),
-            Handler::Tag("more:following".to_owned()),
-        ),
+    let mut more_items = vec![
         blocks::menu_item(
             sel,
             "more/kinds",
@@ -287,6 +283,7 @@ fn health_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         ),
         more_trash,
     ];
+    more_items.splice(0..0, follow_rows);
     let more_menu = blocks::menu(
         "band/more/menu",
         vec![blocks::menu_section("", more_items)],
@@ -298,13 +295,15 @@ fn health_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
     band
 }
 
-fn handle_band_nav(tag: &str) -> Option<Outcome> {
+fn handle_band_nav(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
+    if let Some(outcome) = super::follow::handle(e, tag) {
+        return Some(outcome);
+    }
     match tag {
         "nav:home" => Some(Outcome::replace(super::shell::HOME)),
         "tab:tab/summary" => Some(Outcome::replace(HEALTH)),
         "tab:tab/workouts" => Some(Outcome::replace(WORKOUTS)),
         "tab:tab/vitals" => Some(Outcome::replace(VITALS)),
-        "more:following" => Some(Outcome::say(&words::follow_health_note(EN))),
         "more:export" => Some(Outcome::say(&words::export_note(EN))),
         _ => None,
     }
@@ -340,7 +339,7 @@ impl RoomScreen for SummaryRoom {
             Err(refused) => {
                 return room(wire::RoomKind::AppPlace, HEALTH)
                     .title(&words::title(EN))
-                    .band(health_band(&mut b.sel, HEALTH))
+                    .band(health_band(b, HEALTH))
                     .failed(&mut b.sel, &refused.0, &shared::kit_retry(EN))
                     .build();
             }
@@ -353,7 +352,7 @@ impl RoomScreen for SummaryRoom {
             Err(refused) => {
                 return room(wire::RoomKind::AppPlace, HEALTH)
                     .title(&words::title(EN))
-                    .band(health_band(&mut b.sel, HEALTH))
+                    .band(health_band(b, HEALTH))
                     .failed(&mut b.sel, &refused.0, &shared::kit_retry(EN))
                     .build();
             }
@@ -536,13 +535,13 @@ impl RoomScreen for SummaryRoom {
                 &words::summary_edit_action(EN),
                 Handler::Open(format!("health/day/{day}/edit")),
             )
-            .band(health_band(&mut b.sel, HEALTH))
+            .band(health_band(b, HEALTH))
             .ready(blocks_out)
             .build()
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
-        if let Some(outcome) = handle_band_nav(tag) {
+        if let Some(outcome) = handle_band_nav(e, tag) {
             return outcome;
         }
         match tag {
@@ -725,7 +724,7 @@ impl RoomScreen for WorkoutsRoom {
             Err(refused) => {
                 return room(wire::RoomKind::AppPlace, WORKOUTS)
                     .title(&words::workouts_title(EN))
-                    .band(health_band(&mut b.sel, WORKOUTS))
+                    .band(health_band(b, WORKOUTS))
                     .failed(&mut b.sel, &refused.0, &shared::kit_retry(EN))
                     .build();
             }
@@ -851,13 +850,13 @@ impl RoomScreen for WorkoutsRoom {
                 &words::workout_add(EN),
                 Handler::Open(NEW_WORKOUT.to_owned()),
             )
-            .band(health_band(&mut b.sel, WORKOUTS))
+            .band(health_band(b, WORKOUTS))
             .ready(blocks_out)
             .build()
     }
 
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
-        if let Some(outcome) = handle_band_nav(tag) {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        if let Some(outcome) = handle_band_nav(e, tag) {
             return outcome;
         }
         if tag == "next_page" {
@@ -1551,7 +1550,7 @@ impl RoomScreen for VitalsRoom {
             Err(refused) => {
                 return room(wire::RoomKind::AppPlace, VITALS)
                     .title(&words::vitals_title(EN))
-                    .band(health_band(&mut b.sel, VITALS))
+                    .band(health_band(b, VITALS))
                     .failed(&mut b.sel, &refused.0, &shared::kit_retry(EN))
                     .build();
             }
@@ -1566,7 +1565,7 @@ impl RoomScreen for VitalsRoom {
             Err(refused) => {
                 return room(wire::RoomKind::AppPlace, VITALS)
                     .title(&words::vitals_title(EN))
-                    .band(health_band(&mut b.sel, VITALS))
+                    .band(health_band(b, VITALS))
                     .failed(&mut b.sel, &refused.0, &shared::kit_retry(EN))
                     .build();
             }
@@ -1693,13 +1692,13 @@ impl RoomScreen for VitalsRoom {
                 &words::reading_add(EN),
                 Handler::Open(NEW_READING.to_owned()),
             )
-            .band(health_band(&mut b.sel, VITALS))
+            .band(health_band(b, VITALS))
             .ready(blocks_out)
             .build()
     }
 
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
-        if let Some(outcome) = handle_band_nav(tag) {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = handle_band_nav(e, tag) {
             return outcome;
         }
         match tag {

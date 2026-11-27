@@ -58,6 +58,7 @@ pub mod config;
 pub mod convert;
 pub mod device;
 pub mod error;
+pub mod follow;
 pub mod events;
 pub mod example;
 pub mod handle;

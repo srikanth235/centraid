@@ -40,7 +40,7 @@ pub struct KeyDecl {
     /// The exact key, or the prefix a family's keys start with.
     pub name: &'static str,
     pub prefix: bool,
-    /// Which of D1–D12 it belongs to.
+    /// Which of D1–D13 it belongs to.
     pub d: &'static str,
     pub owner: Owner,
     pub place: Place,
@@ -131,6 +131,7 @@ pub const DEVICE_KEYS: &[KeyDecl] = &[
     key("gw", "D8", Core, Settings, Opaque),
     key("install-id", "D8", Shell, Settings, Opaque),
     family("follower-device.", "D8", Shell, Settings, Opaque),
+    family("follow.", "D13", Core, Device, Json(1)),
     family("grant.", "D9", Shell, Files, Opaque),
     key("backup.state", "D11", Backup, Files, Opaque),
     key("export", "D12", Core, Files, Json(1)),

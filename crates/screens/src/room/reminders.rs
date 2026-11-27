@@ -106,7 +106,9 @@ fn draft_key(door: &dyn Door) -> Option<String> {
     (!vault.is_empty()).then(|| format!("draft.{vault}.task"))
 }
 
-fn reminders_band(sel: &mut Sel) -> wire::RoomBand {
+fn reminders_band(b: &mut Build<'_>) -> wire::RoomBand {
+    let follow_rows = super::follow::items(b, "reminders");
+    let sel = &mut b.sel;
     let tabs = vec![frame::tab(
         sel,
         "tab/reminders",
@@ -121,13 +123,7 @@ fn reminders_band(sel: &mut Sel) -> wire::RoomBand {
         Handler::Open(TRASH.to_owned()),
     );
     more_trash.secondary = shared::trash_entry_meta(EN);
-    let more_items = vec![
-        blocks::menu_item(
-            sel,
-            "more/following",
-            &words::more_following(EN),
-            Handler::Tag("more:following".to_owned()),
-        ),
+    let mut more_items = vec![
         blocks::menu_item(
             sel,
             "more/export",
@@ -136,6 +132,7 @@ fn reminders_band(sel: &mut Sel) -> wire::RoomBand {
         ),
         more_trash,
     ];
+    more_items.splice(0..0, follow_rows);
     let more_menu = blocks::menu(
         "band/more/menu",
         vec![blocks::menu_section("", more_items)],
@@ -376,7 +373,7 @@ impl RoomScreen for RemindersRoot {
             Err(err) => {
                 return room(wire::RoomKind::AppPlace, REMINDERS)
                     .title(&words::app_title(EN))
-                    .band(reminders_band(&mut b.sel))
+                    .band(reminders_band(b))
                     .failed(&mut b.sel, &err.0, &shared::kit_retry(EN))
                     .build();
             }
@@ -491,17 +488,19 @@ impl RoomScreen for RemindersRoot {
                 &words::add_task(EN),
                 Handler::Open(NEW_TASK.to_owned()),
             )
-            .band(reminders_band(&mut b.sel))
+            .band(reminders_band(b))
             .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
             .ready(content)
             .build()
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::follow::handle(e, tag) {
+            return outcome;
+        }
         match tag {
             "nav:home" => Outcome::replace(super::shell::HOME),
             "tab:tab/reminders" => Outcome::default(),
-            "more:following" => Outcome::say(&words::follow_note(EN)),
             "more:export" => Outcome::say(&words::export_note(EN)),
             "smart-choice" => {
                 if let Input::Option(choice) = input {

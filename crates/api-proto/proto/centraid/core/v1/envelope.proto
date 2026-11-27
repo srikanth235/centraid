@@ -231,6 +231,8 @@ message Event {
     RoomShown room = 8;
     // The notification set the phone should hold, whole, each time it changes: `notify_screens.proto`.
     ScheduleNotifications notify = 9;
+    // What a phone store's shell must read or watch next: `room.proto`, app-plane §16.
+    FollowAsk follow = 10;
   }
 }
 

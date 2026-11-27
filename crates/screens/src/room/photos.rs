@@ -279,7 +279,9 @@ fn build_photo_sections(
         .collect()
 }
 
-fn photos_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
+fn photos_band(b: &mut Build<'_>, active_tab: &str) -> wire::RoomBand {
+    let follow_rows = super::follow::items(b, "camera_roll");
+    let sel = &mut b.sel;
     let tabs = vec![
         frame::tab(
             sel,
@@ -310,13 +312,7 @@ fn photos_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         Handler::Open(TRASH.to_owned()),
     );
     more_trash.secondary = shared::trash_entry_meta(EN);
-    let more_items = vec![
-        blocks::menu_item(
-            sel,
-            "more/camera-roll",
-            &words::more_camera_roll(EN),
-            Handler::Tag("more:camera-roll".to_owned()),
-        ),
+    let mut more_items = vec![
         blocks::menu_item(
             sel,
             "more/free-space",
@@ -331,6 +327,7 @@ fn photos_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         ),
         more_trash,
     ];
+    more_items.splice(0..0, follow_rows);
     let more_menu = blocks::menu(
         "band/more/menu",
         vec![blocks::menu_section("", more_items)],
@@ -347,13 +344,15 @@ fn photos_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
     band
 }
 
-fn handle_more_or_nav(tag: &str) -> Option<Outcome> {
+fn handle_more_or_nav(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
+    if let Some(outcome) = super::follow::handle(e, tag) {
+        return Some(outcome);
+    }
     match tag {
         "nav:home" => Some(Outcome::replace(super::shell::HOME)),
         "tab:tab/library" => Some(Outcome::replace(PHOTOS)),
         "tab:tab/albums" => Some(Outcome::replace(ALBUMS)),
         "tab:tab/places" => Some(Outcome::replace(PLACES)),
-        "more:camera-roll" => Some(Outcome::say(&words::camera_roll_note(EN))),
         "more:export" => Some(Outcome::say(&words::export_note(EN))),
         _ => None,
     }
@@ -551,7 +550,7 @@ impl RoomScreen for LibraryPage {
 
         let sel_actions = selection_actions(&mut b.sel, &picked);
         let sel_label = words::selected_count(EN, picked.len() as u64);
-        let band = photos_band(&mut b.sel, PHOTOS);
+        let band = photos_band(b, PHOTOS);
 
         room(wire::RoomKind::AppPlace, PHOTOS)
             .title(&words::title(EN))
@@ -573,7 +572,7 @@ impl RoomScreen for LibraryPage {
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
-        if let Some(out) = handle_more_or_nav(tag) {
+        if let Some(out) = handle_more_or_nav(e, tag) {
             return out;
         }
         if tag == "zoom"
@@ -1171,7 +1170,7 @@ impl RoomScreen for AlbumsList {
             );
         }
 
-        let band = photos_band(&mut b.sel, ALBUMS);
+        let band = photos_band(b, ALBUMS);
         room(wire::RoomKind::AppPlace, ALBUMS)
             .title(&words::albums_title(EN))
             .subtitle(&count_str)
@@ -1188,8 +1187,8 @@ impl RoomScreen for AlbumsList {
             .build()
     }
 
-    fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
-        handle_more_or_nav(tag).unwrap_or_default()
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+        handle_more_or_nav(e, tag).unwrap_or_default()
     }
 }
 
@@ -1639,7 +1638,7 @@ impl RoomScreen for PlacesList {
             content.push(sec.into_block());
         }
 
-        let band = photos_band(&mut b.sel, PLACES);
+        let band = photos_band(b, PLACES);
         room(wire::RoomKind::AppPlace, PLACES)
             .title(&words::places_title(EN))
             .subtitle(&count_str)
@@ -1656,8 +1655,8 @@ impl RoomScreen for PlacesList {
             .build()
     }
 
-    fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
-        if let Some(out) = handle_more_or_nav(tag) {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+        if let Some(out) = handle_more_or_nav(e, tag) {
             return out;
         }
         if tag.starts_with("next:") {

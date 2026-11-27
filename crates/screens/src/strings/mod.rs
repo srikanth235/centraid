@@ -129,6 +129,7 @@ pub mod calendar;
 pub mod chat;
 pub mod custody;
 pub mod docs;
+pub mod follow;
 pub mod health;
 pub mod home;
 pub mod locker;

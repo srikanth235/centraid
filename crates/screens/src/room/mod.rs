@@ -12,6 +12,7 @@ pub mod chat;
 pub mod docs;
 pub mod door;
 pub mod field;
+pub mod follow;
 pub mod form;
 pub mod frame;
 pub mod health;

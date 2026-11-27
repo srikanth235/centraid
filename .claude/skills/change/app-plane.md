@@ -335,7 +335,7 @@ One scheduler in core ([`crates/core/src/notify`](../../../crates/core/src/notif
 | Platform limit | The scheduler registers the soonest alerts that fit the platform's pending cap and refills on every commit and launch |
 | Payload | `centraid://open/<kind>/<id>`, plus action ids `done` and `snooze`; categories per `reminder_target` kind. No `Route` in any payload (D4) |
 
-## 10. Device store (D1–D12)
+## 10. Device store (D1–D13)
 
 Persisted outside the vault, so frozen: every key a shell or the core writes is listed once in the **device-key registry (D5)** ([`crates/core/src/device/registry.rs`](../../../crates/core/src/device/registry.rs)) with its version, and a test fails on an unlisted key or a JSON value without `"v"`.
 
@@ -353,6 +353,7 @@ Persisted outside the vault, so frozen: every key a shell or the core writes is 
 | D10 | **Locker clipboard lease** (vault id, item marker, digest, expiry; never the secret) | Listed in D5 |
 | D11 | **The backup plane's state file** (`plane.state_path()`) | Owned by the backup plane, out of this plane's changes; listed in D5 so the registry is complete |
 | D12 | **Portable files:** the "Export everything" manifest, each kind's portable JSON/CSV header, Locker's export, the index file's version header | Each states a format version; one export test per kind |
+| D13 | **Follow enrolment.** `follow.<store>`: `{"v":1,"on":true,"chosen":[…]}`, one per phone store this device enrolled | Core-owned; written when the OS grants the member's tap, deleted by a stop. Section 16 |
 
 **Where D1–D12 live.** [`crates/core/src/device`](../../../crates/core/src/device): `registry.rs` (D5), `store.rs` (a file per key beside the vault, written through the registry), `draft.rs` (D1), `inbox.rs` (D2, the drain), `open_url.rs` (D4), `widget.rs` (D6: `widget.today`, rewritten on every commit that touches `event`, `task` or `entity`, and `widget.health`, rewritten on every commit that touches Health's tables). A shell reads and writes device keys through `DeviceRequest`, so its keys are checked by the same registry. `.ics` files drain into `event.propose`; Money `.csv` files stay in the inbox because Money's column mapping needs its account and column layout.
 
@@ -426,7 +427,7 @@ Where the plan left a choice, the safest was taken. Reverse by editing this page
 
 ## 14. The wire a shell speaks
 
-Requests, answered inside `centraid_call`; no symbol was added. `RoomRequest` (`open{key, tab, root}`, `send{instance, event}`) answers with the `RoomShown`s that changed (none for a scroll report or a stale selector); the same `RoomShown` is pushed as `Event.room` when a commit reaches a room's reads. `NotifyRequest` and `Event.notify` are section 9's. `DeviceRequest` (`get`, `put`, `delete`), `FollowRequest` (`pass`, `stop` of a followed store, run as `follow.<system>`) and `ShareInRequest` (drain the inbox) are bounded or, for the drain, cancellable. `AssistRequest.plan`, `.finished` and `.opened` decide the chat model's files (what to fetch, load and delete; a reload held back by a running turn): the transfer is the shell's, the rules are [`core/src/assist/files.rs`](../../../crates/core/src/assist/files.rs).
+Requests, answered inside `centraid_call`; no symbol was added. `RoomRequest` (`open{key, tab, root}`, `send{instance, event}`) answers with the `RoomShown`s that changed (none for a scroll report or a stale selector); the same `RoomShown` is pushed as `Event.room` when a commit reaches a room's reads. `NotifyRequest` and `Event.notify` are section 9's. `DeviceRequest` (`get`, `put`, `delete`), `FollowRequest` (section 16) and `ShareInRequest` (drain the inbox) are bounded or, for the drain, cancellable. `AssistRequest.plan`, `.finished` and `.opened` decide the chat model's files (what to fetch, load and delete; a reload held back by a running turn): the transfer is the shell's, the rules are [`core/src/assist/files.rs`](../../../crates/core/src/assist/files.rs).
 
 ## 15. Adding to the plane
 
@@ -438,7 +439,43 @@ Requests, answered inside `centraid_call`; no symbol was added. `RoomRequest` (`
 | A block | A part board first; the `RoomBlock` arm and fields in `room.proto` with this page's row; both native blocks; a golden per state |
 | A string | A `strings/` row, as today ([wording](../design/wording.md)); `cargo xtask rules copy` |
 | A kind | The `KINDS` row (section 8) and the vault steps in [vault-model](vault-model.md) |
-| A followed store | [following](following.md) |
+| A followed store | [following](following.md), section 16 |
 | The C ABI or a wire message | [ffi](ffi.md) |
 
 Proof is in [land](../land/SKILL.md): room-tree text snapshots, the registry test, Android block goldens, iOS simulator screenshots at the hand-offs.
+
+## 16. Following a phone store (D13)
+
+The member turns a phone store on from the More of the app that owns it; the core asks the shell to read it; the vault merges what the shell read. The rooms say the state, the core owns every decision about when to read and whether to ask, and a shell reads and answers. Nothing is written back to the phone. What a member is promised is [arrive-take-out](../product/rulings/arrive-take-out.md); the page that lists what each shell performs is [following](following.md).
+
+| Store (`system`) | Owner and row in its More | The shell reads | May ask the OS |
+| --- | --- | --- | --- |
+| `contacts` | People: "Follow Contacts" | the address book | on the member's tap |
+| `calendar` | Calendar: "Follow phone calendars" | the calendars, over a window | on the member's tap |
+| `reminders` | Reminders: "Follow phone reminders"; Android answers `UNAVAILABLE` and the row says so | iOS Reminders | on the member's tap |
+| `files` | Docs: "Follow a folder" | a folder the member picks (the picker is the ask) | the picker, on the member's tap |
+| `health` | Health: "Follow Health" | the health store, read permission only; windows and a cursor | on the member's tap |
+| `camera_roll` | Photos: "Follow camera roll" | the grant only (the camera-roll walk stays the pass service's) | on the member's tap |
+
+**The wire** is `FollowRequest`/`FollowResponse` and one pushed event, `FollowAsk` (`Event.follow`). Field numbers are additive.
+
+| Direction | Message | Meaning |
+| --- | --- | --- |
+| Room, on a tap | `FollowRequest{verb: ENROL, system}` through `Door::call` | The member's tap. Core mints an ask with `ask_permission` true and pushes it |
+| Shell, app forward, a watch, a window | `FollowRequest{verb: TRIGGER, system}` (empty `system` is every store) | A trigger carries no data. For every store this device enrolled and the phone has not refused, core pushes one ask with `ask_permission` false. It never pushes one for a store not enrolled, refused, restricted or unavailable, and a trigger while an ask is in flight queues exactly one more |
+| Core to shell | `Event.follow = FollowAsk{ask_id, system, kind, ask_permission, window, cursor}` | `READ`: read the store and answer. `WATCH_ON`/`WATCH_OFF`: start or stop watching the store (contacts, calendar, reminders) and send a `TRIGGER` for it on each change. `OPEN_SETTINGS`: open the OS settings page for the store (the member's tap on a refused row). `FORGET`: release the grant for one folder |
+| Shell to core | `FollowRequest{verb: PASS, system, ask_id, grant, input_json, refused, background_refused}` | The answer to a `READ`. `grant` is what the OS said; with `GRANTED`, `input_json` is the follow command's input (`origin`, `records`, `complete`, `since`, `gone`; for Health `{"workouts": …, "readings": …}`). An answer to an older ask is `stale` and ignored |
+| Room, on the stop row | `FollowRequest{verb: STOP, system, input_json: {"ref"?}}` | Retires every origin of the store (or the one `ref`), forgets this device's habit, answers `WATCH_OFF` and, for a folder, `FORGET`. Deletes nothing |
+
+**Rules.**
+
+1. **`ask_permission` is true only in the ask a member's tap made.** A trigger's ask never is. Core holds the enrolment as a device key (`follow.<store>`, D13), so "did this device enrol" is asked first, before any ask, exactly as the old keychain habit was; a vault restored onto a new phone is enrolled there once.
+2. **A refusal ends reading.** A `REFUSED`, `RESTRICTED` or `UNAVAILABLE` answer sets the store's state; no trigger asks again until the member taps the row again (a `LIMITED` read is merged and said). The room offers the `OPEN_SETTINGS` effect for a plain refusal only; a restricted grant has no button that can change it.
+3. **One ask in flight per store.** Triggers during it set one `queued` bit; the answer sends one more ask. A tap supersedes whatever is in flight. There is no clock: the machine is driven by triggers and answers, and tests count asks.
+4. **The cursor is the origin's.** For Health the ask carries the cursor the vault holds for this install (`entity.origin_cursor`; absent or another install's is empty and the read is complete). The answer's command input carries the new one in `origin.cursor` with this install's `device_id`, which core sets itself, so it moves in the same commit as the records. A shell keeps none.
+5. **A stop never erases.** `follow.stop` per origin, then the habit goes; the rows the follow filled stay. Following again revives the same origin.
+6. **State is words from core.** The rows say "Following Contacts", "Contacts is off", "Only part of your phone's contacts was readable" from the same report the pass left (`Follower::report`); the room reloads when it changes (the `follow` watch, as the backup ledger's).
+
+**D13: the enrolment key.** `follow.<store>` (`contacts`, `calendar`, `reminders`, `files`, `health`, `camera_roll`): `{"v":1,"on":true,"chosen":[…]}` (`chosen` is Health's types), core-owned, in the device store beside the vault.
+
+**Not built (target).** The native adapters (Swift, Kotlin) that perform `FollowAsk` and send `FollowRequest`; until they land a shell that sends nothing leaves every store as it is. A background-window pass for Health (Android only) waits on the same adapters.

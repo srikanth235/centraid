@@ -285,24 +285,16 @@ fn a_follow_request_names_a_followed_store_and_a_verb() {
                 verb: verb as i32,
                 system: system.to_owned(),
                 input_json: input.to_owned(),
-                invoke_key: "k".to_owned(),
+                ..Default::default()
             })),
         })
     };
-    assert!(call("secrets", wire::FollowVerb::Pass, "{}").is_err());
-    assert!(call("contacts", wire::FollowVerb::Unspecified, "{}").is_err());
-    assert!(call("contacts", wire::FollowVerb::Pass, "not json").is_err());
-    let stopped = call(
-        "contacts",
-        wire::FollowVerb::Stop,
-        r#"{"origin_id":"nothing"}"#,
-    )
-    .expect("a stop of nothing is answered");
+    assert!(call("secrets", wire::FollowVerb::Enrol, "").is_err());
+    assert!(call("contacts", wire::FollowVerb::Unspecified, "").is_err());
+    let stopped = call("contacts", wire::FollowVerb::Stop, "").expect("a stop of nothing is answered");
     let Some(wire::response::Kind::Follow(answer)) = stopped.kind else {
         panic!("a follow answer");
     };
-    assert!(
-        answer.declined,
-        "the vault says so in its own sentence: {answer:?}"
-    );
+    assert!(!answer.declined, "stopping what is not followed is nothing: {answer:?}");
+    assert_eq!(answer.output_json, r#"{"stopped":0}"#);
 }
