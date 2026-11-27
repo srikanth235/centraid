@@ -314,7 +314,7 @@ struct CalendarGridCanvasView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(item.a11yLabel.isEmpty ? item.title : item.a11yLabel)
+        .accessibilityLabel(item.a11YLabel.isEmpty ? item.title : item.a11YLabel)
         .accessibilityIdentifier(item.selectorID)
     }
 
@@ -514,7 +514,7 @@ struct CalendarGridCanvasView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(item.a11yLabel.isEmpty ? item.title : item.a11yLabel)
+        .accessibilityLabel(item.a11YLabel.isEmpty ? item.title : item.a11YLabel)
         .accessibilityIdentifier(item.selectorID)
     }
 
@@ -689,7 +689,7 @@ struct CalendarGridCanvasView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(item.a11yLabel.isEmpty ? item.title : item.a11yLabel)
+        .accessibilityLabel(item.a11YLabel.isEmpty ? item.title : item.a11YLabel)
         .accessibilityIdentifier(item.selectorID)
     }
 

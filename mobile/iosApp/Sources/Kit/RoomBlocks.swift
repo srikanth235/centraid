@@ -371,7 +371,7 @@ struct RoomRowBlock: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .modifier(RoomOptionalA11y(label: row.a11yLabel))
+        .modifier(RoomOptionalA11y(label: row.a11YLabel))
         .modifier(OptionalIdentifier(identifier: row.selectorID))
         .modifier(RoomContextMenuModifier(menu: row.hasMenu ? row.menu : nil, onTap: onTap))
         .modifier(RoomSwipeModifier(swipe: row.hasSwipe ? row.swipe : nil, onTap: onTap))

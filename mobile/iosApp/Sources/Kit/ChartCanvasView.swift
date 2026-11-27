@@ -183,7 +183,7 @@ struct ChartLayout: Sendable {
                         yHigh: pt.yHigh,
                         xLabel: pt.xLabel,
                         yLabel: pt.yLabel,
-                        a11yLabel: pt.a11yLabel,
+                        a11yLabel: pt.a11YLabel,
                         mark: series.mark
                     )
                 )
