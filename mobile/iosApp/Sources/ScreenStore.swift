@@ -655,10 +655,8 @@ final class ScreenStore: ObservableObject {
                 break
             }
             answer(request, done)
-        case .pickFile(let pick)?:
-            DocsFiles.shared.pick(pick.kind, core: core) { [weak self] outcome in
-                Task { @MainActor [weak self] in self?.answer(request, outcome) }
-            }
+        case .pickFile?:
+            answer(request, .failed(Self.failure(EffectReason.unsupported)))
         case .modelDownload(let download)?:
             ChatModelDownloader.shared.start(ChatAsset(download))
             answer(request, done)
