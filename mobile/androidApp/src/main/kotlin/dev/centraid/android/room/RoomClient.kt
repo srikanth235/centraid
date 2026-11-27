@@ -76,7 +76,7 @@ internal class RoomClient(
                 Envelope(
                     request_id = 0,
                     request = Request(
-                        room = RoomRequest(open_ = RoomOpen(key = key, tab = tab, root = root)),
+                        room = RoomRequest(open_ = RoomOpen(key = key, tab = tab, root = root, platform = PLATFORM)),
                     ),
                 ),
             )
@@ -197,6 +197,7 @@ internal class RoomClient(
     }
 
     companion object {
+        const val PLATFORM: String = "android"
         const val DEFAULT_TAB: String = "home"
         const val APPEARANCE_KEY: String = "settings.appearance"
         const val APPEARANCE_SYSTEM: String = "system"
