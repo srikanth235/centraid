@@ -187,7 +187,7 @@ fn an_adapter_that_lands_during_a_turn_changes_nothing_under_it_and_loads_when_t
             assert!(!landed.reload, "nothing reloads under a running turn");
             assert_eq!(
                 landed.offer,
-                wire::AssistOffer::None as i32,
+                wire::AssistOffer::Unspecified as i32,
                 "the row is done"
             );
             assert_eq!(loader.loads(), 1);

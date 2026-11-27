@@ -364,7 +364,7 @@ impl State {
                 }
             ),
             offer: match standing.offer {
-                None => wire::AssistOffer::None,
+                None => wire::AssistOffer::Unspecified,
                 Some(Offer::Model) => wire::AssistOffer::Model,
                 Some(Offer::AdapterOnly) => wire::AssistOffer::AdapterOnly,
             } as i32,
