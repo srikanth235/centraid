@@ -2,6 +2,7 @@ import SwiftUI
 import XCTest
 @testable import CentraidApp
 
+@MainActor
 final class RoomStoreTests: XCTestCase {
     func testRoomTextSyncSeqRevRule() {
         var sync = RoomTextSync()

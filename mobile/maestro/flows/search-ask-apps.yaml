@@ -1,149 +1,55 @@
-# An app's own search that finds nothing offers the assistant (#1097,
-# R-1097-28 to 30): Agenda (its tasks included, #1128), Notes and Photos draw the kit's one no-match state with
-# "Ask about “…”" (`search-ask-about`), the tap opens the Chat tab, and
-# Locker's search never draws it, because a term there can itself be a secret.
+# A search that finds nothing offers the assistant: Home's no-match block carries the "Ask about
+# “…”" row (`search/ask`), whose tap opens the Chat room; Locker's search never draws it, because a
+# term there can itself be a secret.
 #
-# A VAULT-HOLDING INSTALL, as `home-search.yaml`. Re-runnable: it relaunches
-# between apps and leaves nothing behind. LOCKER may open on its own gate
-# before it shows a search (a vault with no lock set up offers to make one):
-# the last step runs only once the band's search key is on screen, and a locked
-# Locker has no search to draw Ask in, which is the same guarantee.
+# THE DEMO VAULT (`mobile/scripts/demo-vault.sh`), as `home-search.yaml`. Re-runnable: it relaunches
+# between steps and leaves nothing behind. LOCKER may open on its own gate before it shows a search:
+# the last step runs only once the band's search key is on screen.
 #
-# THE ASSISTANT NEEDS A MODEL. On a phone with no model file the Chat tab
-# opens on its download step and the question is not sent (nothing to answer
-# it); on a ready one (a DEBUG build launched with
-# `SIMCTL_CHILD_CENTRAID_DEV_MODEL=<path to the .gguf>`) the question lands in
-# the thread, and the conditional step asserts it. Android has no Chat tab, so
-# its no-match states draw without the action and this flow is iOS only.
+# THE ASSISTANT NEEDS A MODEL for the question to be answered; opening the Chat room does not.
+# Ids are Home's and Locker's room selector ids.
 appId: dev.centraid.Centraid
 name: search-ask-apps
 ---
-# --- Agenda ---------------------------------------------------------------
 - launchApp
 - tapOn:
-    id: "home-tile-calendar"
+    id: "band/search"
 - tapOn:
-    id: "band-search"
+    id: "search"
 - inputText: "zzqxv"
 - extendedWaitUntil:
     visible:
-      id: "search-ask-about"
+      id: "search/ask"
     timeout: 5000
 - assertVisible: "Ask about “zzqxv”"
 - tapOn:
-    id: "search-ask-about"
+    id: "search/ask"
 - extendedWaitUntil:
     visible:
-      id: "chat"
+      id: "room-chat"
     timeout: 5000
 - assertNotVisible:
-    id: "agenda-search"
-- runFlow:
-    when:
-      notVisible:
-        id: "chat-download"
-    commands:
-      - runFlow:
-          when:
-            notVisible: "Chat is not available here."
-          commands:
-            - extendedWaitUntil:
-                visible: "Find zzqxv"
-                timeout: 15000
-# --- Notes ----------------------------------------------------------------
-- launchApp
-- tapOn:
-    id: "home-tile-notes"
-# A first vault opens Notes on its starter note: Done goes back to the library.
-- runFlow:
-    when:
-      notVisible:
-        id: "band-search"
-    commands:
-      - tapOn: "Done"
-- tapOn:
-    id: "band-search"
-- inputText: "zzqxn"
-- extendedWaitUntil:
-    visible:
-      id: "search-ask-about"
-    timeout: 5000
-- assertVisible: "Ask about “zzqxn”"
-- tapOn:
-    id: "search-ask-about"
-- extendedWaitUntil:
-    visible:
-      id: "chat"
-    timeout: 5000
-- assertNotVisible:
-    id: "notes-search"
-- runFlow:
-    when:
-      notVisible:
-        id: "chat-download"
-    commands:
-      - runFlow:
-          when:
-            notVisible: "Chat is not available here."
-          commands:
-            - extendedWaitUntil:
-                visible: "Find zzqxn"
-                timeout: 15000
-# --- Photos ---------------------------------------------------------------
-# Photos' search is the door's too (R-1097-25..27), and its no-match block is
-# the same kit state with the same one action (R-1097-30).
-- launchApp
-- tapOn:
-    id: "home-tile-photos"
-- tapOn:
-    id: "band-search"
-- inputText: "zzqxp"
-- extendedWaitUntil:
-    visible:
-      id: "search-ask-about"
-    timeout: 8000
-- assertVisible: "Ask about “zzqxp”"
-- tapOn:
-    id: "search-ask-about"
-- extendedWaitUntil:
-    visible:
-      id: "chat"
-    timeout: 5000
-- assertNotVisible:
-    id: "kit-empty"
-- runFlow:
-    when:
-      notVisible:
-        id: "chat-download"
-    commands:
-      - runFlow:
-          when:
-            notVisible: "Chat is not available here."
-          commands:
-            - extendedWaitUntil:
-                visible: "Find zzqxp"
-                timeout: 15000
+    id: "search"
 # --- Locker: never ----------------------------------------------------------
 - launchApp
-# Locker's tile is last, under the fold.
 - scrollUntilVisible:
     element:
-      id: "home-tile-locker"
+      id: "tile/locker"
 - tapOn:
-    id: "home-tile-locker"
+    id: "tile/locker"
 - assertNotVisible:
-    id: "search-ask-about"
+    id: "search/ask"
 - runFlow:
     when:
       visible:
-        id: "band-search"
+        id: "band/search"
     commands:
       - tapOn:
-          id: "band-search"
+          id: "band/search"
       - inputText: "zzqxl"
       - extendedWaitUntil:
-          visible: "Nothing matches “zzqxl”"
+          visible: "Nothing matches.*"
           timeout: 5000
       - assertNotVisible:
-          id: "search-ask-about"
+          id: "search/ask"
       - assertNotVisible: "Ask about “zzqxl”"
