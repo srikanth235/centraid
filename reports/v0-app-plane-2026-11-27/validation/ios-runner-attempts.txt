@@ -8,11 +8,18 @@ Earlier attempt: [run 46028285993](https://github.com/srikanth235/centraid/actio
 - The source now uses local stream constants to make the closure captures explicit. The next hosted run compiled past those errors before finding the separate RoomStore errors below.
 - The earlier hosted run [46024313714](https://github.com/srikanth235/centraid/actions/runs/46024313714) had a `String: Error` picker/scanner bridge compile failure; the bridge was changed to a local Swift error type. That correction did not result in an end-to-end passing attempt.
 
-Latest retry: [run 46031385998](https://github.com/srikanth235/centraid/actions/runs/46031385998), commit `53311bea8b9318095de4a00ab23ddee1f47dc858`, iOS job `140615783661`, Xcode 26.3 / Swift 6.2.4.
+Earlier retry: [run 46031385998](https://github.com/srikanth235/centraid/actions/runs/46031385998), commit `53311bea8b9318095de4a00ab23ddee1f47dc858`, iOS job `140615783661`, Xcode 26.3 / Swift 6.2.4.
 
 - Both simulator and unsigned-device Rust core builds passed.
 - Swift compilation failed in `mobile/iosApp/Sources/RoomStore.swift`: generated protobuf property spellings (`inputJson`, `clearOwned_p`), async directory enumeration, `StageHandle.contentHash` being a hex string, and an incorrect `followGrant` argument label.
 - XCTest and screenshot capture did not run; the unsigned iPhone app build was skipped. This attempt supplies no screenshot evidence.
-- These compile errors have been fixed in the working tree and await another hosted run.
+- The next hosted run compiled past these errors before finding the separate concurrency errors below.
+
+Latest retry: [run 46035692381](https://github.com/srikanth235/centraid/actions/runs/46035692381), commit `4bcf798f0c7c6b122e3d2bfbc73c0b6c7bc82086`, iOS job `140630397229`, Xcode 26.3 / Swift 6.2.4.
+
+- Both simulator and unsigned-device Rust core builds passed.
+- Swift compilation failed on Swift 6 concurrency checks: `RoomStore.swift:1042` sent `[EKReminder]` across the continuation; `ScreenPlatform.swift:463,466,485,486` captured non-Sendable callbacks in UIKit dismissal completions.
+- XCTest and screenshot capture did not run; the unsigned iPhone app build was skipped. This attempt supplies no screenshot evidence.
+- Reminder records are now projected to JSON `Data` in the EventKit callback, so raw `EKReminder` values do not cross the actor boundary; PHPicker/VisionKit completion holders and their UI dismissal delegate methods are main-actor isolated. These changes await the next hosted run.
 
 No physical device, native owner authentication, or share-extension host-app/share-sheet flow is proven by these attempts. M1, M3, and M4 remain unticked pending owner review.

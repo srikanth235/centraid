@@ -928,38 +928,9 @@ final class RoomStore: ObservableObject {
         let lists = store.calendars(for: .reminder)
         var snapshots: [[String: Any]] = []
         for list in lists {
-            guard let tasks = try await reminderTasks(in: store, list: list) else { return (.unavailable, "") }
-            let records: [[String: Any]] = tasks.compactMap { task in
-                let externalID = task.calendarItemIdentifier
-                guard !externalID.isEmpty else { return nil }
-                var fields: [String: Any] = ["title": task.title ?? "", "status": task.isCompleted ? "done" : "open"]
-                if let due = task.dueDateComponents, let date = Calendar.current.date(from: due) {
-                    if due.hour == nil, let year = due.year, let month = due.month, let day = due.day {
-                        fields["due"] = String(format: "%04d-%02d-%02d", year, month, day)
-                    } else {
-                        let formatter = ISO8601DateFormatter()
-                        formatter.timeZone = due.timeZone ?? TimeZone.current
-                        fields["due"] = formatter.string(from: date)
-                    }
-                    fields["due_timing"] = due.hour == nil ? "all-day" : (due.timeZone == nil ? "floating" : "zoned")
-                    fields["zone"] = due.timeZone?.identifier as Any? ?? NSNull()
-                } else { fields["due"] = NSNull() }
-                fields["priority"] = task.priority
-                fields["description"] = task.notes as Any? ?? NSNull()
-                fields["url"] = task.url?.absoluteString as Any? ?? NSNull()
-                fields["done_at"] = task.completionDate.map { ISO8601DateFormatter().string(from: $0) } as Any? ?? NSNull()
-                fields["rule"] = task.recurrenceRules?.first.map {
-                    Self.recurrenceRule(
-                        $0,
-                        timing: task.dueDateComponents.map { $0.hour == nil ? "all-day" : ($0.timeZone == nil ? "floating" : "zoned") },
-                        zone: task.dueDateComponents?.timeZone
-                    )
-                } as Any? ?? NSNull()
-                fields["reminders"] = (task.alarms ?? []).compactMap { alarm -> Int? in
-                    guard alarm.relativeOffset <= 0 else { return nil }
-                    return Int((-alarm.relativeOffset / 60).rounded())
-                }
-                return ["external_id": externalID, "fields": fields]
+            guard let recordsData = await reminderTasks(in: store, list: list),
+                  let records = (try? JSONSerialization.jsonObject(with: recordsData)) as? [[String: Any]] else {
+                return (.unavailable, "")
             }
             snapshots.append([
                 "origin": ["ref": "list:\(list.calendarIdentifier)", "label": list.title],
@@ -1036,12 +1007,48 @@ final class RoomStore: ObservableObject {
         return Self.encodeSnapshots(snapshots)
     }
 
-    private static func reminderTasks(in store: EKEventStore, list: EKCalendar) async -> [EKReminder]? {
+    private static func reminderTasks(in store: EKEventStore, list: EKCalendar) async -> Data? {
         await withCheckedContinuation { continuation in
             store.fetchReminders(matching: store.predicateForReminders(in: [list])) { reminders in
-                continuation.resume(returning: reminders)
+                continuation.resume(returning: reminders.flatMap(Self.reminderRecordsData))
             }
         }
+    }
+
+    private nonisolated static func reminderRecordsData(_ reminders: [EKReminder]) -> Data? {
+        let records: [[String: Any]] = reminders.compactMap { task in
+            let externalID = task.calendarItemIdentifier
+            guard !externalID.isEmpty else { return nil }
+            var fields: [String: Any] = ["title": task.title ?? "", "status": task.isCompleted ? "done" : "open"]
+            if let due = task.dueDateComponents, let date = Calendar.current.date(from: due) {
+                if due.hour == nil, let year = due.year, let month = due.month, let day = due.day {
+                    fields["due"] = String(format: "%04d-%02d-%02d", year, month, day)
+                } else {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.timeZone = due.timeZone ?? TimeZone.current
+                    fields["due"] = formatter.string(from: date)
+                }
+                fields["due_timing"] = due.hour == nil ? "all-day" : (due.timeZone == nil ? "floating" : "zoned")
+                fields["zone"] = due.timeZone?.identifier as Any? ?? NSNull()
+            } else { fields["due"] = NSNull() }
+            fields["priority"] = task.priority
+            fields["description"] = task.notes as Any? ?? NSNull()
+            fields["url"] = task.url?.absoluteString as Any? ?? NSNull()
+            fields["done_at"] = task.completionDate.map { ISO8601DateFormatter().string(from: $0) } as Any? ?? NSNull()
+            fields["rule"] = task.recurrenceRules?.first.map {
+                Self.recurrenceRule(
+                    $0,
+                    timing: task.dueDateComponents.map { $0.hour == nil ? "all-day" : ($0.timeZone == nil ? "floating" : "zoned") },
+                    zone: task.dueDateComponents?.timeZone
+                )
+            } as Any? ?? NSNull()
+            fields["reminders"] = (task.alarms ?? []).compactMap { alarm -> Int? in
+                guard alarm.relativeOffset <= 0 else { return nil }
+                return Int((-alarm.relativeOffset / 60).rounded())
+            }
+            return ["external_id": externalID, "fields": fields]
+        }
+        return try? JSONSerialization.data(withJSONObject: records, options: [.sortedKeys])
     }
 
     static func encodeSnapshots(_ snapshots: [[String: Any]]) -> (grant: Centraid_Core_V1_FollowGrant, inputJSON: String) {
@@ -1100,7 +1107,7 @@ final class RoomStore: ObservableObject {
         return "\(itemID)#\(millis)"
     }
 
-    static func recurrenceRule(_ rule: EKRecurrenceRule, timing: String? = nil, zone: TimeZone? = nil) -> String {
+    nonisolated static func recurrenceRule(_ rule: EKRecurrenceRule, timing: String? = nil, zone: TimeZone? = nil) -> String {
         let frequency: String
         switch rule.frequency {
         case .daily: frequency = "DAILY"

@@ -444,28 +444,30 @@ enum FilePerformer {
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish([]) }
     }
 
+    @MainActor
     private final class PhotoPickerHolder: NSObject, PHPickerViewControllerDelegate {
         let done: ([PHPickerResult]) -> Void
         var onFinish: () -> Void = {}
         init(done: @escaping ([PHPickerResult]) -> Void) { self.done = done }
         func finish(_ results: [PHPickerResult]) { done(results); onFinish() }
-        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        @MainActor func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             picker.dismiss(animated: true) { self.finish(results) }
         }
     }
 
+    @MainActor
     private final class DocumentScannerHolder: NSObject, VNDocumentCameraViewControllerDelegate {
         let done: (Result<[Centraid_Core_V1_ShellPickedItem], Failure>) -> Void
         var onFinish: () -> Void = {}
         init(done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], Failure>) -> Void) { self.done = done }
         func finish(_ result: Result<[Centraid_Core_V1_ShellPickedItem], Failure>) { done(result); onFinish() }
-        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
+        @MainActor func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
             controller.dismiss(animated: true) { self.finish(.failure(.reason(EffectReason.cancelled))) }
         }
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
+        @MainActor func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
             controller.dismiss(animated: true) { self.finish(.failure(.reason(EffectReason.failed))) }
         }
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
+        @MainActor func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
             do {
                 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("room-scans", isDirectory: true)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
