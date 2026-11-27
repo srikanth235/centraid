@@ -55,7 +55,7 @@ One set of rules, the same in every app (owner, 2026-11-25). Values and words ar
 - **Mentions, guests and places** join both sides on their own and show apart from hand-made links; **a photo or scan taken inside another app** is filed with that item.
 - **Phone-sourced values** show "Phone says" or "Statement says" on the detail screen only.
 
-What each is made of, in rooms and blocks, is in the app plane page **(target)**.
+What each is made of, in rooms and blocks, is in [the app plane](../change/app-plane.md).
 
 ## Reminders on a Calendar day, and Overdue
 
@@ -84,7 +84,7 @@ A screen's load is a skeleton (`ReadStateView` in Compose, `PageReadStateView` i
 
 ## Trash
 
-**One rule in every app (#1185).** Every item can be moved to trash, restored and deleted forever, and every trash can be emptied. No app offers restore only, and none promises a destruction it cannot perform: the vault's shared verbs (`entity.trash`, `entity.restore`, `entity.purge`, `entity.empty_trash`) do all four for every kind. The kind registry holds, per kind, its trash noun and inverse **(target)**. The words are the kit's (`strings/shared.rs`, `kit/trash.rs`); an app passes only its noun (item, note, person, task, document, photo, event, workout, transaction) and, where something goes with the record, the first sentence of the purge confirm.
+**One rule in every app (#1185).** Every item can be moved to trash, restored and deleted forever, and every trash can be emptied. No app offers restore only, and none promises a destruction it cannot perform: the vault's shared verbs (`entity.trash`, `entity.restore`, `entity.purge`, `entity.empty_trash`) do all four for every kind. The kind registry holds, per kind, its trash noun and inverse (`crates/domain/src/kind.rs`). The words are the kit's (`strings/shared.rs`, `kit/trash.rs`); an app passes only its noun (item, note, person, task, document, photo, event, workout, transaction) and, where something goes with the record, the first sentence of the purge confirm.
 
 - **Verb and line.** "Move to trash", asking nothing (Undo and the trash restore it). Then the status line "{title} moved to trash" with Undo; a restore says "{title} restored" with Undo.
 - **Entry.** "Trash", secondary "30 days, then erased", in the app's More sheet. The page header is "Trash · {n}".
