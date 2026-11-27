@@ -9,7 +9,6 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
-import "centraid/core/v1/route.proto";
 
 // THE READ LAW: a failed read is not an empty list. A view has three states —
 // loading, a `Failure`, data — and never two.
