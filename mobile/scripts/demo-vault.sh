@@ -30,9 +30,9 @@ mkdir -p "$staging/$stem"
 echo "==> seeding $staging/$stem/vault.db"
 (cd "$root" && cargo run -q -p centraid-nativetools --bin nativetools -- seed "$world" "$staging/$stem/vault.db")
 # The app's byte store is `vault.bytes` beside the file; the seeder keeps its
-# content store in `vault.blobs`, which the app's store adopts.
-if [ -d "$staging/$stem/vault.blobs" ]; then
-  mv "$staging/$stem/vault.blobs" "$staging/$stem/vault.bytes"
+# content store in `vault.db.blobs`, which the app's store adopts.
+if [ -d "$staging/$stem/vault.db.blobs" ]; then
+  mv "$staging/$stem/vault.db.blobs" "$staging/$stem/vault.bytes"
 fi
 rm -f "$staging/$stem/vault.db-wal" "$staging/$stem/vault.db-shm"
 
