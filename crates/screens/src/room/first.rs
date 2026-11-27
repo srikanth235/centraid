@@ -172,7 +172,7 @@ pub fn first_open(b: &mut Build<'_>, card: FirstOpen<'_>) -> wire::RoomBlock {
             &format!("first/{}/settings", card.app),
             &words::refused_open_settings(EN),
             "",
-            Handler::Tag(format!("{SETTINGS_TAG}{}", card.app)),
+            settings(card.app),
         );
         return blocks::empty(glyph(card.icon, card.hue), &title, &body, Some(action));
     }
@@ -199,22 +199,34 @@ pub fn first_open(b: &mut Build<'_>, card: FirstOpen<'_>) -> wire::RoomBlock {
     blocks::empty(glyph(card.icon, card.hue), "", &body, action)
 }
 
-/// The import tag a first-open or Home widget sends: `import:<store>`.
-pub const IMPORT_TAG: &str = "import:";
-/// The tag that opens the OS settings page for a refused store: `open_settings:<store>`.
-pub const SETTINGS_TAG: &str = "open_settings:";
-
-/// An event no screen owns: the door's one import and Open Settings.
-pub fn door_event(door: &dyn Door, tag: &str) -> Option<super::screen::Outcome> {
-    use super::screen::Outcome;
-    if let Some(store) = tag.strip_prefix(IMPORT_TAG) {
-        return Some(match door.enrol_store(store) {
-            Ok(done) => Outcome::done(&done.sentence, false),
-            Err(refused) => Outcome::refuse(&refused.0),
-        });
+/// The core's system for one of the stores a day-one widget or card names.
+fn system(store: &str) -> &str {
+    match store {
+        "photos" => "camera_roll",
+        "people" => "contacts",
+        other => other,
     }
-    tag.strip_prefix(SETTINGS_TAG).map(|store| {
-        let _ = door.open_settings(store);
-        Outcome::default()
+}
+
+/// The one import: the tap the follow rows send, so the core asks the OS itself.
+#[must_use]
+pub fn import(store: &str) -> Handler {
+    Handler::Tag(format!("follow:enrol:{}", system(store)))
+}
+
+/// Open the OS settings page for a store whose permission was refused.
+#[must_use]
+pub fn settings(store: &str) -> Handler {
+    Handler::Tag(format!("follow:settings:{}", system(store)))
+}
+
+/// Whether the member refused (or the OS restricts) the permission this store needs.
+#[must_use]
+pub fn refused(door: &dyn Door, store: &str) -> bool {
+    super::follow::status(door, system(store)).is_some_and(|status| {
+        matches!(
+            wire::FollowGrant::try_from(status.blocked),
+            Ok(wire::FollowGrant::Refused | wire::FollowGrant::Restricted)
+        )
     })
 }

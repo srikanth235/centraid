@@ -318,7 +318,7 @@ impl Home {
                 home_words::tile_people_count_one(EN),
                 home_words::tile_people_count_many(EN),
             )
-        } else if b.door.permission_refused("people") {
+        } else if first::refused(b.door, "people") {
             home_words::tile_contacts_refused(EN)
         } else {
             home_words::tile_empty_people(EN)
@@ -422,7 +422,7 @@ impl Home {
         teach: &str,
         refused: &str,
     ) -> String {
-        if !has && b.door.permission_refused(store) {
+        if !has && first::refused(b.door, store) {
             refused.to_owned()
         } else if has {
             quiet.to_owned()
@@ -438,10 +438,10 @@ impl Home {
     fn widget_handler(&self, b: &Build<'_>, store: &str, has: bool, app: &str) -> Handler {
         if has {
             Handler::Open(app.to_owned())
-        } else if b.door.permission_refused(store) {
-            Handler::Tag(format!("{}{store}", first::SETTINGS_TAG))
+        } else if first::refused(b.door, store) {
+            first::settings(store)
         } else if self.importable(b, store) {
-            Handler::Tag(format!("{}{store}", first::IMPORT_TAG))
+            first::import(store)
         } else {
             Handler::Open(app.to_owned())
         }

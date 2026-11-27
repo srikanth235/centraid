@@ -620,7 +620,7 @@ impl RoomScreen for CalendarRoot {
             );
         }
         if !first::holds(b, "event") {
-            let refused = b.door.permission_refused("calendar").then(|| {
+            let refused = first::refused(b.door, "calendar").then(|| {
                 (
                     home_words::refused_calendar_title(EN),
                     home_words::refused_calendar_body(EN),
@@ -634,7 +634,7 @@ impl RoomScreen for CalendarRoot {
                     hue: "",
                     sentence: home_words::first_open_calendar(EN),
                     action: Some((
-                        Handler::Tag(format!("{}calendar", first::IMPORT_TAG)),
+                        first::import("calendar"),
                         home_words::first_open_import_calendar(EN),
                     )),
                     tail: first::Tail::OrWrite,

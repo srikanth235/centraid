@@ -58,8 +58,32 @@ impl Door for Phone {
         self.reminders
     }
 
-    fn permission_refused(&self, store: &str) -> bool {
-        self.refused.contains(&store)
+    fn call(&self, request: &wire::Request) -> Result<wire::Response, Refused> {
+        let Some(wire::request::Kind::Follow(follow)) = &request.kind else {
+            return Err(Refused("no core here".to_owned()));
+        };
+        if follow.verb != wire::FollowVerb::Status as i32 {
+            return Err(Refused("this door follows no phone store".to_owned()));
+        }
+        let store = match follow.system.as_str() {
+            "camera_roll" => "photos",
+            "contacts" => "people",
+            other => other,
+        };
+        let blocked = if self.refused.contains(&store) {
+            wire::FollowGrant::Refused
+        } else {
+            wire::FollowGrant::Unspecified
+        };
+        Ok(wire::Response {
+            kind: Some(wire::response::Kind::Follow(wire::FollowResponse {
+                status: Some(wire::FollowStatus {
+                    blocked: blocked as i32,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+        })
     }
 }
 
