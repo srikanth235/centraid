@@ -457,7 +457,7 @@ impl RoomScreen for SummaryRoom {
             empty_sentence: fill(&words::summary_chart_empty(EN), &[("metric", &mlabel)]),
         }));
 
-        if totals.is_empty() {
+        if totals.is_empty() && trend.is_empty() && !first::holds(b, "workout") {
             let (sentence, label) = if b.door.reminders_source() {
                 (
                     home_words::first_open_health(EN),

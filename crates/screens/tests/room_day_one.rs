@@ -234,3 +234,83 @@ fn a_refused_permission_is_open_settings_alone_on_the_app_and_never_the_status_l
         snapshot::assert_room(snap, &room);
     }
 }
+
+#[test]
+fn locker_first_open_is_two_steps_check_then_the_first_item() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_handle, path) = vault(dir.path());
+    let door = phone(&path, true, vec![]);
+    let mut rooms = Rooms::new(shell::registry());
+    let wall = rooms.open(&door, "locker", "home", true).expect("opens");
+    let text = snapshot::render(&wall.room);
+    assert!(
+        text.contains("Step 1 of 2") && text.contains("Confirm it's you"),
+        "{text}"
+    );
+    let event = wire::RoomEvent {
+        kind: Some(wire::room_event::Kind::Tap(wire::RoomTap {
+            selector_id: "wall/unlock".to_owned(),
+        })),
+    };
+    let unlocked = rooms
+        .event(&door, wall.instance, &event)
+        .expect("unlocks")
+        .expect("changed");
+    let text = snapshot::render(&unlocked.room);
+    assert!(
+        text.contains("Step 2 of 2") && text.contains("Add your first item."),
+        "{text}"
+    );
+    snapshot::assert_room("first_open_locker_item", &unlocked.room);
+}
+
+#[test]
+fn home_widgets_run_the_import_directly_and_health_shows_its_card_only_before_it_holds_anything() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_handle, path) = vault(dir.path());
+    let door = phone(&path, true, vec![]);
+    door.device_put("welcome.seen", "1").unwrap();
+    let mut rooms = Rooms::new(shell::registry());
+    let home = rooms.open(&door, "home", "home", true).expect("opens");
+    let event = wire::RoomEvent {
+        kind: Some(wire::room_event::Kind::Tap(wire::RoomTap {
+            selector_id: "tile/calendar".to_owned(),
+        })),
+    };
+    let shown = rooms
+        .event(&door, home.instance, &event)
+        .expect("tap lands")
+        .expect("the door answered")
+        .room;
+    let text = snapshot::render(&shown);
+    assert!(text.contains("this door follows no phone store"), "{text}");
+}
+
+#[test]
+fn the_money_tile_says_what_this_month_spent() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (handle, path) = vault(dir.path());
+    for (name, input, key) in [
+        (
+            "account.add",
+            json!({ "id": "01900000-0000-7000-8000-000000000401", "title": "Checking",
+                    "type": "checking", "currency": "USD", "opening_minor": 250_000,
+                    "opening_on": "2026-01-01" }),
+            "seed-account",
+        ),
+        (
+            "txn.add",
+            json!({ "id": "01900000-0000-7000-8000-000000000402",
+                    "account_id": "01900000-0000-7000-8000-000000000401",
+                    "posted_on": "2026-06-10", "amount_minor": -8450, "title": "Market" }),
+            "seed-txn",
+        ),
+    ] {
+        let outcome = handle.command(name, &input, key).expect("command runs");
+        assert_eq!(outcome.status, centraid_vault::CommandStatus::Executed);
+    }
+    let door = phone(&path, true, vec![]);
+    let (_rooms, home, _) = home(&door);
+    let text = snapshot::render(&home);
+    assert!(text.contains("$84.50 spent"), "{text}");
+}
