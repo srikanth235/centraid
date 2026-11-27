@@ -1,67 +1,53 @@
-# Agenda's band and the Calendar's views (#1128, #1173): Calendar · Reminders ·
-# Invites · More on the band; Calendar opens on Day, an hour grid under the week
-# strip, and its view menu reaches Week, Month, List and Year. A reminder due on a
-# day is ticked where it stands, with the status line's Undo to take it back.
+# The Calendar room's views: Day opens as an hour grid, and the view choice reaches Week, Month,
+# List and Year. The band holds Calendar and Calendars, with Home, search and More beside them.
 #
-# THE DEMO VAULT, as `search-photos.yaml`: a made vault is day zero and its Calendar draws the empty
-# state, with no week strip or hour grid (starter rows exist only in Notes, 3d82d2d40), so this flow
-# reads the seeded "Demo vault" (`mobile/scripts/demo-vault.sh`). Re-runnable: the check is undone
-# before the flow ends, so the vault is left as it was. The check-off steps run only when a task row
-# is drawn, and the places are asserted either way.
+# THE DEMO VAULT: a made vault is day zero and draws no grid, so this flow reads the seeded
+# "Demo vault" (`mobile/scripts/demo-vault.sh`). It changes no row, so the vault is left as it was.
+# Ids are the room's own selector ids (`crates/screens/tests/rooms/calendar_day.txt`).
 appId: dev.centraid.Centraid
 name: agenda-day
 ---
 - launchApp
 - tapOn:
-    id: "home-tile-calendar"
+    id: "tile/calendar"
 - assertVisible:
-    id: "calendar-band-calendar"
+    id: "room-calendar"
 - assertVisible:
-    id: "calendar-band-invites"
+    id: "tab/calendar"
 - assertVisible:
-    id: "calendar-band-more"
-# Day is where the app opens: the week strip over the hour grid.
+    id: "tab/calendars"
 - assertVisible:
-    id: "agenda-week-strip"
+    id: "band/more"
 - assertVisible:
-    id: "agenda-time-grid"
-# A dated reminder on the day ticks where it stands (Reminders' own complete-task, so the row stays
-# on its day, filled, with the status line's Undo), and its row opens it in Reminders.
-# The layout key (Day and Week's header) lists the views: Month is a grid of whole weeks, Year
-# twelve months, and List draws the same rows over the coming days. The month chip goes back to
-# the Month; Month, Year and List keep the view menu.
+    id: "band/search"
+# Day is where the room opens: the grid, with its stepper and Today.
 - assertVisible:
-    id: "agenda-month-chip"
-- tapOn:
-    id: "agenda-month-chip"
+    id: "choice/view"
 - assertVisible:
-    id: "agenda-month-grid"
-- tapOn:
-    id: "agenda-view-menu"
-- tapOn:
-    id: "agenda-view-day"
-- tapOn:
-    id: "agenda-layout-key"
-- tapOn:
-    id: "agenda-view-month"
+    id: "canvas-calendar-grid"
 - assertVisible:
-    id: "agenda-month-grid"
+    id: "cal/today"
+# Each view of the choice draws the grid again.
 - tapOn:
-    id: "agenda-view-menu"
-- tapOn:
-    id: "agenda-view-year"
+    id: "choice/view-week"
 - assertVisible:
-    id: "agenda-year-grid"
+    id: "canvas-calendar-grid"
 - tapOn:
-    id: "agenda-view-menu"
-- tapOn:
-    id: "agenda-view-list"
+    id: "choice/view-month"
 - assertVisible:
-    id: "agenda-list|kit-empty"
-# The Plus differs per place: here it is a new event.
+    id: "canvas-calendar-grid"
+- tapOn:
+    id: "choice/view-year"
 - assertVisible:
-    id: "agenda-new-event"
+    id: "canvas-calendar-grid"
 - tapOn:
-    id: "agenda-view-menu"
+    id: "choice/view-list"
+- assertVisible:
+    id: "choice/view"
+# The header's plus is a new event.
+- assertVisible:
+    id: "key/add"
 - tapOn:
-    id: "agenda-view-day"
+    id: "choice/view-day"
+- assertVisible:
+    id: "canvas-calendar-grid"

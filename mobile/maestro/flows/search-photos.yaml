@@ -1,54 +1,49 @@
-# Photos' own search is the door's (#1097, R-1097-25..27): a slip in a word of
-# a photograph's caption finds the photograph, and the shared field says what
-# was searched ("Including results for “emerald”"); a term nothing matches draws
-# the no-match block from the copy twins.
+# Photos' search: a slip in a word of a photograph's caption finds the photograph, the line over the
+# field says what was searched ("Including results for “emerald”"), and a term nothing matches draws
+# the empty block.
 #
-# THE DEMO VAULT, and no other: the onboarding starters hold no photograph.
-# Seed it first with `mobile/scripts/demo-vault.sh ios` (it places the Tahoe
-# scenario's vaults in the running simulator's app and relaunches it keyed);
-# the "Demo vault" is the one this flow reads. Its roll holds a photograph
-# captioned "Emerald Bay overlook", and "emrald" is its first word with a
-# letter dropped. Re-runnable: the flow leaves a closed search and nothing
-# else.
+# THE DEMO VAULT, and no other: the onboarding starters hold no photograph. Seed it first with
+# `mobile/scripts/demo-vault.sh ios` (or `android`); the "Demo vault" is the one this flow reads. Its
+# roll holds a photograph captioned "Emerald Bay overlook", and "emrald" is its first word with a
+# letter dropped. Re-runnable: the flow leaves a closed search and nothing else.
 #
-# A photograph cell's id is `photos.cell.<asset id>`, or the path of its held
-# thumbnail (a file in the vault's `vault.bytes`) once it has one; the flow
-# matches either.
+# A photograph's cell is `tile/<asset id>` (`crates/screens/tests/rooms/photos_library.txt`); the room's
+# search field is `search` and its close key `search/close`.
 appId: dev.centraid.Centraid
 name: search-photos
 ---
 - launchApp
 - tapOn:
-    id: "home-tile-photos"
+    id: "tile/photos"
 - tapOn:
-    id: "band-search"
+    id: "band/search"
 - inputText: "emrald"
-# The slip finds the photograph, and the shared field names the word searched.
+# The slip finds the photograph, and the line names the word searched.
 - extendedWaitUntil:
     visible:
       id: "search-corrected"
     timeout: 8000
 - assertVisible: "Including results for “emerald”"
 - assertVisible:
-    id: "photos\\.cell\\..*|.*vault\\.bytes.*"
+    id: "tile/.*"
 - assertNotVisible:
-    id: "kit-empty"
+    id: "block-empty"
 # An exact word says nothing: no line over a photograph it did not correct.
 - eraseText: 6
 - inputText: "emerald"
 - extendedWaitUntil:
     visible:
-      id: "photos\\.cell\\..*|.*vault\\.bytes.*"
+      id: "tile/.*"
     timeout: 8000
 - assertNotVisible:
     id: "search-corrected"
-# Nothing matches: the block, from the copy (its sentence leads the body).
+# Nothing matches: the empty block, with the term in its sentence.
 - eraseText: 7
 - inputText: "zzqxv"
 - extendedWaitUntil:
     visible:
-      id: "kit-empty"
+      id: "block-empty"
     timeout: 8000
-- assertVisible: "Nothing matches “zzqxv”.*"
+- assertVisible: "Nothing matches.*"
 - assertNotVisible:
     id: "search-corrected"
