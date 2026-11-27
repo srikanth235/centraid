@@ -357,3 +357,28 @@ fn a_vocabulary_column_refuses_an_unknown_code_and_a_code_of_another_domain() {
         }
     }
 }
+
+#[test]
+fn every_container_kind_code_is_an_entity_kind_and_the_plain_domains_hold_no_underscore() {
+    let scratch = common::Scratch::empty("lookups_vocab_seed").expect("a vault");
+    let strays = words(
+        &scratch,
+        "SELECT code FROM vocab WHERE domain = 'container_kind'
+          AND code NOT IN (SELECT code FROM entity_kind)",
+    );
+    assert!(strays.is_empty(), "{strays:?}");
+    let why = scratch
+        .vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO vocab (domain, code) VALUES ('palette', 'a_b')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect_err("an underscore in a plain domain");
+    assert!(
+        why.to_string().contains(REFUSAL) || why.to_string().contains("CHECK"),
+        "{why}"
+    );
+}
