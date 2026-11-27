@@ -21,8 +21,6 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
-import "centraid/core/v1/kit_screens.proto";
-import "centraid/core/v1/route.proto";
 
 // WHAT A TAP ON A STEP'S ACTION ASKS (#1188 download rules): the shell sends it back as
 // `DownloadTapped.choice` and Rust decides what follows.
