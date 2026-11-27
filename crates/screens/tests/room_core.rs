@@ -61,6 +61,7 @@ fn open(handle: &Handle, key: &str, tab: &str, root: bool) -> wire::RoomShown {
             key: key.to_owned(),
             tab: tab.to_owned(),
             root,
+            ..Default::default()
         }),
     )
     .remove(0)
@@ -165,6 +166,7 @@ fn an_unknown_room_and_an_unknown_instance_are_refused_as_typed_errors() {
                 key: "nowhere".into(),
                 tab: String::new(),
                 root: true,
+                ..Default::default()
             })),
         })),
     });

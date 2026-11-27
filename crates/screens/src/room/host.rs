@@ -30,6 +30,8 @@ pub struct RoomRuntime {
     rooms: Mutex<Rooms>,
     keys: AtomicU64,
     last: Mutex<Option<UndoRecord>>,
+    platform: Mutex<String>,
+    effects: Mutex<Vec<wire::ShellEffect>>,
 }
 
 impl RoomRuntime {
@@ -39,6 +41,8 @@ impl RoomRuntime {
             rooms: Mutex::new(Rooms::new(registry)),
             keys: AtomicU64::new(1),
             last: Mutex::new(None),
+            platform: Mutex::new(String::new()),
+            effects: Mutex::new(Vec::new()),
         }
     }
 }
@@ -46,6 +50,17 @@ impl RoomRuntime {
 struct CtxDoor<'a> {
     ctx: &'a dyn RoomCtx,
     runtime: &'a RoomRuntime,
+}
+
+fn follow_system(store: &str) -> Option<&'static str> {
+    Some(match store {
+        "photos" => "camera_roll",
+        "calendar" => "calendar",
+        "reminders" => "reminders",
+        "people" => "contacts",
+        "health" => "health",
+        _ => return None,
+    })
 }
 
 fn decl_of(name: &str) -> Option<&'static ActionDecl> {
@@ -115,7 +130,60 @@ impl CtxDoor<'_> {
 
 impl Door for CtxDoor<'_> {
     fn reminders_source(&self) -> bool {
-        self.ctx.reminders_source()
+        let platform = self
+            .runtime
+            .platform
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if platform.is_empty() {
+            self.ctx.reminders_source()
+        } else {
+            *platform != "android"
+        }
+    }
+
+    fn permission_refused(&self, store: &str) -> bool {
+        let Some(system) = follow_system(store) else {
+            return false;
+        };
+        super::follow::status(self, system)
+            .is_some_and(|status| status.blocked == wire::FollowGrant::Refused as i32)
+    }
+
+    fn enrol_store(&self, store: &str) -> std::result::Result<Done, Refused> {
+        let system = follow_system(store).ok_or_else(|| Refused(words::act_refused(Locale::En)))?;
+        self.call(&wire::Request {
+            kind: Some(wire::request::Kind::Follow(wire::FollowRequest {
+                verb: wire::FollowVerb::Enrol as i32,
+                system: system.to_owned(),
+                ..Default::default()
+            })),
+        })?;
+        Ok(Done {
+            sentence: crate::strings::follow::asking_status(Locale::En),
+            undo: false,
+        })
+    }
+
+    fn open_settings(&self, store: &str) -> std::result::Result<Done, Refused> {
+        let system = follow_system(store).ok_or_else(|| Refused(words::act_refused(Locale::En)))?;
+        let id = u64::MAX - self.runtime.keys.fetch_add(1, Ordering::Relaxed);
+        self.runtime
+            .effects
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(wire::ShellEffect {
+                effect_id: id,
+                kind: Some(wire::shell_effect::Kind::OpenSettings(
+                    wire::ShellOpenSettings {
+                        system: system.to_owned(),
+                    },
+                )),
+            });
+        Ok(Done {
+            sentence: String::new(),
+            undo: false,
+        })
     }
 
     fn act(&self, act: &Act) -> std::result::Result<Done, Refused> {
@@ -279,6 +347,11 @@ impl RoomHost for RoomRuntime {
         let mut rooms = self.rooms.lock().unwrap_or_else(PoisonError::into_inner);
         let shown = match &request.kind {
             Some(K::Open(open)) => {
+                if !open.platform.is_empty() {
+                    open.platform.clone_into(
+                        &mut self.platform.lock().unwrap_or_else(PoisonError::into_inner),
+                    );
+                }
                 let tab = if open.tab.is_empty() {
                     DEFAULT_TAB
                 } else {
@@ -306,7 +379,11 @@ impl RoomHost for RoomRuntime {
         };
         Ok(wire::RoomResponse {
             shown: shown.iter().map(super::rooms::Shown::wire).collect(),
-            effects: rooms.take_effects(),
+            effects: {
+                let mut effects = rooms.take_effects();
+                effects.append(&mut self.effects.lock().unwrap_or_else(PoisonError::into_inner));
+                effects
+            },
         })
     }
 
