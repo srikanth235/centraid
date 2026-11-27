@@ -22,4 +22,10 @@ Latest retry: [run 46035692381](https://github.com/srikanth235/centraid/actions/
 - XCTest and screenshot capture did not run; the unsigned iPhone app build was skipped. This attempt supplies no screenshot evidence.
 - Reminder records are now projected to JSON `Data` in the EventKit callback, so raw `EKReminder` values do not cross the actor boundary; PHPicker/VisionKit completion holders and their UI dismissal delegate methods are main-actor isolated. These changes await the next hosted run.
 
+Latest retry: [run 46038733383](https://github.com/srikanth235/centraid/actions/runs/46038733383), commit `a455906eb0c8332f7f050acc5f5782f8210f0ddb`, iOS job `140640829049`, Xcode 26.3 / Swift 6.2.4.
+
+- Both Rust core slices passed.
+- Swift module emission failed because `VNDocumentCameraViewControllerDelegate` is nonisolated while its witness methods enter main-actor code. The compiler recommended isolating the conformance itself; no XCTest or screenshot capture ran, and the unsigned-device app build was skipped.
+- The VisionKit delegate conformance is now explicitly main-actor isolated. This follow-up awaits the next hosted run.
+
 No physical device, native owner authentication, or share-extension host-app/share-sheet flow is proven by these attempts. M1, M3, and M4 remain unticked pending owner review.

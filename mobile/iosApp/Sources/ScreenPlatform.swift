@@ -456,18 +456,18 @@ enum FilePerformer {
     }
 
     @MainActor
-    private final class DocumentScannerHolder: NSObject, VNDocumentCameraViewControllerDelegate {
+    private final class DocumentScannerHolder: NSObject, @MainActor VNDocumentCameraViewControllerDelegate {
         let done: (Result<[Centraid_Core_V1_ShellPickedItem], Failure>) -> Void
         var onFinish: () -> Void = {}
         init(done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], Failure>) -> Void) { self.done = done }
         func finish(_ result: Result<[Centraid_Core_V1_ShellPickedItem], Failure>) { done(result); onFinish() }
-        @MainActor func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
+        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
             controller.dismiss(animated: true) { self.finish(.failure(.reason(EffectReason.cancelled))) }
         }
-        @MainActor func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
+        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
             controller.dismiss(animated: true) { self.finish(.failure(.reason(EffectReason.failed))) }
         }
-        @MainActor func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
+        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
             do {
                 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("room-scans", isDirectory: true)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
