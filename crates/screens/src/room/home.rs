@@ -473,7 +473,7 @@ impl RoomScreen for Home {
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
         b.watch(&BACKUP_TABLES);
-        b.watch(&["entity"]);
+        b.watch(&["entity", centraid_core::vaults::SHELF_TABLE]);
         if !first::welcomed(b.door) && first::day_one(b) {
             return first::welcome(b);
         }
