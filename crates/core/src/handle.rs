@@ -3441,7 +3441,11 @@ mod tests {
                 },
             );
 
+        let state = Arc::downgrade(&handle.state);
         drop(handle);
+        while state.strong_count() > 0 {
+            std::thread::yield_now();
+        }
         assert!(
             !path.exists(),
             "the receipt owns plaintext until commit or drop"
