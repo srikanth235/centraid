@@ -5,12 +5,13 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use super::blocks;
 use super::door::Door;
-use super::screen::{Build, Event, Outcome};
+use super::blocks::{self, Confirm};
+use super::frame::room;
+use super::screen::{Build, Event, Input, Nav, Outcome, Registry, RoomScreen, Status};
 use super::selector::Handler;
 use crate::kit::permission::{self, Resource, State};
-use crate::strings::{Locale, fill, follow as words};
+use crate::strings::{Locale, fill, follow as words, shared};
 
 const EN: Locale = Locale::En;
 
@@ -97,6 +98,7 @@ pub fn items(b: &mut Build<'_>, system: &str) -> Vec<wire::RoomMenuItem> {
     b.watch(&[WATCH]);
     let status = status(b.door, system).unwrap_or_default();
     let name = store(system);
+    let slug = system.replace('_', "-");
     let with_store = |template: String| fill(&template, &[("store", &name)]);
     let tag = |verb: &str| Handler::Tag(format!("follow:{verb}:{system}"));
     let mut rows = Vec::new();
@@ -104,7 +106,7 @@ pub fn items(b: &mut Build<'_>, system: &str) -> Vec<wire::RoomMenuItem> {
     if blocked == wire::FollowGrant::Unavailable {
         let mut row = blocks::menu_item(
             &mut b.sel,
-            &format!("more/follow-{system}"),
+            &format!("more/follow-{slug}"),
             &with_store(words::unavailable_row(EN)),
             tag("note"),
         );
@@ -113,7 +115,7 @@ pub fn items(b: &mut Build<'_>, system: &str) -> Vec<wire::RoomMenuItem> {
     } else if let Some(state) = blocked_state(blocked) {
         let mut row = blocks::menu_item(
             &mut b.sel,
-            &format!("more/follow-{system}"),
+            &format!("more/follow-{slug}"),
             &with_store(words::off_row(EN)),
             if state == State::Refused {
                 tag("settings")
@@ -126,7 +128,7 @@ pub fn items(b: &mut Build<'_>, system: &str) -> Vec<wire::RoomMenuItem> {
         if state == State::Refused {
             rows.push(blocks::menu_item(
                 &mut b.sel,
-                &format!("more/follow-{system}-again"),
+                &format!("more/follow-{slug}-again"),
                 &if system == "files" {
                     words::follow_files_row(EN)
                 } else {
@@ -143,7 +145,7 @@ pub fn items(b: &mut Build<'_>, system: &str) -> Vec<wire::RoomMenuItem> {
         };
         let mut row = blocks::menu_item(
             &mut b.sel,
-            &format!("more/follow-{system}"),
+            &format!("more/follow-{slug}"),
             &label,
             tag("note"),
         );
@@ -152,9 +154,9 @@ pub fn items(b: &mut Build<'_>, system: &str) -> Vec<wire::RoomMenuItem> {
         if system != "files" {
             let mut stop = blocks::menu_item(
                 &mut b.sel,
-                &format!("more/follow-{system}-stop"),
+                &format!("more/follow-{slug}-stop"),
                 &with_store(words::stop_row(EN)),
-                tag("stop"),
+                Handler::Open(format!("follow/stop/{system}")),
             );
             stop.destructive = true;
             rows.push(stop);
@@ -162,7 +164,7 @@ pub fn items(b: &mut Build<'_>, system: &str) -> Vec<wire::RoomMenuItem> {
     } else {
         rows.push(blocks::menu_item(
             &mut b.sel,
-            &format!("more/follow-{system}"),
+            &format!("more/follow-{slug}"),
             &if system == "files" {
                 words::follow_files_row(EN)
             } else {
@@ -190,26 +192,6 @@ pub fn handle(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
     let mut parts = tag.strip_prefix("follow:")?.splitn(2, ':');
     let (verb, system) = (parts.next()?, parts.next()?);
     let outcome = match verb {
-        "stopref" => {
-            let (system, origin) = system.split_once(':')?;
-            let request = wire::Request {
-                kind: Some(wire::request::Kind::Follow(wire::FollowRequest {
-                    verb: wire::FollowVerb::Stop as i32,
-                    system: system.to_owned(),
-                    input_json: serde_json::json!({ "ref": origin }).to_string(),
-                    ..Default::default()
-                })),
-            };
-            e.door.call(&request).map_or_else(
-                |refused| Outcome::refuse(&refused.0),
-                |_| {
-                    Outcome::say(&fill(
-                        &words::stopped_status(EN),
-                        &[("store", &store(system))],
-                    ))
-                },
-            )
-        }
         "enrol" => ask(e.door, wire::FollowVerb::Enrol, system).map_or_else(
             |refused| Outcome::refuse(&refused.0),
             |()| Outcome::default(),
@@ -217,15 +199,6 @@ pub fn handle(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
         "settings" => ask(e.door, wire::FollowVerb::Settings, system).map_or_else(
             |refused| Outcome::refuse(&refused.0),
             |()| Outcome::default(),
-        ),
-        "stop" => ask(e.door, wire::FollowVerb::Stop, system).map_or_else(
-            |refused| Outcome::refuse(&refused.0),
-            |()| {
-                Outcome::say(&fill(
-                    &words::stopped_status(EN),
-                    &[("store", &store(system))],
-                ))
-            },
         ),
         "note" => {
             let status = status(e.door, system).unwrap_or_default();
@@ -240,4 +213,87 @@ pub fn handle(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
         _ => return None,
     };
     Some(outcome)
+}
+
+/// The confirm a stop asks first: `follow/stop/<store>`, or `follow/stop/files:<ref>` for one folder.
+#[must_use]
+pub fn registry() -> Registry {
+    Registry::new().with(Box::new(|key| {
+        let rest = key.strip_prefix("follow/stop/")?;
+        let (system, origin) = match rest.split_once(':') {
+            Some((system, origin)) => (system, Some(origin.to_owned())),
+            None => (rest, None),
+        };
+        Some(Box::new(StopConfirm {
+            system: system.to_owned(),
+            origin,
+        }) as Box<dyn RoomScreen>)
+    }))
+}
+
+struct StopConfirm {
+    system: String,
+    origin: Option<String>,
+}
+
+impl RoomScreen for StopConfirm {
+    fn key(&self) -> String {
+        match &self.origin {
+            Some(origin) => format!("follow/stop/{}:{origin}", self.system),
+            None => format!("follow/stop/{}", self.system),
+        }
+    }
+
+    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let holes = [("store", store(&self.system)), ("source", source(&self.system))];
+        let holes = [(holes[0].0, holes[0].1.as_str()), (holes[1].0, holes[1].1.as_str())];
+        let title = fill(&words::stop_title(EN), &holes);
+        let body = fill(&words::stop_body(EN), &holes);
+        let confirm = blocks::confirm(
+            &mut b.sel,
+            Confirm {
+                class: wire::RoomConfirmClass::Outlined,
+                title: &title,
+                body: &body,
+                warning: "",
+                confirm_label: &words::stop_confirm(EN),
+                confirm: Handler::Tag("stop:confirm".to_owned()),
+                cancel_label: &shared::kit_cancel(EN),
+                cancel: Handler::Back,
+            },
+        );
+        room(wire::RoomKind::Sheet, &self.key())
+            .title(&title)
+            .ready(vec![confirm])
+            .build()
+    }
+
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+        if tag != "stop:confirm" {
+            return Outcome::default();
+        }
+        let request = wire::Request {
+            kind: Some(wire::request::Kind::Follow(wire::FollowRequest {
+                verb: wire::FollowVerb::Stop as i32,
+                system: self.system.clone(),
+                input_json: self
+                    .origin
+                    .as_ref()
+                    .map(|origin| serde_json::json!({ "ref": origin }).to_string())
+                    .unwrap_or_default(),
+                ..Default::default()
+            })),
+        };
+        match e.door.call(&request) {
+            Ok(_) => Outcome {
+                nav: Nav::Pop,
+                status: Some(Status {
+                    sentence: fill(&words::stopped_status(EN), &[("store", &store(&self.system))]),
+                    undo: false,
+                    refused: false,
+                }),
+            },
+            Err(refused) => Outcome::refuse(&refused.0),
+        }
+    }
 }

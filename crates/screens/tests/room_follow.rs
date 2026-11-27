@@ -146,6 +146,24 @@ impl<'a> Shell<'a> {
         }
     }
 
+    fn tap_id(&mut self, id: &str) {
+        let shown = self.room.clone().expect("a room is open");
+        let again = room_call(
+            self.handle,
+            wire::room_request::Kind::Send(wire::RoomSend {
+                instance: shown.instance,
+                event: Some(wire::RoomEvent {
+                    kind: Some(wire::room_event::Kind::Tap(wire::RoomTap {
+                        selector_id: id.to_owned(),
+                    })),
+                }),
+            }),
+        );
+        if let Some(last) = again.into_iter().last() {
+            self.room = Some(last);
+        }
+    }
+
     fn labels(&self) -> Vec<String> {
         self.room
             .as_ref()
@@ -388,6 +406,16 @@ fn stopping_keeps_what_was_read_forgets_the_enrolment_and_ends_passes() {
     people_enrolled(&mut shell);
 
     shell.tap("Stop following Contacts");
+    let sheet = shell.rendered();
+    assert!(
+        sheet.contains("Stop following Contacts?") && sheet.contains("What it already added stays"),
+        "a stop asks first, in words that say nothing is deleted:\n{sheet}"
+    );
+    assert_eq!(shell.verb(wire::FollowVerb::Status, "contacts").status.unwrap().enrolled, true);
+    shell.tap_id("confirm/no");
+    assert!(shell.verb(wire::FollowVerb::Status, "contacts").status.unwrap().enrolled, "cancel stops nothing");
+    shell.tap("Stop following Contacts");
+    shell.tap_id("confirm/yes");
     shell.pump();
     assert_eq!(shell.watches.last(), Some(&("contacts".to_owned(), false)));
     assert!(shell.labels().contains(&"Follow Contacts".to_owned()), "{:?}", shell.labels());
@@ -470,4 +498,34 @@ fn the_more_sheet_of_each_owning_app_offers_its_store() {
         shell.open(key);
         assert!(shell.labels().contains(&row.to_owned()), "{key}: {:?}\n{}", shell.labels(), shell.rendered());
     }
+}
+
+#[test]
+fn a_followed_folder_is_stopped_from_its_page_and_its_grant_is_released() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = phone(dir.path());
+    let mut shell = Shell::new(&handle);
+    shell.open("docs");
+    shell.tap("Follow a folder");
+    let ask = shell.pump().remove(0);
+    assert!(ask.ask_permission, "the picker is the ask, and only the tap opens it");
+    let done = shell.answer(
+        &ask,
+        wire::FollowGrant::Granted,
+        json!({ "origin": { "ref": "/Documents/Taxes", "label": "Taxes" }, "records": [], "complete": true }),
+    );
+    assert!(!done.declined, "{done:?}");
+    shell.pump();
+    assert_eq!(shell.verb(wire::FollowVerb::Trigger, "").asked, 1, "the folder is read on a trigger");
+    let pass = shell.pump().remove(0);
+    assert!(!pass.ask_permission);
+    shell.answer(&pass, wire::FollowGrant::Granted, json!({ "origin": { "ref": "/Documents/Taxes", "label": "Taxes" }, "records": [], "complete": true }));
+
+    shell.open("docs/followed");
+    assert!(shell.rendered().contains("Taxes"), "{}", shell.rendered());
+    shell.open("follow/stop/files:/Documents/Taxes");
+    shell.tap_id("confirm/yes");
+    shell.pump();
+    assert_eq!(shell.forgotten, ["/Documents/Taxes"], "the shell releases the folder's grant");
+    assert_eq!(shell.verb(wire::FollowVerb::Trigger, "").asked, 0, "no folder left, no pass");
 }

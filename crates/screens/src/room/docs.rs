@@ -1459,10 +1459,6 @@ impl RoomScreen for FollowedFoldersPage {
         FOLLOWED.to_owned()
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
-        super::follow::handle(e, tag).unwrap_or_default()
-    }
-
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
         let origins = match b.run(&reads::FOLLOWED_FOLDERS, &Args::new()) {
             Ok(answer) => answer.rows,
@@ -1508,7 +1504,7 @@ impl RoomScreen for FollowedFoldersPage {
                                     &mut b.sel,
                                     &format!("followed/{}/stop", origin.id),
                                     &words::menu_stop_following(EN),
-                                    Handler::Tag(format!("follow:stopref:files:{}", origin.external_ref)),
+                                    Handler::Open(format!("follow/stop/files:{}", origin.external_ref)),
                                 )],
                             )],
                             &mut b.sel,

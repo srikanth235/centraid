@@ -7,6 +7,12 @@ catalog! {
     plain following_meta = ("Read from your phone when Centraid opens.", "Read from your phone when Centraid opens.");
     plain stop_row = ("Stop following {store}", "Stop following {store}");
     plain stopped_status = ("Stopped following {store}. What it added stays.", "Stopped following {store}. What it added stays.");
+    plain stop_title = ("Stop following {store}?", "Stop following {store}?");
+    plain stop_body = (
+        "Centraid stops reading {source}. What it already added stays.",
+        "Centraid stops reading {source}. What it already added stays."
+    );
+    plain stop_confirm = ("Stop following", "Stop following");
     plain off_row = ("{store} is off", "{store} is off");
     plain open_settings_row = ("Open Settings", "Open Settings");
     plain unavailable_row = ("{store} isn’t on this phone", "{store} isn’t on this phone");
