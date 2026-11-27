@@ -1,6 +1,4 @@
 import Combine
-import Contacts
-import EventKit
 import Foundation
 import Security
 import SwiftProtobuf
@@ -60,9 +58,6 @@ final class ScreenStore: ObservableObject {
     var closedInstances: Set<UInt64> { closed }
     /// Instances this shell opened with `open`, so two opens never claim one entry.
     private var claimed: Set<UInt64> = []
-    /// The phone stores being watched (`PhoneWatch`), each under the effect that asked.
-    private var watches: [UInt64: (instance: UInt64, source: Centraid_Core_V1_ImportSource)] = [:]
-    private var storeObservers: [NotificationObservation] = []
     /// OPEN A PAGE NOW, wherever the member is (`OpenRoute`): the shell pushes the
     /// route as it pushes a tapped row's route. Set by `ShellModel`.
     var onOpenRoute: ((Centraid_Core_V1_Route) -> Void)?
@@ -74,10 +69,6 @@ final class ScreenStore: ObservableObject {
     /// under it): the shell takes their pages off its path.
     var onClosed: (([UInt64]) -> Void)?
     private var homeTold: UInt64?
-    /// An import over iOS's limited contact access: the shell raises the system's picker.
-    var onContactsLimited: (() -> Void)?
-    /// THE LINK NOW, for the camera roll's `LinkRead` (`LinkReporter.reading`).
-    var linkReading: (() -> Centraid_Core_V1_LinkReading)?
 
     /// THE PASS SCHEDULER'S WINDOWS (`passes` in Rust): a granted background window waits
     /// here, by name, for `PassWindowDone`, which carries the answer `setTaskCompleted` takes.
@@ -106,24 +97,10 @@ final class ScreenStore: ObservableObject {
     /// Clipboard writes and clears are one shell-wide FIFO across screen instances.
     private var clipboardQueue: [Centraid_Core_V1_EffectRequest] = []
     private var clipboardRunning = false
-    /// The `words.make` instances whose made vault the made-vault imports were told of.
-    private var madeTold: Set<UInt64> = []
-    /// The instances the SHELL popped (a Cancel or a back): a `words.make` the core closed
-    /// instead was closed by the vault it made coming to the front.
-    private var shellPopped: Set<UInt64> = []
 
     init(core: any ScreenCore, scheduleNotifications: @escaping NotificationScheduler = ScreenStore.scheduleNotifications) {
         self.core = core
         self.scheduleNotifications = scheduleNotifications
-        #if os(iOS)
-        // THE PHOTO LIBRARY CHANGED while the app is in view: a nudge to the camera roll.
-        LibraryWatcher.shared.onChange = { [weak self] in
-            var event = Centraid_Core_V1_ImportsCameraRollEvent()
-            event.libraryChanged = .init()
-            self?.sendRoot(RustScreens.cameraRollTab, .importsCameraRoll(event))
-        }
-        LibraryWatcher.shared.registerIfAllowed()
-        #endif
     }
 
     /// One event reader and first snapshot, shared by every startup caller. A cold
@@ -301,22 +278,6 @@ final class ScreenStore: ObservableObject {
         return answer.destinations
     }
 
-    /// Send `event` to the root of `tab`: the phone imports' hidden tabs, which the shell
-    /// tells only what the platform alone knows.
-    func sendRoot(_ tab: String, _ event: Centraid_Core_V1_ScreenEvent.OneOf_Kind) {
-        guard let root = entries(of: tab).first?.instance else { return }
-        send(root, event)
-    }
-
-    /// THE MADE VAULT'S ONE LINE (`imports.made`, the root of its hidden tab): what came in,
-    /// and the app it opens. Nil before it has a view.
-    var madeLine: Centraid_Core_V1_ImportsMadeState? {
-        guard let root = entries(of: RustScreens.madeTab).first?.instance,
-            case let .importsMade(state)? = views[root]?.kind
-        else { return nil }
-        return state
-    }
-
     /// Push a route onto a tab and answer the instance Rust opened for it, or
     /// nil when the push was not answered. The shell remembers the instance:
     /// it draws that instance's view and reports its pop (`popped`).
@@ -336,7 +297,6 @@ final class ScreenStore: ObservableObject {
     /// The shell popped a screen it opened (a back control or a swipe); Rust drops it.
     func popped(tab: String, instance: UInt64) {
         claimed.remove(instance)
-        shellPopped.insert(instance)
         var popped = Centraid_Core_V1_NavPopped()
         popped.tab = tab
         popped.instance = instance
@@ -390,15 +350,6 @@ final class ScreenStore: ObservableObject {
             navigation = update.navigation
         }
         for id in update.closed {
-            // A VAULT MADE IS A VAULT IN FRONT, AND THE CORE CLOSES EVERY SCREEN FOR IT: the
-            // `words.make` page goes with its `finished` view undelivered (the quiet make never
-            // shows one at all). A make page the core closed, which the shell did not pop, is the
-            // made vault the imports are told of.
-            if case .wordsMake? = views[id]?.kind, !shellPopped.contains(id), madeTold.insert(id).inserted {
-                var made = Centraid_Core_V1_ImportsMadeEvent()
-                made.made = .with { $0.reminders = true; $0.includeCompleted = false }
-                sendRoot(RustScreens.madeTab, .importsMade(made))
-            }
             closed.insert(id)
             views[id] = nil
             queues[id] = nil
@@ -591,12 +542,13 @@ final class ScreenStore: ObservableObject {
             #endif
             answer(request, done)
         case .rollPage(let page)?:
-            let paged = await Task.detached(priority: .utility) {
+            _ = await Task.detached(priority: .utility) {
                 await PhoneLibrary.page(cursor: page.cursor, limit: Int(page.limit))
             }.value
-            answer(request, .rollPaged(paged))
+            answer(request, done)
         case .libraryStage(let stage)?:
-            answer(request, .libraryStaged(await PhoneLibrary.stage(stage, core: core)))
+            _ = await PhoneLibrary.stage(stage, core: core)
+            answer(request, done)
         case .libraryDerivatives(let derivatives)?:
             await PhoneLibrary.derivatives(derivatives, core: core)
             answer(request, done)
@@ -724,13 +676,6 @@ final class ScreenStore: ObservableObject {
         }
     }
 
-    /// A link the platform has not described yet: expensive, which Rust reads as "wait".
-    private static var unknownLink: Centraid_Core_V1_LinkReading {
-        var reading = Centraid_Core_V1_LinkReading()
-        reading.platformRefused = true
-        return reading
-    }
-
     /// THE PLATFORM'S OWN PHOTO PAGES: Settings, and iOS's limited selection. The prompt and a
     /// walk are the camera roll's, in Rust.
     private static func cameraRoll(_ roll: Centraid_Core_V1_CameraRoll) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
@@ -789,50 +734,6 @@ final class ScreenStore: ObservableObject {
 
     static func changedTables(_ changed: Centraid_Core_V1_DataChanged) -> [String] {
         changed.tables
-    }
-
-    /// START OR STOP WATCHING A PHONE STORE. While on, each change of the store
-    /// is answered under the one `effect_id` that asked, as `PhoneChanged`. The
-    /// follow coordinator asks once per session for contacts and calendar; the
-    /// app coming forward is not this watch's, Rust hears the lifecycle itself.
-    private func watch(_ request: Centraid_Core_V1_EffectRequest, _ watch: Centraid_Core_V1_PhoneWatch) {
-        if watch.on {
-            watches[request.effectID] = (request.instance, watch.source)
-            observeStores()
-        } else {
-            watches = watches.filter { $0.value.instance != request.instance || $0.value.source != watch.source }
-            answer(request, .done(Centraid_Core_V1_EffectDone()))
-        }
-    }
-
-    /// One observer per store the OS announces changes of, installed on the first watch.
-    private func observeStores() {
-        guard storeObservers.isEmpty else { return }
-        // EventKit posts only for a store that is alive.
-        _ = PhoneCalendar.watcher
-        let center = NotificationCenter.default
-        storeObservers = [
-            NotificationObservation(center.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.storeChanged(.calendar)
-                    self?.storeChanged(.reminders)
-                }
-            }, center: center),
-            NotificationObservation(center.addObserver(forName: .CNContactStoreDidChange, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.storeChanged(.contacts) }
-            }, center: center),
-        ]
-    }
-
-    private func storeChanged(_ source: Centraid_Core_V1_ImportSource) {
-        for (effectID, watch) in watches where watch.source == source {
-            var changed = Centraid_Core_V1_PhoneChanged()
-            changed.source = source
-            var result = Centraid_Core_V1_EffectResult()
-            result.effectID = effectID
-            result.outcome = .phoneChanged(changed)
-            send(watch.instance, .effectResult(result))
-        }
     }
 
     #if os(iOS)

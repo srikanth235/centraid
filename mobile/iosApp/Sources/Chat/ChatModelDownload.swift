@@ -5,9 +5,8 @@ import Foundation
 // WHEN A MEMBER FIRST ATTACHES A PHOTO — ITS VISION PROJECTOR.
 //
 // Rust names the file to fetch (`ModelDownload`: url, file name, SHA-256, size and the
-// directory) and hears about the transfer as `ChatEvent.DownloadProgress` and
-// `DownloadFinished` (each with a `vision` flag). Everything else is iOS's and is here, one code
-// path for both files: where the file lands, the session, the hash, the iCloud exclusion.
+// directory). Everything else is iOS's and is here, one code path for both files: where the file
+// lands, the session, the hash, the iCloud exclusion.
 
 /// WHICH FILE A TRANSFER IS, as the effect named it. It rides on the task
 /// (`taskDescription`, encoded), so the delegate knows what landed without a table of its own.
@@ -80,18 +79,10 @@ enum ChatModelStore {
 /// What arrives is verified before it is kept: it is moved to a staging file inside the models
 /// directory (the system deletes its own copy when the delegate returns), hashed in 1 MB reads,
 /// and renamed into place only when the digest is the one Rust named. A mismatch is deleted and
-/// reported as a failed download, so a truncated file or an error page can never reach the core
+/// dropped, so a truncated file or an error page can never reach the core
 /// as a model.
 final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     static let shared = ChatModelDownloader()
-
-    /// Both fire on the main queue. The ChatModel points them at the chat.
-    @MainActor var onProgress: ((_ vision: Bool, Int64, Int64) -> Void)?
-    @MainActor var onFinished: ((_ vision: Bool, Bool) -> Void)?
-
-    private let lock = NSLock()
-    private var lastReportedAt: [Bool: Date] = [:]
-    private var lastReportedPercent: [Bool: Int] = [:]
 
     /// The asset a task is fetching.
     private func asset(of task: URLSessionTask) -> ChatAsset? {
@@ -103,28 +94,6 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
         configuration.waitsForConnectivity = true
         return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
     }()
-
-    /// Make sure the session exists before the chat asks about running work.
-    @MainActor func reconnect() {
-        _ = session
-    }
-
-    /// SAY SO WHEN A TRANSFER IS ALREADY RUNNING.
-    ///
-    /// A member who leaves the Chat tab mid-download and comes back finds the model still
-    /// arriving. Its progress is reported at once, bypassing the throttle, and the chat treats
-    /// progress heard before any tap as "already downloading".
-    @MainActor func reportRunning() {
-        session.getAllTasks { [weak self] tasks in
-            guard let self else { return }
-            for running in tasks where running.state == .running {
-                guard let asset = self.asset(of: running) else { continue }
-                let done = running.countOfBytesReceived
-                let total = max(running.countOfBytesExpectedToReceive, 0)
-                DispatchQueue.main.async { self.onProgress?(asset.vision, done, total) }
-            }
-        }
-    }
 
     /// WHICH TRANSFERS MAY USE MOBILE DATA (by `vision`): the member's word, for the transfer that is
     /// going. Without it a transfer is held (suspended) while the phone is on mobile data and goes on
@@ -168,10 +137,7 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
                 DispatchQueue.main.async { self.enforce() }
                 return
             }
-            guard let url = URL(string: asset.url) else {
-                self.finish(asset, false)
-                return
-            }
+            guard let url = URL(string: asset.url) else { return }
             let task = session.downloadTask(with: url)
             task.taskDescription = asset.encoded
             task.resume()
@@ -180,31 +146,6 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
     }
 
     // MARK: URLSessionDownloadDelegate
-
-    func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didWriteData bytesWritten: Int64,
-        totalBytesWritten: Int64,
-        totalBytesExpectedToWrite: Int64
-    ) {
-        guard let asset = asset(of: downloadTask) else { return }
-        // A callback per few kilobytes would be a state per few kilobytes: one per whole percent,
-        // and none sooner than a quarter second after the last.
-        let total = max(totalBytesExpectedToWrite, 0)
-        let percent = total > 0 ? Int(Double(totalBytesWritten) / Double(total) * 100) : -1
-        lock.lock()
-        let now = Date()
-        let due = percent != lastReportedPercent[asset.vision, default: -1]
-            && now.timeIntervalSince(lastReportedAt[asset.vision, default: .distantPast]) >= 0.25
-        if due {
-            lastReportedAt[asset.vision] = now
-            lastReportedPercent[asset.vision] = percent
-        }
-        lock.unlock()
-        guard due else { return }
-        DispatchQueue.main.async { [weak self] in self?.onProgress?(asset.vision, totalBytesWritten, total) }
-    }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let asset = asset(of: downloadTask) else { return }
@@ -215,23 +156,16 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
         do {
             try FileManager.default.moveItem(at: location, to: staging)
         } catch {
-            return finish(asset, false)
+            return
         }
         guard status == 200 else {
             try? FileManager.default.removeItem(at: staging)
-            return finish(asset, false)
+            return
         }
         // THE HASH IS OFF THE DELEGATE QUEUE: half a gigabyte is seconds of work.
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let ok = Self.keep(staging, as: asset)
-            self?.finish(asset, ok)
+        DispatchQueue.global(qos: .utility).async {
+            _ = Self.keep(staging, as: asset)
         }
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Swift.Error?) {
-        // A transfer that finished cleanly was settled in `didFinishDownloadingTo`.
-        guard error != nil, let asset = asset(of: task) else { return }
-        finish(asset, false)
     }
 
     // MARK: Verification
@@ -267,13 +201,5 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
             hasher.update(data: chunk)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    }
-
-    private func finish(_ asset: ChatAsset, _ ok: Bool) {
-        lock.lock()
-        lastReportedPercent[asset.vision] = -1
-        lastReportedAt[asset.vision] = .distantPast
-        lock.unlock()
-        DispatchQueue.main.async { [weak self] in self?.onFinished?(asset.vision, ok) }
     }
 }

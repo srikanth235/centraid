@@ -4,8 +4,6 @@ enum RustScreens {
     static let homeTab = "home"
     static let chatTab = "chat"
     static let backupTab = "backup"
-    static let cameraRollTab = "imports-camera-roll"
-    static let madeTab = "imports-made"
 }
 
 struct RustEntry: Hashable, Identifiable {
