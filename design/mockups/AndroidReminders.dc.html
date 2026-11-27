@@ -51,7 +51,7 @@ button{font:inherit;color:inherit}
       </div>
       <span style="font-size: 16px; font-weight: 500;">Scheduled</span>
     </div>
-    <div style="color: var(--on-fill); background: var(--fill-4a4741); border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="color: var(--on-fill); background: var(--chip-graphite); border-radius: 24px; padding: 16px; height: 96px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"></path><path d="M3 13h5l1 2h6l1-2h5"></path></svg>
         <span style="font-size: 28px; font-weight: 500; line-height: 32px;">31</span>
@@ -65,7 +65,7 @@ button{font:inherit;color:inherit}
       </div>
       <span style="font-size: 16px; font-weight: 500;">Starred</span>
     </div>
-    <div style="grid-column: span 2; color: var(--on-fill); background: var(--fill-6e6b66); border-radius: 24px; padding: 0 16px; height: 64px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;">
+    <div style="grid-column: span 2; color: var(--on-fill); background: var(--chip-slate); border-radius: 24px; padding: 0 16px; height: 64px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;">
       <div style="display: flex; align-items: center; gap: 12px;">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
         <span style="font-size: 16px; font-weight: 500;">Completed</span>
@@ -106,15 +106,15 @@ button{font:inherit;color:inherit}
   </button>
 
   <div style="position: absolute; left: 18px; right: 18px; bottom: 21px; height: 54px; display: flex; align-items: center; gap: 8px;">
-    <button aria-label="Home" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: var(--surface-fill); box-shadow: 0 3px 10px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+    <button aria-label="Home" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: var(--surface-fill); box-shadow: 0 3px 10px var(--shadow-card); display: flex; align-items: center; justify-content: center;">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-body)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg>
     </button>
-    <div style="flex-grow: 1; height: 54px; box-sizing: border-box; padding: 4px; position: relative; border-radius: 27px; background: var(--surface-fill); box-shadow: 0 3px 10px var(--shadow-8); display: flex; align-items: stretch; font-size: 11px; line-height: 15px;">
-      <span aria-hidden="true" style="position: absolute; top: 5px; left: 84px; width: 22px; height: 2px; border-radius: 1px; background: var(--fill-1c1b19);"></span>
+    <div style="flex-grow: 1; height: 54px; box-sizing: border-box; padding: 4px; position: relative; border-radius: 27px; background: var(--surface-fill); box-shadow: 0 3px 10px var(--shadow-card); display: flex; align-items: stretch; font-size: 11px; line-height: 15px;">
+      <span aria-hidden="true" style="position: absolute; top: 5px; left: 84px; width: 22px; height: 2px; border-radius: 1px; background: var(--chip-ink);"></span>
       <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--text-ink); font-weight: 600;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="7" r="2"></circle><circle cx="5" cy="17" r="2"></circle><path d="M10 7h11M10 17h11"></path></svg>Reminders</span>
       <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--text-body);"><svg width="22" height="22" viewBox="0 0 24 24" fill="var(--text-meta)" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>More</span>
     </div>
-    <button aria-label="Search" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: var(--surface-fill); box-shadow: 0 3px 10px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+    <button aria-label="Search" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: var(--surface-fill); box-shadow: 0 3px 10px var(--shadow-card); display: flex; align-items: center; justify-content: center;">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-body)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
     </button>
   </div>
@@ -123,7 +123,7 @@ button{font:inherit;color:inherit}
     <input id="agenda-quick-add" type="text" role="textbox" aria-label="Add to Inbox" value="Water the plants" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--text-ink); font: 16px 'Roboto Flex', Roboto, system-ui, sans-serif;">
     <button aria-label="Add reminder" style="height: 40px; padding: 0 14px; border: none; border-radius: 20px; background: var(--app-reminders-fill); color: var(--on-fill); font: 600 14px 'Roboto Flex', Roboto, system-ui, sans-serif;">Add</button>
   </div>
-  <div aria-hidden="true" style="position: absolute; left: 152px; bottom: 6px; width: 108px; height: 4px; border-radius: 2px; background: var(--fill-1c1b19);"></div>
+  <div aria-hidden="true" style="position: absolute; left: 152px; bottom: 6px; width: 108px; height: 4px; border-radius: 2px; background: var(--chip-ink);"></div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>

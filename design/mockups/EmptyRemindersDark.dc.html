@@ -20,7 +20,7 @@ button{font:inherit;color:inherit}
   <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 20px 8px;">
     <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Reminders</h1>
     <div style="display: flex; gap: 8px;">
-      <button aria-label="Filter and sort" style="width: 44px; height: 44px; border-radius: 22px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+      <button aria-label="Filter and sort" style="width: 44px; height: 44px; border-radius: 22px; background: var(--glass-bar); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-card); display: flex; align-items: center; justify-content: center;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"></path></svg>
       </button>
       <button aria-label="New reminder" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: var(--app-reminders-fill); display: flex; align-items: center; justify-content: center;">
@@ -46,7 +46,7 @@ button{font:inherit;color:inherit}
       </div>
       <span style="font-size: 17px; font-weight: 600;">Scheduled</span>
     </div>
-    <div style="text-decoration: none; color: var(--on-fill); background: var(--fill-1c1b19); border-radius: 18px; padding: 14px; height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="text-decoration: none; color: var(--on-fill); background: var(--chip-ink); border-radius: 18px; padding: 14px; height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"></path><path d="M3 13h5l1 2h6l1-2h5"></path></svg>
         <span style="font-size: 28px; font-weight: 700;">0</span>
@@ -60,7 +60,7 @@ button{font:inherit;color:inherit}
       </div>
       <span style="font-size: 17px; font-weight: 600;">Starred</span>
     </div>
-    <div style="grid-column: span 2; color: var(--on-fill); background: var(--fill-6e6b66); border-radius: 18px; padding: 14px; height: 64px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;">
+    <div style="grid-column: span 2; color: var(--on-fill); background: var(--chip-slate); border-radius: 18px; padding: 14px; height: 64px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;">
       <div style="display: flex; align-items: center; gap: 12px;">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
         <span style="font-size: 17px; font-weight: 600;">Completed</span>
@@ -71,7 +71,7 @@ button{font:inherit;color:inherit}
 
   <!-- part:Empty variant="action" t0="Add the first thing you must not forget." t1="Or tap + to write one." -->
   <div style="margin: 28px 20px 0; background: var(--surface-card); border-radius: 16px; padding: 24px 20px 20px; display: flex; flex-direction: column; align-items: center; text-align: center;">
-    <span style="width: 52px; height: 52px; border-radius: 26px; background: var(--fill-e2eef8); display: flex; align-items: center; justify-content: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--app-reminders)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="7" r="2"></circle><circle cx="5" cy="17" r="2"></circle><path d="M10 7h11M10 17h11"></path></svg></span>
+    <span style="width: 52px; height: 52px; border-radius: 26px; background: var(--tint-sky-pale); display: flex; align-items: center; justify-content: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--app-reminders)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="7" r="2"></circle><circle cx="5" cy="17" r="2"></circle><path d="M10 7h11M10 17h11"></path></svg></span>
     <div data-slot="t0" style="font-size: 18px; font-weight: 600; margin-top: 12px; line-height: 1.3;">Add the first thing you must not forget.</div>
     <button style="margin-top: 16px; height: 48px; padding: 0 24px; border-radius: 24px; border: none; background: var(--app-reminders-fill); color: var(--on-fill); font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg>Import from Reminders
@@ -82,14 +82,14 @@ button{font:inherit;color:inherit}
 
   <!-- part:Band variant="two" -->
   <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; display: flex; align-items: center; gap: 8px;">
-    <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+    <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-bar); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-card); display: flex; align-items: center; justify-content: center;">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg>
     </button>
-    <div style="flex-grow: 1; height: 56px; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
+    <div style="flex-grow: 1; height: 56px; border-radius: 28px; background: var(--glass-bar); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-card); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
       <span aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-ink); font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="7" r="2"></circle><circle cx="5" cy="17" r="2"></circle><path d="M10 7h11M10 17h11"></path></svg>Reminders</span>
       <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text-meta);"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>More</span>
     </div>
-    <button aria-label="Search" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-72); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-8); display: flex; align-items: center; justify-content: center;">
+    <button aria-label="Search" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--glass-bar); border: 1px solid var(--surface-border); box-shadow: 0 6px 20px var(--shadow-card); display: flex; align-items: center; justify-content: center;">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
     </button>
   </div>

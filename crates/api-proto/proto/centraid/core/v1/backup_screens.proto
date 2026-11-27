@@ -466,7 +466,7 @@ message BackupCheckState {
   // "Result" while a result stands, "Checking" while one runs; empty before the first check.
   string heading = 3;
   repeated BackupCheckRow rows = 4;
-  // THE STATUS LINE AT THE FOOT: "Checked just now", "Not checked", "Checking Office NAS".
+  // THE STATUS LINE AT THE FOOT: "Checked just now", "Not checked", "Checking Office Mac".
   StatusLine status = 5;
   // A determinate bar while a check runs: `fraction` of the device in hand, 0..1.
   bool running = 6;

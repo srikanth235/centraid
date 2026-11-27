@@ -47,26 +47,16 @@ struct CentraidApp: App {
                                 RustScreenHost(shell: shell, entry: entry)
                             }
                         }
-                        // KEYED ON THE ROUTE: a route swapped in place is a new task.
-                        .task(id: route) { shell.opened(route) }
-                        // THE ASSISTANT'S DOOR for a search's Ask row (#1097, R-1097-30, #1135).
-                        .environment(\.askChat, { shell.open($0) })
-                        // THE IMPORT'S LINE on every route, at the foot (design/behaviour.md § Status line                        // one status line): above the app's band where the page
-                        // has one, at the page's own foot where it does not.
-                        .modifier(ShellLineHost(shell: shell))
                     }
             }
             .id(shell.stackEpoch)
             // A SCREEN RUST SAYS IS A SHEET (`Route.sheet`), over the page that opened it.
             .sheet(item: $shell.sheet) { entry in
                 RustScreenHost(shell: shell, entry: entry)
-                    .environment(\.askChat, { shell.open($0) })
                     .kitRootTint()
             }
             .kitRootTint()
             .onOpenURL { shell.handleOpenURL($0) }
-            // IOS'S CONTACT PICKER, for an import over limited access.
-            .modifier(ContactAccessPickerHost(shell: shell))
             // THE SWITCHER MASK. Leaving the foreground paints an opaque mask
             // — not cosmetic: the snapshot iOS keeps for the app switcher is
             // taken once the scene reaches `.background`, of whatever is on

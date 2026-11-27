@@ -6,13 +6,12 @@ extension Notification.Name {
     static let chatNetworkChanged = Notification.Name("centraid.chat.networkChanged")
 }
 
-/// WHAT THE PHONE IS LIKE FOR THE DOWNLOAD RULES (#1188): the network it is on (Wi-Fi, mobile data,
-/// none) and the space it has free. Told to Rust as `ChatEvent.DeviceFacts`, which decides what the
-/// download step offers; the downloader reads the same network to hold a transfer to Wi-Fi.
+/// THE NETWORK THE PHONE IS ON (Wi-Fi, mobile data, none), which the downloader reads to hold a
+/// transfer to Wi-Fi.
 final class ChatDeviceWatcher: @unchecked Sendable {
     static let shared = ChatDeviceWatcher()
 
-    typealias Network = Centraid_Core_V1_ChatEvent.DeviceFacts.Network
+    enum Network { case unspecified, offline, cellular, wifi }
 
     private let monitor = NWPathMonitor()
     private let lock = NSLock()
@@ -40,12 +39,5 @@ final class ChatDeviceWatcher: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return current
-    }
-
-    /// Bytes the phone can still keep for something the member asked for; 0 when it cannot say.
-    var freeBytes: UInt64 {
-        let values = try? URL(fileURLWithPath: NSHomeDirectory())
-            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        return UInt64(max(values?.volumeAvailableCapacityForImportantUsage ?? 0, 0))
     }
 }
