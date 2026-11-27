@@ -3993,22 +3993,6 @@
       "x": 0,
       "y": 77000
     },
-    "Reconnect.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · Reconnect phone data",
-      "w": 390,
-      "x": 5250,
-      "y": 24000
-    },
-    "ReconnectDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "7 · Reconnect phone data · dark",
-      "w": 390,
-      "x": 5250,
-      "y": 24000
-    },
     "RecoveryKey.dc.html": {
       "h": 844,
       "page": "light",
@@ -5613,7 +5597,6 @@
     "NotesAboutPage.dc.html",
     "PeopleMoreContacts.dc.html",
     "PeopleImport.dc.html",
-    "Reconnect.dc.html",
     "HealthSearch.dc.html",
     "PersonLinks.dc.html",
     "PersonMenu.dc.html",
