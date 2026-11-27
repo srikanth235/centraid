@@ -1,22 +1,22 @@
 room home key="home"
-  header title="Household" subtitle="Not backed up. Pair a backup device."
+  header title="Household"
     key verb sym="Settings" "Settings" #tile/settings
   band search=#band/search
     tab "Home" sym="Home" selected #tab/home
     tab "Chat" sym="NewChat" #tab/chat
     tab "Backup" sym="Backup" #tab/backup
   ready
-    glance "Today" #glance/today
+    glance "Calendar" #tile/calendar
       line "Design review"
+    glance "Reminders" #tile/reminders
       line "Send invoice"
+    glance "Photos" #tile/photos
+      line "Import your camera roll"
     tiles
-      tile "People" glyph="Users" #tile/people
-      tile "Money" glyph="Coin" #tile/money
-      tile "Calendar" glyph="Calendar" #tile/calendar
-      tile "Reminders" glyph="Check" #tile/reminders
-      tile "Notes" glyph="Journal" #tile/notes
-      tile "Docs" glyph="FileText" #tile/docs
-      tile "Photos" glyph="Image" #tile/photos
-      tile "Health" glyph="Heart" #tile/health
-      tile "Locker" glyph="Lock" #tile/locker
+      tile "Money" subtitle="Import a statement" glyph="Coin" #tile/money
+      tile "Health" subtitle="Connect Apple Health" glyph="Heart" #tile/health
+      tile "People" subtitle="People" glyph="Users" #tile/people
+      tile "Locker" subtitle="Set up Locker" glyph="Lock" #tile/locker
+      tile "Notes" subtitle="Write your first note" glyph="Journal" #tile/notes
+      tile "Docs" subtitle="Add a document" glyph="FileText" #tile/docs
   search placeholder="Search everything" #search

@@ -114,6 +114,10 @@ impl CtxDoor<'_> {
 }
 
 impl Door for CtxDoor<'_> {
+    fn reminders_source(&self) -> bool {
+        self.ctx.reminders_source()
+    }
+
     fn act(&self, act: &Act) -> std::result::Result<Done, Refused> {
         let decl = decl_of(&act.name).ok_or_else(|| Refused(words::act_refused(Locale::En)))?;
         let before: Vec<(String, i64)> = if matches!(decl.inverse, Inverse::Restore) {

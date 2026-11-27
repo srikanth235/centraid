@@ -101,4 +101,39 @@ catalog! {
     plain tile_contacts_refused = ("Contacts access is off · Open Settings", "Contacts access is off · Open Settings");
     plain tile_reminders_refused = ("Reminders access is off · Open Settings", "Reminders access is off · Open Settings");
     plain tile_empty_photos = ("Import your camera roll", "Import your camera roll");
+
+    // ---- first open and refused ----
+    plain first_open_calendar = ("Your events and invitations, day by day.", "Your events and invitations, day by day.");
+    plain first_open_people = ("The people you know, and what you write about them.", "The people you know, and what you write about them.");
+    plain first_open_reminders = ("Things to do, by day and by list.", "Things to do, by day and by list.");
+    plain first_open_reminders_by_hand = ("Add the first thing you must not forget.", "Add the first thing you must not forget.");
+    plain first_open_notes = ("Write down what you want to keep.", "Write down what you want to keep.");
+    plain first_open_docs = ("Documents you own, kept in your vault.", "Documents you own, kept in your vault.");
+    plain first_open_money = ("Your statements, sorted and searchable.", "Your statements, sorted and searchable.");
+    plain first_open_health = ("Steps, sleep and workouts, read from Apple Health.", "Steps, sleep and workouts, read from Apple Health.");
+    plain first_open_health_connect = ("Steps, sleep and workouts, read from Health Connect.", "Steps, sleep and workouts, read from Health Connect.");
+    plain first_open_or_write = ("Or tap + to write one.", "Or tap + to write one.");
+    plain first_open_or_add = ("Or tap + to add one.", "Or tap + to add one.");
+    plain first_open_write = ("Tap + to write one.", "Tap + to write one.");
+    plain first_open_import_calendar = ("Import your calendar", "Import your calendar");
+    plain first_open_import_reminders = ("Import your reminders", "Import your reminders");
+    plain first_open_import_contacts = ("Import contacts", "Import contacts");
+    plain first_open_import_photos = ("Import your camera roll", "Import your camera roll");
+    plain locker_step_one = ("Step 1 of 2", "Step 1 of 2");
+    plain locker_step_one_title = ("Your passwords and secure notes", "Your passwords and secure notes");
+    plain locker_step_one_body = ("Locker opens with your face or your passcode, every time.", "Locker opens with your face or your passcode, every time.");
+    plain locker_step_one_action = ("Confirm it's you", "Confirm it's you");
+    plain locker_step_two = ("Step 2 of 2", "Step 2 of 2");
+    plain locker_step_two_title = ("Add your first item.", "Add your first item.");
+    plain locker_step_two_body = ("A password, a card, a Wi\u{2011}Fi network or a code.", "A password, a card, a Wi\u{2011}Fi network or a code.");
+    plain tile_locker_locked = ("Locked", "Locked");
+    plain refused_open_settings = ("Open Settings", "Open Settings");
+    plain refused_photos_title = ("Photo access is off.", "Photo access is off.");
+    plain refused_photos_body = ("Turn it on in Settings to import your camera roll.", "Turn it on in Settings to import your camera roll.");
+    plain refused_calendar_title = ("Calendar access is off.", "Calendar access is off.");
+    plain refused_calendar_body = ("Turn it on in Settings to import your calendar.", "Turn it on in Settings to import your calendar.");
+    plain refused_contacts_title = ("Contacts access is off.", "Contacts access is off.");
+    plain refused_contacts_body = ("Turn it on in Settings to import your contacts.", "Turn it on in Settings to import your contacts.");
+    plain refused_reminders_title = ("Reminders access is off.", "Reminders access is off.");
+    plain refused_reminders_body = ("Turn it on in Settings to import your reminders.", "Turn it on in Settings to import your reminders.");
 }

@@ -128,6 +128,7 @@ pub const DEVICE_KEYS: &[KeyDecl] = &[
     key("backup.key-prompt", "D8", Core, Settings, Opaque),
     key("backup.notify-ask", "D8", Core, Settings, Opaque),
     key("backup.check", "D8", Core, Settings, Opaque),
+    key("welcome.seen", "D8", Core, Settings, Opaque),
     key("gw", "D8", Core, Settings, Opaque),
     key("install-id", "D8", Shell, Settings, Opaque),
     family("follower-device.", "D8", Shell, Settings, Opaque),
