@@ -1,4 +1,4 @@
-# Local validation
+# Validation
 
 These receipts describe the remediation worktree. The schema packet separately pins its earlier immutable evidence commit. Commands that use Cargo were serialized with a shared filesystem lock. No full CI or gate-profile success is claimed.
 
@@ -19,7 +19,8 @@ These receipts describe the remediation worktree. The schema packet separately p
 | `cargo build -p centraid-core-ffi` then `gradle -p mobile :core:jvmTest --no-daemon` | 40 passed, 0 failures/errors/skips across 10 suites; real JNA/ABI path | [Native library](validation/jvm-native-library.txt), [JVM tests](validation/jvm-tests.txt) |
 | Android API 24 ARM64 native Core build | Passed; Android floor retained | [Native build](validation/android-core-api24.txt) |
 | Android debug APK assembly | Passed; arm64-only packaging, API 24 native floor, matching embedded Core SHA, JDK time desugaring present | [APK assembly](validation/android-apk.txt), [artifact hashes](validation/android-artifact.json) |
-| Android unit tests and goldens | 212 tests, 0 failures/errors, 2 opt-in captures skipped in the default suite; capture was run separately | [Android unit run](validation/android-unit.txt), [JUnit totals](validation/android-unit-summary.json), [reviewed golden updates](validation/android-goldens.txt) |
+| Local Android unit tests and goldens | 212 tests, 0 failures/errors, 2 opt-in captures skipped; this local run reused ignored full-screen captures and does not prove a clean checkout | [Android unit run](validation/android-unit.txt), [JUnit totals](validation/android-unit-summary.json), [reviewed golden updates](validation/android-goldens.txt) |
+| Hosted Android verification at `53311bea8` | Tracked block goldens all matched. The suite failed on the missing `room_home` reference in ignored build output: 212 tests, 1 failure, 2 skips. The capture path predates this remediation; broader CI cleanup remains excluded | [Hosted Android failure and provenance](validation/android-ci.txt) |
 | Final opt-in Android captures and secret-control regressions | Passed: 20 light and 20 dark review previews, two separate scrolling-layout previews, and both masked-control cases | [Capture run](validation/android-captures.txt), [layout fixture](glass-layout-fixture.json) |
 | Glass contrast over extreme photo backgrounds | Two generated-resource tests passed; selected and inactive text remain at least 4.5:1 over black/white sources | [Contrast/capture receipt](validation/android-captures.txt) |
 | `bun run docs:build` | Passed | [Docs build](validation/docs-build.txt) |

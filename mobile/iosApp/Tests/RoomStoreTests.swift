@@ -88,7 +88,7 @@ final class RoomStoreTests: XCTestCase {
         XCTAssertEqual(pass.system, "calendar")
         XCTAssertEqual(pass.askID, 81)
         XCTAssertEqual(pass.grant, .granted)
-        XCTAssertEqual(pass.inputJSON, #"{"origin":{"ref":"contacts","label":"Contacts"},"records":[],"complete":true}"#)
+        XCTAssertEqual(pass.inputJson, #"{"origin":{"ref":"contacts","label":"Contacts"},"records":[],"complete":true}"#)
     }
 
     func testCameraRollPageUsesCursorAndStagedHashAndDoesNotInferDeletions() throws {
@@ -169,7 +169,7 @@ final class RoomStoreTests: XCTestCase {
         XCTAssertEqual(pass.verb, .pass)
         XCTAssertEqual(pass.askID, 234)
         XCTAssertEqual(pass.grant, .granted)
-        XCTAssertEqual(pass.inputJSON, payload)
+        XCTAssertEqual(pass.inputJson, payload)
     }
 
     func testFollowMergeRefusalShowsCoreSentence() async throws {

@@ -2,3 +2,5 @@ Android unit and golden verification (latest tree)
 
 Command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:testDebugUnitTest -Droborazzi.test.verify=true --no-daemon`
 Result: BUILD SUCCESSFUL. 52 suites, 212 tests, 0 failures, 0 errors, 2 expected opt-in capture skips. See `android-unit-summary.json` for per-suite counts.
+
+Hosted CI limitation: run `46031385998`, source `53311bea8b9318095de4a00ab23ddee1f47dc858`, fails after all block goldens match because the pre-existing full-screen `room_home` capture expects a missing file under ignored build output. Local pass used pre-existing ignored screen images; see `android-ci.txt`.

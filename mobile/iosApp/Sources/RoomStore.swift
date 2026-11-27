@@ -664,7 +664,7 @@ final class RoomStore: ObservableObject {
         pass.system = read.system
         pass.askID = effect.effectID
         pass.grant = grant
-        pass.inputJSON = inputJSON
+        pass.inputJson = inputJSON
         var request = Centraid_Core_V1_Request()
         request.kind = .follow(pass)
         return request
@@ -1007,32 +1007,9 @@ final class RoomStore: ObservableObject {
             guard scoped else { return (.unavailable, "") }
             defer { root.stopAccessingSecurityScopedResource() }
             let enumerationStatus = RoomDirectoryEnumerationStatus()
-            var paths: [URL] = []
-            guard let enumerator = FileManager.default.enumerator(
-                at: root,
-                includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .isHiddenKey, .isPackageKey, .fileSizeKey, .contentModificationDateKey],
-                options: [],
-                errorHandler: { _, _ in enumerationStatus.fail(); return false }
-            ) else { return (.unavailable, "") }
-            var visited = 0
-            for case let url as URL in enumerator {
-                guard visited < 50_000 else { enumerationStatus.fail(); break }
-                visited += 1
-                let values: URLResourceValues
-                do { values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .isHiddenKey, .isPackageKey]) }
-                catch { enumerationStatus.fail(); break }
-                if values.isHidden == true || values.isSymbolicLink == true {
-                    enumerationStatus.markPartial()
-                    continue
-                }
-                if values.isPackage == true {
-                    enumerationStatus.markPartial()
-                    enumerator.skipDescendants()
-                    continue
-                }
-                if values.isRegularFile != true { continue }
-                paths.append(url)
-            }
+            guard let paths = await Task.detached(priority: .utility, operation: {
+                Self.enumerateRoomFiles(at: root, status: enumerationStatus)
+            }).value else { return (.unavailable, "") }
             guard enumerationStatus.canCommit else { return (.unavailable, "") }
             var records: [[String: Any]] = []
             for url in paths {
@@ -1042,8 +1019,10 @@ final class RoomStore: ObservableObject {
                 guard let size = values.fileSize, size >= 0 else { return (.unavailable, "") }
                 let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
                 guard case .staged(let handle) = await StageDoor.stage(core, file: url.path, mediaType: mediaType) else { return (.unavailable, "") }
-                let digest = handle.contentHash.map { String(format: "%02x", $0) }.joined()
-                guard digest.count == 64, handle.byteSize == UInt64(size) else { return (.unavailable, "") }
+                let digest = handle.contentHash.lowercased()
+                guard digest.utf8.count == 64,
+                      digest.utf8.allSatisfy({ ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102) }),
+                      handle.byteSize == UInt64(size) else { return (.unavailable, "") }
                 let relative = String(url.path.dropFirst(root.path.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 let stat = values.contentModificationDate.map { ISO8601DateFormatter().string(from: $0) } ?? ""
                 records.append([
@@ -1069,6 +1048,35 @@ final class RoomStore: ObservableObject {
         guard let data = try? JSONSerialization.data(withJSONObject: ["snapshots": snapshots], options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return (.unavailable, "") }
         return (.granted, json)
+    }
+
+    private nonisolated static func enumerateRoomFiles(at root: URL, status: RoomDirectoryEnumerationStatus) -> [URL]? {
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .isHiddenKey, .isPackageKey, .fileSizeKey, .contentModificationDateKey],
+            options: [],
+            errorHandler: { _, _ in status.fail(); return false }
+        ) else { return nil }
+        var paths: [URL] = []
+        var visited = 0
+        for case let url as URL in enumerator {
+            guard visited < 50_000 else { status.fail(); break }
+            visited += 1
+            let values: URLResourceValues
+            do { values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .isHiddenKey, .isPackageKey]) }
+            catch { status.fail(); break }
+            if values.isHidden == true || values.isSymbolicLink == true {
+                status.markPartial()
+                continue
+            }
+            if values.isPackage == true {
+                status.markPartial()
+                enumerator.skipDescendants()
+                continue
+            }
+            if values.isRegularFile == true { paths.append(url) }
+        }
+        return paths
     }
 
     static func encodeSnapshot(origin: [String: Any], records: [[String: Any]], complete: Bool) -> (grant: Centraid_Core_V1_FollowGrant, inputJSON: String) {
@@ -1291,7 +1299,7 @@ final class RoomStore: ObservableObject {
                 self?.answer(effect, instance: instance, done: true)
             }
         case .clipboardCopy(let copy)?:
-            if copy.clearOwned {
+            if copy.clearOwned_p {
                 Self.clearOwnedClipboard(vaultID: copy.ownerVaultID)
                 answer(effect, instance: instance, done: true)
                 return
@@ -1503,7 +1511,7 @@ final class RoomStore: ObservableObject {
             result.outcome = .done(Centraid_Core_V1_ShellDone())
         } else if let reason {
             var failed = Centraid_Core_V1_ShellFailed()
-            failed.grant = Self.followGrant(reason: reason)
+            failed.grant = Self.followGrant(reason)
             failed.reason = reason
             failed.cancelled = reason == EffectReason.cancelled
             result.outcome = .failed(failed)

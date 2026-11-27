@@ -10,3 +10,5 @@ Result: BUILD SUCCESSFUL; `allBlocksAndSlotsMatchGoldens` passes.
 
 Full verification command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:testDebugUnitTest -Droborazzi.test.verify=true --no-daemon`
 Result: BUILD SUCCESSFUL; 52 suites, 212 tests, 0 failures, 0 errors, 2 expected opt-in capture skips. See `android-unit-summary.json`.
+
+Hosted CI note: all three shared-ground block goldens match in run `46031385998` (zero pixel differences). The clean-run CI failure occurs afterward at the pre-existing `captureScreen("room_home")` reference under gitignored `build/outputs/roborazzi/screens`; see `android-ci.txt`. Local verification used already-present ignored screen output, so it does not establish a clean-checkout CI pass.
