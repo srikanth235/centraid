@@ -35,9 +35,21 @@ sys.exit("no simulator named " + want)
 ' "$CENTRAID_IOS_SIMULATOR")"
 else
   simulator="$(xcrun simctl create CentraidCI com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "$runtime")"
-  trap 'xcrun simctl delete "$simulator"' EXIT
 fi
 destination="platform=iOS Simulator,id=$simulator"
+# WHAT THE APP LEFT IN ITS DOCUMENTS, for the log: the vaults the shelf adopted or founded.
+documents_listing() {
+  local container
+  if container="$(xcrun simctl get_app_container "$simulator" dev.centraid.Centraid data 2>/dev/null)"; then
+    echo "==> documents of dev.centraid.Centraid"
+    find "$container/Documents" -maxdepth 3 -not -name '*.sqlite3-*' | sed "s|$container/||" | head -60
+  fi
+}
+if [ -z "${CENTRAID_IOS_SIMULATOR:-}" ]; then
+  trap 'documents_listing; xcrun simctl delete "$simulator"' EXIT
+else
+  trap documents_listing EXIT
+fi
 # THE UNIT TESTS FIRST, ON AN APP WITH NO VAULT, THEN THE ACCESSIBILITY AUDIT
 # ON THE DEMO VAULT (#1202, S4). `UITests/` drives the real app through
 # `performAccessibilityAudit()`, and an audit of a Home with nothing on it proves
@@ -68,6 +80,7 @@ CENTRAID_SIMULATOR="$simulator" CENTRAID_DEMO_DIR="$artifacts/demo-vault" \
 CENTRAID_DEV_SEED="$(sed -n 's/^CENTRAID_DEMO_SEED=//p' "$seed_log")"
 test -n "$CENTRAID_DEV_SEED"
 xcrun simctl terminate "$simulator" dev.centraid.Centraid || true
+documents_listing
 TEST_RUNNER_CENTRAID_DEV_SEED="$CENTRAID_DEV_SEED" \
   xcodebuild -project Centraid.xcodeproj -scheme Centraid \
   -destination "$destination" -derivedDataPath "$artifacts/app-derived-data" \
