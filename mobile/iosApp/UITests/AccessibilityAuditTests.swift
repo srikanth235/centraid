@@ -121,7 +121,7 @@ final class AccessibilityAuditTests: XCTestCase {
         for root in Self.roots where only?.contains(root.name) ?? true {
             try open(app, tile: root.tile)
             // A TAP THAT OPENED NOTHING must not file Home's issues under this screen's name.
-            let opened = waitUntil(timeout: 15) { !homeShowing(app) }
+            let opened = waitUntil(timeout: 15) { !self.homeShowing(app) }
             guard opened else {
                 print("OPEN-DIAG|\(root.name)|\(String(app.debugDescription.prefix(5000)))")
                 XCTFail("\(mode) / \(root.name): the page did not open (Home is still showing)")
@@ -387,7 +387,7 @@ final class AccessibilityAuditTests: XCTestCase {
         // At the largest sizes a tap can land while the grid is still settling and open nothing:
         // an audit of "the app" would then read Home under another screen's name.
         for _ in 0..<3 {
-            if waitUntil(timeout: 6, { !homeShowing(app) }) { return }
+            if waitUntil(timeout: 6, { !self.homeShowing(app) }) { return }
             if app.hittable(key) { press() }
         }
     }

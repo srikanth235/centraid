@@ -75,7 +75,7 @@ Simulator images do not replace the physical-device checks for owner authenticat
 
 The PR's macOS job now builds both simulator and device Rust targets, runs the simulator unit/UI tests, requires the five light/dark screenshot attachments, exports PNGs from the result bundle, and builds the generic iPhone app with code signing disabled. An unsigned build verifies compilation; it does not install on or exercise an iPhone. The share extension still needs a real host-app/share-sheet flow and is not covered by these screenshot assertions.
 
-The latest completed [hosted iOS run 46038733383](https://github.com/srikanth235/centraid/actions/runs/46038733383) built both Rust targets, then found one module error: VisionKit's delegate conformance needed explicit main-actor isolation. That conformance now uses the compiler-recommended isolation. Reminder records become JSON Data inside the EventKit callback, and picker/scanner callbacks use the main actor for UIKit dismissal. XCTest and screenshots have not run, and the unsigned generic iPhone app build was skipped. The fixes still need a successful hosted rerun. Full attempt details are in [validation/ios-runner-attempts.txt](validation/ios-runner-attempts.txt).
+The latest completed [hosted iOS run 46040847364](https://github.com/srikanth235/centraid/actions/runs/46040847364) built both Rust targets and reached UI-test compilation, where two closures needed explicit `self` captures. Those captures are fixed. XCTest and screenshots have not run, and the unsigned generic iPhone app build was skipped. The fixes still need a successful hosted rerun. Full attempt details are in [validation/ios-runner-attempts.txt](validation/ios-runner-attempts.txt).
 
 ## Linux checks already completed
 
