@@ -6,11 +6,12 @@ room pushed_page key="photos/photo/01900000-0000-7000-8000-000000003010"
         section
           item "Unstar" #viewer/menu/star
           item "Details" #viewer/menu/details
+          item "Move or tag" #viewer/menu/organize
           item "Slideshow" #viewer/menu/slideshow
           item "Add to album" #viewer/menu/album
           item "Adjust location" #viewer/menu/place
+          item "Add edited copy" #viewer/menu/edited-copy
           item "Download original" #viewer/menu/download
-          item "Share" #viewer/menu/share
           item "Move to trash" destructive #viewer/menu/trash
   ready
     photo_grid all
@@ -22,3 +23,5 @@ room pushed_page key="photos/photo/01900000-0000-7000-8000-000000003010"
           fact "Size" "120 KB" kind=text
           fact "Dimensions" "4000 × 3000" kind=text
           fact "Place" "Baker Beach" kind=address open=#fact/place/open
+        linked "Linked"
+          add "Add link" #footer/linked/add

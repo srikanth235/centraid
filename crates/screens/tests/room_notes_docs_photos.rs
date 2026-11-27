@@ -576,6 +576,39 @@ fn photos_s12_zoom_viewer_slideshow_albums_places_and_unbacked_warning() {
     let viewer_room = viewer.room.expect("photo viewer");
     snapshot::assert_room("photos_viewer", &viewer_room);
 
+    cmd(
+        &handle,
+        "entity.retitle",
+        json!({ "id": PHOTO_LIB_ID, "title": "Evening fog" }),
+        "edit-photo-before-version-restore",
+    );
+    let versions = open(
+        &handle,
+        &format!("photos/photo/{PHOTO_LIB_ID}/versions"),
+        "home",
+        false,
+    );
+    assert!(snapshot::render(versions.room.as_ref().unwrap()).contains("Restore"));
+    let restored = send(&handle, versions.instance, tap("version/1")).remove(0);
+    assert_eq!(
+        restored
+            .room
+            .as_ref()
+            .unwrap()
+            .status_line
+            .as_ref()
+            .unwrap()
+            .action_label,
+        "Undo"
+    );
+    let restored_photo = open(
+        &handle,
+        &format!("photos/photo/{PHOTO_LIB_ID}"),
+        "home",
+        false,
+    );
+    assert!(snapshot::render(restored_photo.room.as_ref().unwrap()).contains("Golden Gate Fog"));
+
     let stage = open(
         &handle,
         &format!("photos/slideshow/{PHOTO_LIB_ID}"),

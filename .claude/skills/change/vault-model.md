@@ -78,7 +78,7 @@ Reading alone found none of the reproduced purge and merge bugs. For any model c
 
 ## 6. Year-3 scale tests
 
-Every app module of `crates/domain` keeps a year-3 test **(target)**: a hot read is proven on a seeded year-3 corpus. Each builds a deterministic corpus (a `Year3...Shape` struct whose fields are all named, so a new field fails the literal), runs the module's registered reads, and asserts what a count cannot: windows are walked and bounded, truncation is reported, pinned or special rows outlive the window. When your change adds a hot read or grows a table that scales with years of use (notes, transactions, photos, events), extend the fixture shape and the test in the same change. Timings are reported as provenance, never as ceilings.
+The shared `crates/domain/tests/read_registry.rs` year-3 test exercises a hot registered read for every app module against one deterministic corpus. `Year3Shape` names each row count; the fixture walks complete keyset pages, checks each page bound and uniqueness, exercises bounded child reads, and proves the pinned note remains visible outside the ordinary first window. When a change adds a hot read or grows a table that scales with years of use (notes, transactions, photos, events), extend the shape and its assertion in the same change. Timings are reported as provenance, never as ceilings.
 
 ## 7. How to check it
 
@@ -88,7 +88,8 @@ cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl
 cargo run -p centraid-vault --bin export-commands > contracts/schema/vault-commands.txt
 cargo run -p centraid-vault --bin export-ontology-page
 cargo test -p centraid-vault            # commitments, lookups, schema_rules, ladder_ddl, command_list, ontology_page, format_identity, restore_drill, backup_snapshot
-cargo test -p centraid-apps-<app>       # the app's tests, year3 included
+cargo test -p centraid-domain --test read_registry  # registered read plans, shapes and year-3 walks
+cargo test -p centraid-domain --lib                  # domain helpers and derived calculations
 cargo xtask gate --profile pr           # the real gate; one crate green is not enough
 ```
 

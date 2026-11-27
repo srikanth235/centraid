@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Android single page document capture</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<style>*{box-sizing:border-box}body{margin:0;font-family:'Roboto Flex',Roboto,system-ui,sans-serif;background:var(--surface-plain-page);color:var(--text-ink)}</style>
+</helmet>
+<main style="width:412px;height:915px;margin:auto;padding:58px 20px 28px;display:flex;flex-direction:column;">
+  <a href="AndroidDocs.dc.html" style="color:var(--text-meta);text-decoration:none;font-size:14px;">‹ Docs</a>
+  <h1 style="font-size:28px;line-height:1.15;margin:32px 0 8px;">Capture one page</h1>
+  <p style="font-size:15px;line-height:1.45;color:var(--text-meta);margin:0;">Take a photo and add it as a one-page PDF. You can retake it before it is added.</p>
+  <div style="margin:34px 0 20px;flex:1;border-radius:24px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;">
+    <div style="width:68%;height:72%;background:var(--surface-page);border:1px solid var(--surface-border);border-radius:4px;box-shadow:0 8px 24px var(--shadow-card);display:flex;align-items:center;justify-content:center;color:var(--text-meta);font-size:13px;">Document page</div>
+    <span style="position:absolute;left:18px;right:18px;bottom:18px;text-align:center;font-size:12px;color:var(--text-meta);">No automatic edge detection · one page</span>
+  </div>
+  <button style="height:54px;border:0;border-radius:27px;background:var(--app-docs-fill);color:var(--on-fill);font-size:16px;font-weight:600;">Take photo</button>
+  <p style="font-size:12px;line-height:1.4;text-align:center;color:var(--text-meta);margin:12px 12px 0;">The camera app opens. Review the photo there, or cancel to return.</p>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

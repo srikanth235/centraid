@@ -212,7 +212,7 @@ mod tests {
             "Full-size photos download when you tap one; backups wait for Wi-Fi."
         );
         assert_eq!(title(en), "Downloads");
-        assert!(subtitle(en).contains("thumbnails download on any network"));
+        assert!(subtitle(en).contains("photo previews download on any network"));
     }
 
     #[test]

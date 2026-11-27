@@ -17,6 +17,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.time.Duration.Companion.seconds
@@ -227,78 +231,64 @@ class AbiContractSpec : StringSpec({
         // core's own queue fills, and the core is the one that reports the
         // stall. If the flow dropped instead, the reader would keep draining
         // and `handedOver` would reach everything offered.
-        val abi = FakeCentraidAbi { FakeCentraidAbi.ok(Envelope(request_id = 1)) }
-        val core = CentraidCore.overAbi(abi, Dispatchers.Default, UI_THREAD)
-        // FOUR TIMES THE BUFFER, so "parked near the buffer" and "drained
-        // everything" are far apart. See the bound below.
-        val offered = CentraidCore.EVENT_BUFFER * 4
-        val arrived = java.util.concurrent.CountDownLatch(1)
-        val collector = kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
-            core.events.collect {
-                arrived.countDown()
-                // Never resumes. This is the stalled consumer.
-                kotlinx.coroutines.awaitCancellation()
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val abi = FakeCentraidAbi { FakeCentraidAbi.ok(Envelope(request_id = 1)) }
+            val core = CentraidCore.overAbi(abi, dispatcher, UI_THREAD)
+            // FOUR TIMES THE BUFFER, so "parked near the buffer" and "drained
+            // everything" are far apart. See the bound below.
+            val offered = CentraidCore.EVENT_BUFFER * 4
+            var arrived = false
+            val collector = launch(dispatcher) {
+                core.events.collect {
+                    arrived = true
+                    // Never resumes. This is the stalled consumer.
+                    kotlinx.coroutines.awaitCancellation()
+                }
             }
-        }
-        try {
-            core.startReader(timeoutMs = 20)
-            repeat(offered) { abi.offer(FakeCentraidAbi.stalled(depth = it)) }
-            arrived.await(10, java.util.concurrent.TimeUnit.SECONDS).shouldBeTrue()
-            // WAIT FOR THE READER TO STOP, DO NOT GUESS HOW LONG IT NEEDS
-            // (#1025 S5).
-            //
-            // This slept 1.5 s and then looked, which made the assertion a
-            // statement about this machine's scheduler rather than about the
-            // buffer: on a loaded host the reader gets further inside the same
-            // wall clock, `handedOver` passes `EVENT_BUFFER + 3`, and the test
-            // reds with nothing wrong. It failed five times out of five while
-            // other builds were running, and passed alone — which is the
-            // signature of a timing assertion, and the same defect #1025 S2
-            // fixed in `blobs/tests/windows.rs` by cutting its windows on
-            // verified PROGRESS instead of on 120 ms.
-            //
-            // Quiescence is what the claim actually is: the reader PARKS. So
-            // watch the counter until it stops moving, with a ceiling that is a
-            // stall backstop rather than the measurement. This is stricter than
-            // the sleep — a reader that was merely slow would keep advancing
-            // and never settle.
-            var handedOver = core.buffersHandedOver
-            var still = 0
-            val deadline = System.nanoTime() + 30_000_000_000L
-            while (still < 5 && System.nanoTime() < deadline) {
-                Thread.sleep(100)
-                val now = core.buffersHandedOver
-                still = if (now == handedOver) still + 1 else 0
-                handedOver = now
+            runCurrent() // register the stalled subscriber before the reader starts
+            try {
+                repeat(offered) { abi.offer(FakeCentraidAbi.stalled(depth = it)) }
+                // A terminal answer behind the offered events acts as a barrier: a reader that
+                // drains the producer queue must close, while a reader parked in emit cannot reach it.
+                abi.offerTerminal()
+                core.startReader(timeoutMs = 20)
+                advanceUntilIdle()
+                arrived.shouldBeTrue()
+                core.lifecycle.value shouldBe CoreLifecycle.Open
+                val handedOver = core.buffersHandedOver
+                withClue("the reader stopped before filling the shared flow buffer") {
+                    (handedOver > CentraidCore.EVENT_BUFFER).shouldBeTrue()
+                }
+                withClue("the reader reached the terminal answer instead of parking") {
+                    (handedOver < offered.toLong()).shouldBeTrue()
+                }
+                (abi.pendingEvents > 0).shouldBeTrue()
+                // BOUNDED BY THE BUFFER, NOT BY WHAT WAS OFFERED (#1025 S5).
+                //
+                // This read `<= EVENT_BUFFER + 3`, with a comment accounting for
+                // the exact three: one in the collector, the buffer's worth, one in
+                // the reader's hand. That is a claim about `MutableSharedFlow`'s
+                // internals rather than about this code, and the runtime does not
+                // make it: measured, the reader parks at the buffer plus somewhere
+                // between 35 and 74, and the number moves run to run. With the old
+                // margin of 200 offered beyond the buffer, that slop was most of
+                // the margin, so the test failed on THIS tree five runs out of five
+                // and had been red on `main` before this slice touched anything.
+                //
+                // The property is not the arithmetic. It is that a stalled
+                // consumer bounds the reader by the BUFFER instead of letting it
+                // drain everything offered — so four times the buffer is offered
+                // and the bound is twice it, which separates the two answers by
+                // two thousand events and cannot be met by a reader that drained.
+                withClue("handedOver=$handedOver buffer=${CentraidCore.EVENT_BUFFER}") {
+                    (handedOver < CentraidCore.EVENT_BUFFER * 2L).shouldBeTrue()
+                }
+                core.buffersFreed shouldBe handedOver
+            } finally {
+                collector.cancel()
+                core.close()
             }
-            withClue("the reader never parked; it was still handing buffers over") {
-                (still >= 5).shouldBeTrue()
-            }
-            (handedOver < offered.toLong()).shouldBeTrue()
-            // BOUNDED BY THE BUFFER, NOT BY WHAT WAS OFFERED (#1025 S5).
-            //
-            // This read `<= EVENT_BUFFER + 3`, with a comment accounting for
-            // the exact three: one in the collector, the buffer's worth, one in
-            // the reader's hand. That is a claim about `MutableSharedFlow`'s
-            // internals rather than about this code, and the runtime does not
-            // make it: measured, the reader parks at the buffer plus somewhere
-            // between 35 and 74, and the number moves run to run. With the old
-            // margin of 200 offered beyond the buffer, that slop was most of
-            // the margin, so the test failed on THIS tree five runs out of five
-            // and had been red on `main` before this slice touched anything.
-            //
-            // The property is not the arithmetic. It is that a stalled
-            // consumer bounds the reader by the BUFFER instead of letting it
-            // drain everything offered — so four times the buffer is offered
-            // and the bound is twice it, which separates the two answers by
-            // two thousand events and cannot be met by a reader that drained.
-            withClue("handedOver=$handedOver buffer=${CentraidCore.EVENT_BUFFER}") {
-                (handedOver < CentraidCore.EVENT_BUFFER * 2L).shouldBeTrue()
-            }
-            core.buffersFreed shouldBe handedOver
-        } finally {
-            collector.cancel()
-            core.close()
         }
     }
 

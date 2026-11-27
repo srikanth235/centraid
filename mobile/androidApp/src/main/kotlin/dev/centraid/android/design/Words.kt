@@ -15,6 +15,7 @@ public object KitWords {
     public const val BAND_MORE: String = "More"
     public const val CANCEL: String = "Cancel"
     public const val CLOSE_SEARCH: String = "Close search"
+    public const val CORE_REQUEST_FAILED: String = "Couldn't reach your vault. Try again."
     public const val DELETE: String = "Delete"
     public const val DETAILS: String = "Details"
     public const val DISMISS: String = "Dismiss"

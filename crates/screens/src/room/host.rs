@@ -31,6 +31,7 @@ pub struct RoomRuntime {
     keys: AtomicU64,
     last: Mutex<Option<UndoRecord>>,
     platform: Mutex<String>,
+    time_zone: Mutex<Option<String>>,
 }
 
 impl RoomRuntime {
@@ -41,6 +42,7 @@ impl RoomRuntime {
             keys: AtomicU64::new(1),
             last: Mutex::new(None),
             platform: Mutex::new(String::new()),
+            time_zone: Mutex::new(None),
         }
     }
 }
@@ -116,6 +118,15 @@ impl CtxDoor<'_> {
 }
 
 impl Door for CtxDoor<'_> {
+    fn time_zone(&self) -> Option<centraid_vault::time::FireZone> {
+        self.runtime
+            .time_zone
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_deref()
+            .and_then(|name| centraid_vault::time::FireZone::named(name).ok())
+    }
+
     fn reminders_source(&self) -> bool {
         let platform = self
             .runtime
@@ -127,6 +138,84 @@ impl Door for CtxDoor<'_> {
         } else {
             *platform != "android"
         }
+    }
+
+    fn command_result(
+        &self,
+        command: &str,
+        input: &serde_json::Value,
+    ) -> std::result::Result<serde_json::Value, Refused> {
+        self.run_command(command, input)
+    }
+
+    fn stage_export(&self, bytes: &[u8]) -> std::result::Result<String, Refused> {
+        self.ctx
+            .stage_room_file(bytes)
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn stage_archive(&self) -> std::result::Result<String, Refused> {
+        self.ctx
+            .stage_room_archive()
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn held_bytes(&self, hash: &str, max_bytes: u64) -> std::result::Result<Vec<u8>, Refused> {
+        self.ctx
+            .held_bytes(hash, max_bytes)
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn remove_export(&self, path: &str) {
+        self.ctx.remove_room_file(path);
+    }
+
+    fn locker_unlocked(&self) -> bool {
+        self.ctx.locker_unlocked()
+    }
+
+    fn locker_unlock(&self) -> std::result::Result<(u32, Option<String>), Refused> {
+        self.ctx
+            .locker_unlock()
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn locker_unlock_failed(&self) -> std::result::Result<u32, Refused> {
+        self.ctx
+            .locker_unlock_failed()
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn locker_failed_unlocks(&self) -> std::result::Result<(u32, Option<String>), Refused> {
+        self.ctx
+            .locker_failed_unlocks()
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn locker_lock(&self) -> std::result::Result<(), Refused> {
+        self.ctx
+            .locker_lock()
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn locker_reveal_field(
+        &self,
+        item_id: &str,
+        field_id: &str,
+    ) -> std::result::Result<zeroize::Zeroizing<String>, Refused> {
+        self.ctx
+            .locker_reveal_field(item_id, field_id)
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn locker_seal_field(
+        &self,
+        field_id: &str,
+        plaintext: &str,
+    ) -> std::result::Result<(String, String), Refused> {
+        self.ctx
+            .locker_seal_field(field_id, plaintext)
+            .map_err(|error| Refused(error.to_string()))
     }
 
     fn act(&self, act: &Act) -> std::result::Result<Done, Refused> {
@@ -146,17 +235,38 @@ impl Door for CtxDoor<'_> {
         let record = match decl.inverse {
             Inverse::Pair(inverse_name) => {
                 let mut input = act.input.clone();
-                if inverse_name == "entity.trash"
-                    && input.get("id").is_none()
-                    && input.get("ids").is_none()
-                    && let Some(id) = output.get("id").and_then(serde_json::Value::as_str)
+                if let Some(changed_ids) = output
+                    .get("changed_ids")
+                    .and_then(serde_json::Value::as_array)
                 {
-                    input = serde_json::json!({ "ids": [id] });
+                    if changed_ids.is_empty() {
+                        None
+                    } else {
+                        if let Some(object) = input.as_object_mut() {
+                            object.remove("id");
+                            object.insert(
+                                "ids".to_owned(),
+                                serde_json::Value::Array(changed_ids.clone()),
+                            );
+                        }
+                        Some(UndoRecord::Pair {
+                            act: act.clone(),
+                            input,
+                        })
+                    }
+                } else {
+                    if inverse_name == "entity.trash"
+                        && input.get("id").is_none()
+                        && input.get("ids").is_none()
+                        && let Some(id) = output.get("id").and_then(serde_json::Value::as_str)
+                    {
+                        input = serde_json::json!({ "ids": [id] });
+                    }
+                    Some(UndoRecord::Pair {
+                        act: act.clone(),
+                        input,
+                    })
                 }
-                Some(UndoRecord::Pair {
-                    act: act.clone(),
-                    input,
-                })
             }
             Inverse::Restore => {
                 let mut pairs = Vec::new();
@@ -215,12 +325,14 @@ impl Door for CtxDoor<'_> {
                         return Err(Refused(words::act_changed_since(Locale::En)));
                     }
                 }
-                for (id, seq) in pairs.into_iter().rev() {
-                    self.run_command(
-                        "history.restore_version",
-                        &serde_json::json!({ "id": id, "seq": seq }),
-                    )?;
-                }
+                self.run_command(
+                    "history.restore_many",
+                    &serde_json::json!({
+                        "items": pairs.into_iter().rev().map(|(id, seq)| {
+                            serde_json::json!({ "id": id, "seq": seq, "expected_rev": seq })
+                        }).collect::<Vec<_>>()
+                    }),
+                )?;
             }
         }
         Ok(Done {
@@ -241,6 +353,35 @@ impl Door for CtxDoor<'_> {
 
     fn device_get(&self, key: &str) -> Option<String> {
         self.ctx.device().ok()?.get(key).ok().flatten()
+    }
+
+    fn search(
+        &self,
+        request: &centraid_search::EachRequest,
+    ) -> std::result::Result<Vec<centraid_search::Target>, Refused> {
+        self.ctx
+            .search(request)
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn search_page(
+        &self,
+        request: &centraid_search::SearchRequest,
+    ) -> std::result::Result<centraid_search::Answer, Refused> {
+        self.ctx
+            .search_page(request)
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn search_correction(
+        &self,
+        kinds: &[String],
+        query: &str,
+        thin: bool,
+    ) -> std::result::Result<Option<String>, Refused> {
+        self.ctx
+            .search_correction(kinds, query, thin)
+            .map_err(|error| Refused(error.to_string()))
     }
 
     fn device_put(&self, key: &str, value: &str) -> std::result::Result<(), Refused> {
@@ -295,6 +436,17 @@ impl RoomHost for RoomRuntime {
                         &mut self.platform.lock().unwrap_or_else(PoisonError::into_inner),
                     );
                 }
+                if !open.time_zone.is_empty() {
+                    centraid_vault::time::FireZone::named(&open.time_zone).map_err(|_| {
+                        CoreError::InvalidRequest {
+                            detail: "The phone's time zone is not recognized.".to_owned(),
+                        }
+                    })?;
+                    *self
+                        .time_zone
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner) = Some(open.time_zone.clone());
+                }
                 let tab = if open.tab.is_empty() {
                     DEFAULT_TAB
                 } else {
@@ -314,26 +466,57 @@ impl RoomHost for RoomRuntime {
                     .into_iter()
                     .collect()
             }
+            Some(K::Lifecycle(lifecycle)) => {
+                match wire::room_lifecycle::Phase::try_from(lifecycle.phase).ok() {
+                    Some(wire::room_lifecycle::Phase::Background) => {
+                        ctx.locker_lock()?;
+                        rooms.lock_locker(&door)
+                    }
+                    Some(wire::room_lifecycle::Phase::Foreground) => rooms.foreground(&door),
+                    _ => Vec::new(),
+                }
+            }
             None => {
                 return Err(CoreError::InvalidRequest {
                     detail: "a room request names open or send".to_owned(),
                 });
             }
         };
+        let effects = rooms.take_effects();
+        if effects.iter().any(|effect| {
+            effect.kind.as_ref().is_some_and(
+                |kind| matches!(kind, wire::shell_effect::Kind::OwnerCheck(check) if check.cancel),
+            )
+        }) {
+            ctx.locker_cancel_check();
+        }
+        let secure_epoch = ctx.locker_epoch();
+        let shown = shown
+            .iter()
+            .map(|entry| {
+                let mut shown = entry.wire();
+                shown.secure_epoch = secure_epoch;
+                shown
+            })
+            .collect();
         Ok(wire::RoomResponse {
-            shown: shown.iter().map(super::rooms::Shown::wire).collect(),
-            effects: rooms.take_effects(),
+            shown,
+            effects,
+            secure_epoch,
         })
     }
 
     fn changed(&self, ctx: &dyn RoomCtx, tables: &[String]) {
         let door = CtxDoor { ctx, runtime: self };
-        let shown = {
+        let (shown, secure_epoch) = {
             let mut rooms = self.rooms.lock().unwrap_or_else(PoisonError::into_inner);
-            rooms.changed(&door, tables.iter().map(String::as_str))
+            let shown = rooms.changed(&door, tables.iter().map(String::as_str));
+            (shown, ctx.locker_epoch())
         };
         for each in shown {
-            ctx.push(each.wire());
+            let mut shown = each.wire();
+            shown.secure_epoch = secure_epoch;
+            ctx.push(shown);
         }
     }
 }

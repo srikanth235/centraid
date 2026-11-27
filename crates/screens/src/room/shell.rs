@@ -1,8 +1,5 @@
-//! THE SHELL FRAME ON ROOMS (app-plane §5.1): the Home placeholder, Settings and Backup. Settings
-//! and Backup are `SYSTEM_PLACE` rooms of section and row blocks only. Their sentences are the
-//! catalogue's: the backup line is the backup plane's own (`backup::line`), read from the core's
-//! backup status, and the choices Settings keeps live in the device store under the registry's
-//! `settings.*` keys.
+//! Home, Settings, and Backup system rooms. Backup status comes from the core, while Settings
+//! preferences are stored on the device under the registered `settings.*` keys.
 
 use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
@@ -49,6 +46,7 @@ pub fn registry() -> Registry {
         .merge(super::photos::registry())
         .merge(super::health::registry())
         .merge(super::locker::registry())
+        .merge(super::organize::registry())
         .merge(super::chat::registry())
         .merge(super::home::registry())
 }

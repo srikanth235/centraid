@@ -10,7 +10,6 @@ import centraid.core.v1.NotificationCategory
 import centraid.core.v1.NotificationVerb
 import centraid.core.v1.PendingNotification
 import centraid.core.v1.ScheduleNotifications
-import dev.centraid.android.room.RoomClient
 import java.lang.reflect.Proxy
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -213,9 +212,7 @@ class NotifyActionsTest {
         val noted = NotifyTaps.takeDeepLink()
         assertEquals("centraid://open/event/0193-event-1", noted)
         assertNull("deep link must be consumed once", NotifyTaps.takeDeepLink())
-        assertEquals("event/0193-event-1", RoomClient.parseDeepLink(noted!!))
-        assertNull(RoomClient.parseDeepLink("https://example.com/open/event/1"))
-        assertNull(RoomClient.parseDeepLink("centraid://open/event/bad/extra"))
+        assertEquals("centraid://open/event/0193-event-1", noted)
     }
 
     private fun <T : Any> proxy(

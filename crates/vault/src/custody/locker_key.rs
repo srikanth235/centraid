@@ -4,9 +4,9 @@
 //! ## Where `K` is, and where it is not
 //!
 //! `K` is the 24 words' own leaf, `seed / vault'(i) / locker'`
-//! (`centraid_identity::derive`). The core derives it at open into its
-//! in-memory keyring and hands it to a Locker session after the phone's unlock;
-//! it is **never a file** and this crate never holds it. Every function here
+//! (`centraid_identity::derive`). The core re-derives it only after the phone's
+//! owner check and holds it in the volatile Locker session until relock; it is
+//! **never a file** and this crate never holds it. Every function here
 //! takes the key **by value**, so there is no ambient `K` for a read path to
 //! reach for. The vault stores only the live generation's **id**, in
 //! `locker_key`, and a restore from the 24 words re-derives the same `K` for

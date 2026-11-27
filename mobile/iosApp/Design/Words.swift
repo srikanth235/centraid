@@ -15,6 +15,7 @@ public enum KitWords {
     public static let BAND_MORE = "More"
     public static let CANCEL = "Cancel"
     public static let CLOSE_SEARCH = "Close search"
+    public static let CORE_REQUEST_FAILED = "Couldn't reach your vault. Try again."
     public static let DELETE = "Delete"
     public static let DETAILS = "Details"
     public static let DISMISS = "Dismiss"

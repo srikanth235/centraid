@@ -33,13 +33,14 @@ pub const OTHER_SOURCES: [(&str, &str); 2] = [
 
 /// Member name to the Rust key. Exactly the words a native kit view reads; a
 /// word nothing native draws stays Rust's alone.
-const CONSTANTS: [(&str, &str); 25] = [
+const CONSTANTS: [(&str, &str); 26] = [
     ("BACK", "back"),
     ("BAND_CURRENT", "home::band_current_spoken"),
     ("BAND_HOME", "kit_band_home"),
     ("BAND_MORE", "kit_band_more"),
     ("CANCEL", "kit_cancel"),
     ("CLOSE_SEARCH", "kit_close_search"),
+    ("CORE_REQUEST_FAILED", "core_request_failed"),
     ("DELETE", "kit_delete"),
     ("DETAILS", "kit_details"),
     ("DISMISS", "kit_dismiss"),

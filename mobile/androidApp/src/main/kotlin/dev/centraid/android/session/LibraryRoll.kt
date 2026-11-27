@@ -27,6 +27,8 @@ import java.time.Instant
 internal data class RollAssetRecord(
     val after: String,
     val video: Boolean,
+    val byteSize: Long,
+    val title: String,
     val capturedAt: String,
     val offsetMinutes: Int,
     val captureGroup: String,
@@ -75,7 +77,7 @@ internal object LibraryRoll {
             "$TYPED AND ${MediaStore.Files.FileColumns._ID} > ?",
             arrayOf(position.id.toString()),
             "${MediaStore.Files.FileColumns._ID} ASC",
-        )?.use { cursor ->
+        ).requireStoreRead().use { cursor ->
             while (cursor.moveToNext()) {
                 if (assets.size == limit) {
                     more = true
@@ -95,7 +97,7 @@ internal object LibraryRoll {
                     "(${MediaStore.MediaColumns.DATE_MODIFIED} = ? AND ${MediaStore.Files.FileColumns._ID} > ?))",
                 arrayOf(keysetId.toString(), newest.toString(), newest.toString(), position.modifiedId.toString()),
                 "${MediaStore.MediaColumns.DATE_MODIFIED} ASC, ${MediaStore.Files.FileColumns._ID} ASC",
-            )?.use { cursor ->
+            ).requireStoreRead().use { cursor ->
                 while (cursor.moveToNext()) {
                     if (assets.size == limit) {
                         more = true
@@ -122,6 +124,8 @@ internal object LibraryRoll {
         return RollAssetRecord(
             after = after,
             video = video,
+            byteSize = cursor.getLong(2).coerceAtLeast(0L),
+            title = if (cursor.isNull(9)) "" else cursor.getString(9).orEmpty(),
             capturedAt = Instant.ofEpochMilli(taken).toString(),
             offsetMinutes = if (video) 0 else captureOffsetOf(context, id),
             captureGroup = if (changed) ref else "",
@@ -312,6 +316,7 @@ internal object LibraryRoll {
         MediaStore.MediaColumns.WIDTH,
         MediaStore.MediaColumns.HEIGHT,
         "duration",
+        MediaStore.MediaColumns.DISPLAY_NAME,
     )
     private val TYPED = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN " +
         "(${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})"

@@ -9,6 +9,7 @@ use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
+use super::search_view;
 use super::selector::{Act, Handler, Sel};
 use crate::strings::{Locale, fill, home as home_words, reminders as words, shared};
 
@@ -26,6 +27,7 @@ const MAX_NOTES: usize = 4_000;
 pub fn registry() -> Registry {
     Registry::new()
         .exact(REMINDERS, || Box::new(RemindersRoot::default()))
+        .exact("reminders/inbox", || Box::new(InboxList::default()))
         .exact(NEW_TASK, || Box::new(TaskForm::new_task(None, false)))
         .exact(NEW_LIST, || Box::new(NewListForm::default()))
         .exact(TRASH, || Box::new(RemindersTrash::default()))
@@ -50,6 +52,20 @@ pub fn registry() -> Registry {
                 }));
             }
             if let Some(rest) = key.strip_prefix("reminders/task/") {
+                if let Some(id) = rest.strip_suffix("/link") {
+                    return Some(Box::new(super::link_picker::LinkPicker::new(
+                        id.to_owned(),
+                        format!("reminders/task/{id}"),
+                        words::app_title(EN),
+                    )));
+                }
+                if let Some(id) = rest.strip_suffix("/versions") {
+                    return Some(super::versions::page(
+                        &format!("reminders/task/{id}/versions"),
+                        id,
+                        &words::app_title(EN),
+                    ));
+                }
                 if let Some(id) = rest.strip_suffix("/edit") {
                     return Some(Box::new(TaskForm::edit_task(id.to_owned())));
                 }
@@ -59,30 +75,6 @@ pub fn registry() -> Registry {
             }
             None
         }))
-}
-
-fn epoch_ms_to_ymd(ms: i64) -> (i32, u32, u32) {
-    let days = ms.div_euclid(86_400_000);
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y = (yoe as i64) + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = y + i64::from(m <= 2);
-    (year as i32, m as u32, d as u32)
-}
-
-fn today_iso(now_ms: i64) -> String {
-    let (y, m, d) = epoch_ms_to_ymd(now_ms);
-    format!("{y:04}-{m:02}-{d:02}")
-}
-
-fn tomorrow_iso(now_ms: i64) -> String {
-    today_iso(now_ms + 86_400_000)
 }
 
 fn load_smart_list(door: &dyn Door) -> String {
@@ -156,6 +148,8 @@ fn task_row(
     today: &str,
     snooze_until: &str,
     prefix: &str,
+    selecting: bool,
+    selected: bool,
 ) -> wire::RoomBlock {
     let id = &task.id;
     let is_done = task.status == "done";
@@ -224,6 +218,22 @@ fn task_row(
             )),
         ));
     }
+    if !selecting {
+        menu_items.push(blocks::menu_item(
+            sel,
+            &format!("{prefix}/{id}/menu/select"),
+            &shared::menu_select(EN),
+            Handler::SelectMode(true),
+        ));
+        if super::organize::can_organize("task") {
+            menu_items.push(blocks::menu_item(
+                sel,
+                &format!("{prefix}/{id}/menu/organize"),
+                &shared::organize(EN),
+                Handler::Open(super::organize::route(std::slice::from_ref(id))),
+            ));
+        }
+    }
     menu_items.push(trash);
     let menu = blocks::menu(
         &format!("{prefix}/{id}/menu"),
@@ -247,26 +257,34 @@ fn task_row(
         sel,
         &format!("{prefix}/{id}"),
         &task.title,
-        Handler::Open(format!("reminders/task/{id}")),
+        if selecting {
+            Handler::Pick(id.clone())
+        } else {
+            Handler::Open(format!("reminders/task/{id}"))
+        },
     )
     .meta(meta)
-    .mark(blocks::check_mark(
-        sel,
-        &format!("{prefix}/{id}/check"),
-        if is_done {
-            wire::RoomCheckState::On
-        } else {
-            wire::RoomCheckState::Off
-        },
-        Handler::Act(check_act),
-    ))
-    .menu(menu)
-    .swipe(
-        sel,
-        &format!("{prefix}/{id}/swipe"),
-        &shared::trash_move(EN),
-        Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
-    );
+    .selected(selected);
+    if !selecting {
+        row = row
+            .mark(blocks::check_mark(
+                sel,
+                &format!("{prefix}/{id}/check"),
+                if is_done {
+                    wire::RoomCheckState::On
+                } else {
+                    wire::RoomCheckState::Off
+                },
+                Handler::Act(check_act),
+            ))
+            .menu(menu)
+            .swipe(
+                sel,
+                &format!("{prefix}/{id}/swipe"),
+                &shared::trash_move(EN),
+                Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
+            );
+    }
     if overdue {
         row = row.chip(blocks::chip(
             &words::chip_overdue(EN),
@@ -283,6 +301,45 @@ fn task_row(
         row = row.dimmed();
     }
     row.into_block()
+}
+
+fn task_selection_actions(sel: &mut Sel, ids: &[String], unstar: bool) -> Vec<wire::RoomMenuItem> {
+    if ids.is_empty() {
+        return Vec::new();
+    }
+    let mut trash = blocks::menu_item(
+        sel,
+        "selection/trash",
+        &shared::trash_move(EN),
+        Handler::Act(Act::new("entity.trash", json!({ "ids": ids }))),
+    );
+    trash.destructive = true;
+    vec![
+        blocks::menu_item(
+            sel,
+            "selection/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(ids)),
+        ),
+        blocks::menu_item(
+            sel,
+            "selection/star",
+            &if unstar {
+                words::action_unstar(EN)
+            } else {
+                words::action_star(EN)
+            },
+            Handler::Act(Act::new(
+                if unstar {
+                    "flag.clear/starred"
+                } else {
+                    "flag.set/starred"
+                },
+                json!({ "flag": "starred", "ids": ids }),
+            )),
+        ),
+        trash,
+    ]
 }
 
 #[derive(Default)]
@@ -304,9 +361,49 @@ impl RoomScreen for RemindersRoot {
             }
         }
         let smart = b.ui.lens().unwrap_or("today").to_owned();
-        let today = today_iso(b.door.now_ms());
+        let today = b.door.today();
         let snooze_until = centraid_vault::clock::format_iso_ms(b.door.now_ms() + 3_600_000);
-        let search_term = b.ui.search_term().trim().to_ascii_lowercase();
+        let search_term = b.ui.search_term().trim().to_owned();
+        if !search_term.is_empty() {
+            if let Err(sentence) =
+                search_view::load(b.ui, b.door, &["task", "task_list"], &search_term)
+            {
+                return room(wire::RoomKind::AppPlace, REMINDERS)
+                    .title(&words::app_title(EN))
+                    .band(reminders_band(b))
+                    .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                    .build();
+            }
+            let mut content = search_view::rows(&mut b.sel, b.ui, false);
+            if content.is_empty() {
+                content.push(blocks::empty(
+                    glyph("Search", ""),
+                    &words::empty_search_title(EN),
+                    &fill(&words::empty_search_body(EN), &[("term", &search_term)]),
+                    None,
+                ));
+            }
+            let mut built = room(wire::RoomKind::AppPlace, REMINDERS)
+                .title(&words::app_title(EN))
+                .band(reminders_band(b))
+                .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
+                .ready(content)
+                .build();
+            if let Some(search) = built.search.as_mut() {
+                search_view::decorate(&mut b.sel, search, b.ui);
+            }
+            return built;
+        }
+        let inbox_count = match b.run(&reads::INBOX_COUNT, &Args::new()) {
+            Ok(answer) => answer.rows.first().copied().unwrap_or_default(),
+            Err(_) => {
+                return room(wire::RoomKind::AppPlace, REMINDERS)
+                    .title(&words::app_title(EN))
+                    .band(reminders_band(b))
+                    .failed(&mut b.sel, &shared::read_failed(EN), &shared::kit_retry(EN))
+                    .build();
+            }
+        };
 
         let smart_choice = blocks::choice_block(blocks::choice(
             &mut b.sel,
@@ -391,6 +488,14 @@ impl RoomScreen for RemindersRoot {
                 search_term.is_empty() || t.title.to_ascii_lowercase().contains(&search_term)
             })
             .collect();
+        b.ui.list(filtered.iter().map(|task| task.id.clone()));
+        let selecting = b.ui.selecting();
+        let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
+        let unstar = !picked.is_empty()
+            && filtered
+                .iter()
+                .filter(|task| picked.contains(&task.id))
+                .all(|task| task.starred_at.is_some());
 
         let mut content = vec![smart_choice];
         if filtered.is_empty() && !first::holds(b, "task") {
@@ -455,7 +560,17 @@ impl RoomScreen for RemindersRoot {
             };
             let rows: Vec<wire::RoomBlock> = filtered
                 .iter()
-                .map(|t| task_row(&mut b.sel, t, &today, &snooze_until, "task"))
+                .map(|t| {
+                    task_row(
+                        &mut b.sel,
+                        t,
+                        &today,
+                        &snooze_until,
+                        "task",
+                        selecting,
+                        b.ui.is_picked(&t.id),
+                    )
+                })
                 .collect();
             content.push(
                 blocks::section(&mut b.sel, "section/tasks", &heading)
@@ -464,7 +579,7 @@ impl RoomScreen for RemindersRoot {
             );
         }
 
-        let list_rows: Vec<wire::RoomBlock> = lists
+        let mut list_rows: Vec<wire::RoomBlock> = lists
             .iter()
             .map(|l| {
                 let mut trash = blocks::menu_item(
@@ -499,6 +614,21 @@ impl RoomScreen for RemindersRoot {
                 .into_block()
             })
             .collect();
+        list_rows.insert(
+            0,
+            blocks::row(
+                &mut b.sel,
+                "list/inbox",
+                &words::inbox_title(EN),
+                Handler::Open("reminders/inbox".to_owned()),
+            )
+            .mark(blocks::glyph_mark("Tray", ""))
+            .meta(&words::inbox_count(
+                EN,
+                u64::try_from(inbox_count).unwrap_or(0),
+            ))
+            .into_block(),
+        );
         let add_list_btn = blocks::action(
             &mut b.sel,
             "lists/add",
@@ -513,6 +643,8 @@ impl RoomScreen for RemindersRoot {
                 .into_block(),
         );
 
+        let selection = task_selection_actions(&mut b.sel, &picked, unstar);
+        let selected_count = shared::selected_count(EN, picked.len() as u64);
         room(wire::RoomKind::AppPlace, REMINDERS)
             .title(&words::app_title(EN))
             .key(
@@ -525,18 +657,26 @@ impl RoomScreen for RemindersRoot {
             )
             .band(reminders_band(b))
             .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
+            .selection(&mut b.sel, b.ui, &selected_count, selection)
             .ready(content)
             .build()
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::export::handle(e, tag, input) {
+            return outcome;
+        }
         if let Some(outcome) = super::follow::handle(e, tag) {
             return outcome;
         }
         match tag {
             "nav:home" => Outcome::replace(super::shell::HOME),
             "tab:tab/reminders" => Outcome::default(),
-            "more:export" => Outcome::say(&words::export_note(EN)),
+            "more:export" => super::export::ask(
+                "task.export_ics",
+                json!({}),
+                &shared::owner_reason_export(EN),
+            ),
             "smart-choice" => {
                 if let Input::Option(choice) = input {
                     e.ui.set_lens(choice);
@@ -546,6 +686,109 @@ impl RoomScreen for RemindersRoot {
             }
             _ => Outcome::default(),
         }
+    }
+}
+
+struct InboxList {
+    loaded: usize,
+}
+
+impl Default for InboxList {
+    fn default() -> Self {
+        Self { loaded: 50 }
+    }
+}
+
+impl RoomScreen for InboxList {
+    fn key(&self) -> String {
+        "reminders/inbox".to_owned()
+    }
+
+    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let answer = match b.reload(&reads::INBOX, &Args::new(), self.loaded) {
+            Ok(answer) => answer,
+            Err(_) => {
+                return room(wire::RoomKind::PushedPage, &self.key())
+                    .title(&words::inbox_title(EN))
+                    .back(&mut b.sel, &words::app_title(EN))
+                    .failed(&mut b.sel, &shared::read_failed(EN), &shared::kit_retry(EN))
+                    .build();
+            }
+        };
+        let today = b.door.today();
+        let snooze_until = centraid_vault::clock::format_iso_ms(b.door.now_ms() + 3_600_000);
+        b.ui.list(answer.rows.iter().map(|task| task.id.clone()));
+        let selecting = b.ui.selecting();
+        let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
+        let unstar = !picked.is_empty()
+            && answer
+                .rows
+                .iter()
+                .filter(|task| picked.contains(&task.id))
+                .all(|task| task.starred_at.is_some());
+        let rows: Vec<wire::RoomBlock> = answer
+            .rows
+            .iter()
+            .map(|task| {
+                task_row(
+                    &mut b.sel,
+                    task,
+                    &today,
+                    &snooze_until,
+                    "inbox-task",
+                    selecting,
+                    b.ui.is_picked(&task.id),
+                )
+            })
+            .collect();
+        let content = if rows.is_empty() {
+            vec![blocks::empty(
+                glyph("Tray", ""),
+                &words::empty_title(EN),
+                &words::empty_body(EN),
+                Some(blocks::action(
+                    &mut b.sel,
+                    "inbox/add-task",
+                    &words::add_task(EN),
+                    "Plus",
+                    Handler::Open(NEW_TASK.to_owned()),
+                )),
+            )]
+        } else {
+            let mut section =
+                blocks::section(&mut b.sel, "section/inbox", &words::inbox_title(EN)).blocks(rows);
+            if answer.next.is_some() && self.loaded < 500 {
+                section = section.next_page(&mut b.sel, "inbox/more");
+            }
+            vec![section.into_block()]
+        };
+        let selection = task_selection_actions(&mut b.sel, &picked, unstar);
+        let selected_count = shared::selected_count(EN, picked.len() as u64);
+        room(wire::RoomKind::PushedPage, &self.key())
+            .title(&words::inbox_title(EN))
+            .back(&mut b.sel, &words::app_title(EN))
+            .key(
+                &mut b.sel,
+                "key/add",
+                wire::RoomKeyRole::Add,
+                "Plus",
+                &words::add_task(EN),
+                Handler::Open(NEW_TASK.to_owned()),
+            )
+            .selection(&mut b.sel, b.ui, &selected_count, selection)
+            .ready(content)
+            .build()
+    }
+
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        if tag == "next:search/more" {
+            e.ui.advance_search_page();
+            return Outcome::default();
+        }
+        if tag.starts_with("next:") {
+            self.loaded = (self.loaded + 50).min(500);
+        }
+        Outcome::default()
     }
 }
 
@@ -592,8 +835,16 @@ impl RoomScreen for TaskListDetail {
             )
             .map(|a| a.rows)
             .unwrap_or_default();
-        let today = today_iso(b.door.now_ms());
+        let today = b.door.today();
         let snooze_until = centraid_vault::clock::format_iso_ms(b.door.now_ms() + 3_600_000);
+        b.ui.list(tasks.iter().map(|task| task.id.clone()));
+        let selecting = b.ui.selecting();
+        let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
+        let unstar = !picked.is_empty()
+            && tasks
+                .iter()
+                .filter(|task| picked.contains(&task.id))
+                .all(|task| task.starred_at.is_some());
 
         let mut trash = blocks::menu_item(
             &mut b.sel,
@@ -635,7 +886,17 @@ impl RoomScreen for TaskListDetail {
         } else {
             let rows: Vec<wire::RoomBlock> = tasks
                 .iter()
-                .map(|t| task_row(&mut b.sel, t, &today, &snooze_until, "list-task"))
+                .map(|task| {
+                    task_row(
+                        &mut b.sel,
+                        task,
+                        &today,
+                        &snooze_until,
+                        "list-task",
+                        selecting,
+                        b.ui.is_picked(&task.id),
+                    )
+                })
                 .collect();
             vec![
                 blocks::section(&mut b.sel, "section/list-tasks", &list.title)
@@ -644,10 +905,13 @@ impl RoomScreen for TaskListDetail {
             ]
         };
 
+        let selection = task_selection_actions(&mut b.sel, &picked, unstar);
+        let selected_count = shared::selected_count(EN, picked.len() as u64);
         room(wire::RoomKind::PushedPage, &self.key())
             .title(&list.title)
             .back(&mut b.sel, &words::app_title(EN))
             .menu_key(&mut b.sel, "key/menu", &shared::kit_details(EN), menu)
+            .selection(&mut b.sel, b.ui, &selected_count, selection)
             .ready(content)
             .build()
     }
@@ -891,7 +1155,7 @@ impl RoomScreen for TaskDetailRoom {
             .ok()
             .and_then(|a| a.rows.into_iter().next());
 
-        let today = today_iso(b.door.now_ms());
+        let today = b.door.today();
         let snooze_until = centraid_vault::clock::format_iso_ms(b.door.now_ms() + 3_600_000);
         let is_done = task.status == "done";
         let starred = task.starred_at.is_some();
@@ -926,6 +1190,12 @@ impl RoomScreen for TaskDetailRoom {
                 Handler::Open(format!("reminders/task/{}/edit", self.id)),
             ),
             blocks::menu_item(&mut b.sel, "menu/star", &star_label, Handler::Act(star_act)),
+            blocks::menu_item(
+                &mut b.sel,
+                "menu/organize",
+                &shared::organize(EN),
+                Handler::Open(super::organize::route(std::slice::from_ref(&self.id))),
+            ),
         ];
         if !is_done && task.due.is_some() {
             menu_items.push(blocks::menu_item(
@@ -1051,7 +1321,7 @@ impl RoomScreen for TaskDetailRoom {
         if !is_subtask {
             let sub_blocks: Vec<wire::RoomBlock> = subtasks
                 .iter()
-                .map(|sub| task_row(&mut b.sel, sub, &today, &snooze_until, "sub"))
+                .map(|sub| task_row(&mut b.sel, sub, &today, &snooze_until, "sub", false, false))
                 .collect();
             let add_sub = blocks::action(
                 &mut b.sel,
@@ -1143,22 +1413,33 @@ impl RoomScreen for TaskDetailRoom {
             ));
         }
 
-        if !linked_ids.is_empty() {
+        {
             let mut rows = Vec::new();
             for lid in &linked_ids {
                 if let Ok(ans) = b.run(&entity_reads::META_BY_ID, &Args::new().text("id", lid))
                     && let Some(meta) = ans.rows.into_iter().next()
                 {
                     rows.push(
-                        blocks::still_row(&mut b.sel, &format!("link/{}", meta.id), &meta.title)
-                            .meta(&meta.kind)
-                            .build(),
+                        blocks::row(
+                            &mut b.sel,
+                            &format!("link/{}", meta.id),
+                            &meta.title,
+                            Handler::Tag(format!("open:{}:{}", meta.kind, meta.id)),
+                        )
+                        .meta(&meta.kind)
+                        .menu(super::link_picker::unlink_menu(&mut b.sel, &meta.id))
+                        .build(),
                     );
                 }
             }
-            if !rows.is_empty() {
-                content.push(blocks::linked(&words::section_linked(EN), rows, None));
-            }
+            let add = blocks::action(
+                &mut b.sel,
+                "footer/linked/add",
+                &shared::link_add(EN),
+                "",
+                Handler::Tag("link:add".to_owned()),
+            );
+            content.push(blocks::linked(&words::section_linked(EN), rows, Some(add)));
         }
 
         if !mentioned.is_empty() {
@@ -1178,7 +1459,7 @@ impl RoomScreen for TaskDetailRoom {
                 &mut b.sel,
                 &words::earlier_versions_label(EN),
                 u32::try_from(head.count).unwrap_or(u32::MAX),
-                Handler::Tag("task:versions".to_owned()),
+                Handler::Open(format!("reminders/task/{}/versions", self.id)),
             ));
         }
 
@@ -1188,6 +1469,100 @@ impl RoomScreen for TaskDetailRoom {
                 &[("label", task.arrived_label.as_deref().unwrap_or(via))],
             );
             content.push(blocks::origin(&mut b.sel, &line, None));
+        }
+
+        if let Ok(differences) = b.run(
+            &entity_reads::PHONE_DIFFERENCES,
+            &Args::new().text("id", &task.id),
+        ) {
+            for source in differences
+                .rows
+                .iter()
+                .filter(|source| source.system == "phone_reminders")
+            {
+                let reminder_values = b
+                    .run(&reads::REMINDERS, &Args::new().text("task_id", &task.id))
+                    .ok()
+                    .filter(|answer| answer.rows.len() < 20)
+                    .map(|answer| {
+                        if answer.rows.is_empty() {
+                            Value::Null
+                        } else {
+                            json!(
+                                answer
+                                    .rows
+                                    .iter()
+                                    .map(|alert| alert.offset_min)
+                                    .collect::<Vec<_>>()
+                            )
+                        }
+                    });
+                let mut current = vec![
+                    (
+                        "title",
+                        words::field_title(EN),
+                        Value::String(task.title.clone()),
+                    ),
+                    (
+                        "due",
+                        words::field_due(EN),
+                        task.due.clone().map(Value::String).unwrap_or(Value::Null),
+                    ),
+                    (
+                        "due_timing",
+                        words::field_due_timing(EN),
+                        task.due_timing
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                    (
+                        "zone",
+                        words::field_zone(EN),
+                        task.zone.clone().map(Value::String).unwrap_or(Value::Null),
+                    ),
+                    ("priority", words::field_priority(EN), json!(task.priority)),
+                    (
+                        "description",
+                        words::field_notes(EN),
+                        task.description
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                    (
+                        "url",
+                        words::field_url(EN),
+                        task.url.clone().map(Value::String).unwrap_or(Value::Null),
+                    ),
+                    (
+                        "status",
+                        words::field_status(EN),
+                        Value::String(task.status.clone()),
+                    ),
+                    (
+                        "rule",
+                        words::field_repeat(EN),
+                        task.rule.clone().map(Value::String).unwrap_or(Value::Null),
+                    ),
+                    (
+                        "done_at",
+                        words::field_done_at(EN),
+                        task.done_at
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                ];
+                if let Some(reminders) = reminder_values {
+                    current.push(("reminders", words::field_alerts(EN), reminders));
+                }
+                if let Some(says) =
+                    super::follow::phone_says(&mut b.sel, b.door, &task.id, source, &current)
+                {
+                    content.push(says);
+                }
+            }
         }
 
         let back_label = parent_meta
@@ -1202,6 +1577,12 @@ impl RoomScreen for TaskDetailRoom {
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        if let Some(outcome) = super::link_picker::handle_unlink(e, tag, &self.id) {
+            return outcome;
+        }
+        if tag == "link:add" {
+            return Outcome::push(&format!("reminders/task/{}/link", self.id));
+        }
         if tag == "task:trash" {
             let act = Act::new("entity.trash", json!({ "ids": [self.id] }));
             return match e.door.act(&act) {
@@ -1230,7 +1611,11 @@ fn priority_label(p: i64) -> String {
     }
 }
 
-fn extract_typed_date(title: &str, now_ms: i64) -> Option<(String, String, String)> {
+fn extract_typed_date(
+    title: &str,
+    today: &str,
+    tomorrow: &str,
+) -> Option<(String, String, String)> {
     let tokens: Vec<&str> = title.split_whitespace().collect();
     if tokens.len() < 2 {
         return None;
@@ -1238,9 +1623,9 @@ fn extract_typed_date(title: &str, now_ms: i64) -> Option<(String, String, Strin
     let last = *tokens.last()?;
     let lower = last.to_ascii_lowercase();
     let (chip_label, iso) = if lower == "today" {
-        (shared::today(EN), today_iso(now_ms))
+        (shared::today(EN), today.to_owned())
     } else if lower == "tomorrow" {
-        (shared::tomorrow(EN), tomorrow_iso(now_ms))
+        (shared::tomorrow(EN), tomorrow.to_owned())
     } else if last.len() == 10
         && last.as_bytes()[4] == b'-'
         && last.as_bytes()[7] == b'-'
@@ -1248,13 +1633,119 @@ fn extract_typed_date(title: &str, now_ms: i64) -> Option<(String, String, Strin
             .bytes()
             .enumerate()
             .all(|(i, b)| i == 4 || i == 7 || b.is_ascii_digit())
+        && centraid_domain::civil::shift_day(last, 0).is_some()
     {
         (last.to_owned(), last.to_owned())
     } else {
         return None;
     };
-    let clean = tokens[..tokens.len() - 1].join(" ");
+    let mut end = tokens.len() - 1;
+    if end > 0 && tokens[end - 1].eq_ignore_ascii_case("on") {
+        end -= 1;
+    }
+    let clean = tokens[..end].join(" ");
+    if clean.is_empty() {
+        return None;
+    }
     Some((clean, chip_label, iso))
+}
+
+fn contains_date_word(text: &str) -> bool {
+    text.split_whitespace().any(|token| {
+        token.len() == 10
+            && token.as_bytes().get(4) == Some(&b'-')
+            && token.as_bytes().get(7) == Some(&b'-')
+            && token
+                .bytes()
+                .enumerate()
+                .all(|(i, b)| i == 4 || i == 7 || b.is_ascii_digit())
+    }) || text.split(|ch: char| !ch.is_alphanumeric()).any(|word| {
+        matches!(
+            word.to_ascii_lowercase().as_str(),
+            "today"
+                | "tomorrow"
+                | "yesterday"
+                | "next"
+                | "week"
+                | "month"
+                | "monday"
+                | "tuesday"
+                | "wednesday"
+                | "thursday"
+                | "friday"
+                | "saturday"
+                | "sunday"
+                | "jan"
+                | "january"
+                | "feb"
+                | "february"
+                | "mar"
+                | "march"
+                | "apr"
+                | "april"
+                | "may"
+                | "jun"
+                | "june"
+                | "jul"
+                | "july"
+                | "aug"
+                | "august"
+                | "sep"
+                | "september"
+                | "oct"
+                | "october"
+                | "nov"
+                | "november"
+                | "dec"
+                | "december"
+        )
+    })
+}
+
+fn valid_quick_date(text: &str) -> bool {
+    centraid_domain::civil::shift_day(text, 0).is_some()
+}
+
+#[cfg(test)]
+mod quick_add_tests {
+    use super::{contains_date_word, extract_typed_date};
+
+    #[test]
+    fn quick_add_parses_only_a_clear_trailing_date_and_validates_it() {
+        assert_eq!(
+            extract_typed_date("Pick up library books tomorrow", "2026-11-27", "2026-11-28"),
+            Some((
+                "Pick up library books".to_owned(),
+                "Tomorrow".to_owned(),
+                "2026-11-28".to_owned(),
+            ))
+        );
+        assert_eq!(
+            extract_typed_date("Renew permit on 2026-12-02", "2026-11-27", "2026-11-28"),
+            Some((
+                "Renew permit".to_owned(),
+                "2026-12-02".to_owned(),
+                "2026-12-02".to_owned(),
+            ))
+        );
+        assert_eq!(
+            extract_typed_date(
+                "Pick up books tomorrow or Friday",
+                "2026-11-27",
+                "2026-11-28"
+            ),
+            None,
+            "ambiguous input stays as entered for review and does not set a due date"
+        );
+        assert!(contains_date_word("Pick up books tomorrow or Friday"));
+        assert!(!contains_date_word("Pick up library books"));
+        assert_eq!(
+            extract_typed_date("Pick up books 2026-99-99", "2026-11-27", "2026-11-28"),
+            None,
+            "invalid dates never become due dates"
+        );
+        assert!(contains_date_word("Pick up books 2026-99-99"));
+    }
 }
 
 struct TaskForm {
@@ -1266,6 +1757,11 @@ struct TaskForm {
     date_chip: Option<(String, String)>,
     drafted: bool,
     title_error: Option<String>,
+    date_error: Option<String>,
+    confirm_discard: bool,
+    dirty: bool,
+    date_needs_review: bool,
+    preview_confirm: bool,
 }
 
 impl TaskForm {
@@ -1279,6 +1775,11 @@ impl TaskForm {
             date_chip: None,
             drafted: false,
             title_error: None,
+            date_error: None,
+            confirm_discard: false,
+            dirty: false,
+            date_needs_review: false,
+            preview_confirm: false,
         }
     }
 
@@ -1292,6 +1793,11 @@ impl TaskForm {
             date_chip: None,
             drafted: false,
             title_error: None,
+            date_error: None,
+            confirm_discard: false,
+            dirty: false,
+            date_needs_review: false,
+            preview_confirm: false,
         }
     }
 
@@ -1339,6 +1845,25 @@ impl RoomScreen for TaskForm {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        if self.confirm_discard {
+            let confirm = blocks::confirm(
+                &mut b.sel,
+                Confirm {
+                    class: wire::RoomConfirmClass::Outlined,
+                    title: &words::discard_title(EN),
+                    body: &words::discard_body(EN),
+                    warning: "",
+                    confirm_label: &words::discard_confirm(EN),
+                    confirm: Handler::Tag("discard:yes".to_owned()),
+                    cancel_label: &words::discard_keep(EN),
+                    cancel: Handler::Tag("discard:no".to_owned()),
+                },
+            );
+            return room(wire::RoomKind::Sheet, &self.key())
+                .title(&words::discard_title(EN))
+                .ready(vec![confirm])
+                .build();
+        }
         let lists = b
             .run(&reads::LISTS, &Args::new())
             .map(|a| a.rows)
@@ -1372,6 +1897,21 @@ impl RoomScreen for TaskForm {
                         b.ui.fields.get_or(name, v);
                     }
                 }
+                let draft_title = fields
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let draft_due = fields
+                    .get("due")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                self.date_needs_review =
+                    contains_date_word(draft_title) && !valid_quick_date(draft_due);
+                self.preview_confirm =
+                    contains_date_word(draft_title) && valid_quick_date(draft_due);
+                if self.preview_confirm {
+                    self.date_chip = Some((draft_due.to_owned(), draft_due.to_owned()));
+                }
                 if let Some(p) = fields.get("priority").and_then(Value::as_str) {
                     self.priority = p.to_owned();
                 }
@@ -1404,34 +1944,55 @@ impl RoomScreen for TaskForm {
                 Handler::Tag("chip:remove-date".to_owned()),
             ));
         }
+        if self.preview_confirm
+            && let Some(date) = b.ui.fields.value("due")
+        {
+            title = title.hint(&fill(&words::quick_add_preview(EN), &[("date", date)]));
+        }
         if let Some(err) = &self.title_error {
             title = title.error(err);
         }
+        if self.date_needs_review {
+            title = title.error(&words::ambiguous_date_review(EN));
+        }
 
-        let mut fields = vec![
-            title.build(),
-            form::text(
-                &mut b.sel,
-                &mut b.ui.fields,
-                "due",
-                &words::field_due(EN),
-                wire::RoomTextKind::Line,
-                "",
-                40,
-            )
-            .hint(&words::field_due_hint(EN))
-            .build(),
-            form::text(
-                &mut b.sel,
-                &mut b.ui.fields,
-                "scheduled_on",
-                &words::field_scheduled(EN),
-                wire::RoomTextKind::Line,
-                "",
-                20,
-            )
-            .build(),
-        ];
+        let due_value = b.ui.fields.value("due").unwrap_or("");
+        let mut due = form::moment(
+            &mut b.sel,
+            "due",
+            &words::field_due(EN),
+            wire::RoomMoment {
+                kind: wire::RoomMomentKind::Day as i32,
+                value: due_value.to_owned(),
+                display: if due_value.is_empty() {
+                    String::new()
+                } else {
+                    crate::kit::civil::short_day(EN, due_value)
+                },
+                ..wire::RoomMoment::default()
+            },
+        )
+        .hint(&words::field_due_hint(EN));
+        if let Some(error) = &self.date_error {
+            due = due.error(error);
+        }
+        let scheduled_value = b.ui.fields.value("scheduled_on").unwrap_or("");
+        let scheduled = form::moment(
+            &mut b.sel,
+            "scheduled_on",
+            &words::field_scheduled(EN),
+            wire::RoomMoment {
+                kind: wire::RoomMomentKind::Day as i32,
+                value: scheduled_value.to_owned(),
+                display: if scheduled_value.is_empty() {
+                    String::new()
+                } else {
+                    crate::kit::civil::short_day(EN, scheduled_value)
+                },
+                ..wire::RoomMoment::default()
+            },
+        );
+        let mut fields = vec![title.build(), due.build(), scheduled.build()];
 
         if !self.is_subtask && self.editing_id.is_none() && !lists.is_empty() {
             let mut opts = vec![blocks::option(
@@ -1498,15 +2059,20 @@ impl RoomScreen for TaskForm {
             .build(),
         );
 
-        let dirty = !b.ui.fields.value("title").unwrap_or("").trim().is_empty();
+        let dirty = self.dirty || !b.ui.fields.value("title").unwrap_or("").trim().is_empty();
+        let save_label = if self.preview_confirm {
+            words::quick_add_confirm(EN)
+        } else {
+            shared::kit_save(EN)
+        };
         let save_spec = form::explicit(
             &mut b.sel,
             Explicit {
-                save_label: &shared::kit_save(EN),
+                save_label: &save_label,
                 save: Handler::Tag("form:save".to_owned()),
                 cancel_label: &shared::kit_cancel(EN),
                 cancel: Handler::Tag("form:cancel".to_owned()),
-                save_enabled: true,
+                save_enabled: !self.date_needs_review,
                 dirty,
                 drafted: self.drafted,
             },
@@ -1528,23 +2094,41 @@ impl RoomScreen for TaskForm {
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
         match tag {
             "title" => {
-                if let Input::Text(text) = input
-                    && let Some((clean, label, iso)) = extract_typed_date(text, e.door.now_ms())
-                {
-                    if let Some(f) = e.ui.fields.get_mut("title") {
-                        f.set(&clean);
+                self.dirty = true;
+                if let Input::Text(text) = input {
+                    if let Some((clean, label, iso)) = extract_typed_date(
+                        text,
+                        &e.door.today(),
+                        &e.door.shift_day(&e.door.today(), 1),
+                    ) {
+                        if let Some(f) = e.ui.fields.get_mut("title") {
+                            f.set(&clean);
+                        }
+                        e.ui.fields.get_or("due", "");
+                        if let Some(f) = e.ui.fields.get_mut("due") {
+                            f.set(&iso);
+                        }
+                        self.date_chip = Some((label, iso));
+                        self.date_needs_review = false;
+                        self.preview_confirm = false;
+                    } else {
+                        self.date_needs_review = contains_date_word(text);
+                        self.preview_confirm = false;
+                        self.date_chip = None;
+                        if self.date_needs_review
+                            && let Some(field) = e.ui.fields.get_mut("due")
+                        {
+                            field.set("");
+                        }
                     }
-                    e.ui.fields.get_or("due", "");
-                    if let Some(f) = e.ui.fields.get_mut("due") {
-                        f.set(&iso);
-                    }
-                    self.date_chip = Some((label, iso));
                 }
                 self.save_draft(e);
                 Outcome::default()
             }
             "chip:remove-date" => {
+                self.dirty = true;
                 self.date_chip = None;
+                self.date_needs_review = false;
                 if let Some(f) = e.ui.fields.get_mut("due") {
                     f.set("");
                 }
@@ -1565,21 +2149,80 @@ impl RoomScreen for TaskForm {
                 self.save_draft(e);
                 Outcome::default()
             }
-            "due" | "scheduled_on" | "url" | "notes" => {
+            "due" | "scheduled_on" => {
+                self.dirty = true;
+                let text = match input {
+                    Input::Moment(s) | Input::Text(s) => s.as_str(),
+                    _ => "",
+                };
+                if !text.is_empty() {
+                    if crate::kit::civil::epoch_day_of(text).is_none() {
+                        self.date_error = Some(words::date_invalid(EN));
+                    } else {
+                        self.date_error = None;
+                        if let Some(field) = e.ui.fields.get_mut(tag) {
+                            field.set(text);
+                        }
+                    }
+                } else {
+                    self.date_error = None;
+                    if let Some(field) = e.ui.fields.get_mut(tag) {
+                        field.set("");
+                    }
+                }
+                if tag == "due" {
+                    let title = e.ui.fields.value("title").unwrap_or("").to_owned();
+                    if contains_date_word(&title) {
+                        self.preview_confirm = valid_quick_date(text.trim());
+                        self.date_needs_review = !self.preview_confirm;
+                        if self.preview_confirm {
+                            let date = text.trim().to_owned();
+                            self.date_chip = Some((date.clone(), date));
+                        }
+                    }
+                }
+                self.save_draft(e);
+                Outcome::default()
+            }
+            "url" | "notes" => {
+                self.dirty = true;
                 self.save_draft(e);
                 Outcome::default()
             }
             "form:cancel" => {
+                if self.dirty || self.drafted {
+                    self.confirm_discard = true;
+                    Outcome::default()
+                } else {
+                    self.clear_draft(e.door);
+                    Outcome::pop()
+                }
+            }
+            "discard:yes" => {
                 self.clear_draft(e.door);
                 Outcome::pop()
             }
+            "discard:no" => {
+                self.confirm_discard = false;
+                Outcome::default()
+            }
             "form:save" => {
+                if self.date_needs_review {
+                    return Outcome::refuse(&words::ambiguous_date_review(EN));
+                }
                 let title = e.ui.fields.value("title").unwrap_or("").trim().to_owned();
                 if title.is_empty() {
                     self.title_error = Some(words::error_title_required(EN));
                     return Outcome::default();
                 }
                 self.title_error = None;
+                for name in ["due", "scheduled_on"] {
+                    let value = e.ui.fields.value(name).unwrap_or("").trim();
+                    if !value.is_empty() && crate::kit::civil::epoch_day_of(value).is_none() {
+                        self.date_error = Some(words::date_invalid(EN));
+                        return Outcome::default();
+                    }
+                }
 
                 let mut payload = Map::new();
                 payload.insert("title".to_owned(), Value::String(title));

@@ -1,3 +1,5 @@
+Historical: archived handoff notes; implementation paths in this snapshot may no longer exist.
+
 # Proposed patches for files lane E does not own
 
 The issue carries one line per finding; this file carries the patch each one needs, so the owning lane has an edit rather than a description ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3 lane E; R-1020-35: a correctness bug the port surfaces is fixed at its source).

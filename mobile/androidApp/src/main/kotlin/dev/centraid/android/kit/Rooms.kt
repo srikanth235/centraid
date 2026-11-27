@@ -197,7 +197,7 @@ private fun BandStage(
  * [statusLine] is the status host's second form, for a line that carries a
  * verb or a bar ([ProgressStatusLine]); it docks where [status] does.
  *
- * **THE BAND IS A SOLID TONAL FLOATING PILL** ([bandGround]), and with [contentUnderBand] the
+ * **THE BAND IS A FLOATING GLASS PILL** ([bandGround]), and with [contentUnderBand] the
  * content runs under it, as the SwiftUI shell's always does. A screen that sets it owes its
  * scrollers the bottom padding in [bandFootPadding]; one that does not keeps its content above the
  * band, which is the old layout.
@@ -229,13 +229,13 @@ public fun AppPlace(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            if (!showsTitle && barLeading != null) {
+            if (!showsTitle) {
                 barLeading.invoke()
                 Spacer(Modifier.weight(1f))
             }
             if (showsTitle) Column(Modifier.weight(1f).padding(top = 2.dp)) {
                 RoomTitle(title)
-                if (showsTitle && meta.isNotEmpty()) {
+                if (meta.isNotEmpty()) {
                     KitText(meta, KitType.Meta, Surface.meta)
                 }
             }

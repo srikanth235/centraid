@@ -109,7 +109,7 @@ impl FollowedFolder {
     }
 }
 
-// S12: top-level Docs keeps homed captures (parent_id IS NOT NULL) out of the library.
+// The top-level library excludes documents homed inside another item.
 pub const TOP_LEVEL: Read<DocRow> = read(
     ReadDecl {
         name: "docs.top_level",

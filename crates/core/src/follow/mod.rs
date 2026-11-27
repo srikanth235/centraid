@@ -102,7 +102,15 @@ impl Store {
     /// Whether the OS announces a change to the store while the app runs.
     #[must_use]
     pub const fn watched(self) -> bool {
-        matches!(self, Store::Contacts | Store::Calendar | Store::Reminders)
+        matches!(
+            self,
+            Store::Contacts
+                | Store::Calendar
+                | Store::Reminders
+                | Store::Files
+                | Store::Health
+                | Store::CameraRoll
+        )
     }
 
     /// The device key that says this device enrolled the store.
@@ -120,11 +128,13 @@ struct Report {
     incomplete: bool,
     refused: Vec<String>,
     background_refused: bool,
+    /// Record count across pages in the active Camera Roll traversal.
+    camera_roll_pages: Option<u32>,
 }
 
-#[derive(Default)]
 struct Inner {
     next: u64,
+    launch_nonce: u64,
     current: BTreeMap<Store, u64>,
     queued: BTreeSet<Store>,
     watching: BTreeSet<Store>,
@@ -132,8 +142,20 @@ struct Inner {
 }
 
 /// The board the follower keeps in memory: asks in flight, watches, what the last pass said.
-#[derive(Default)]
 pub struct Follower(Mutex<Inner>);
+
+impl Default for Follower {
+    fn default() -> Self {
+        Self(Mutex::new(Inner {
+            next: 0,
+            launch_nonce: rand::random(),
+            current: BTreeMap::new(),
+            queued: BTreeSet::new(),
+            watching: BTreeSet::new(),
+            reports: BTreeMap::new(),
+        }))
+    }
+}
 
 impl Follower {
     fn lock(&self) -> MutexGuard<'_, Inner> {
@@ -198,7 +220,7 @@ impl crate::handle::HandleState {
     }
 
     fn follow_cursor(&self, store: Store) -> String {
-        if store != Store::Health {
+        if !matches!(store, Store::Health | Store::CameraRoll) {
             return String::new();
         }
         let install = self.follow_install();
@@ -215,7 +237,9 @@ impl crate::handle::HandleState {
             .rows
             .into_iter()
             .find(|row| {
-                row.retired_at.is_none() && row.device_id.as_deref() == Some(install.as_str())
+                row.retired_at.is_none()
+                    && row.device_id.as_deref() == Some(install.as_str())
+                    && (store != Store::CameraRoll || row.r#ref == "camera-roll")
             })
             .and_then(|row| row.cursor)
             .unwrap_or_default()
@@ -251,6 +275,8 @@ impl crate::handle::HandleState {
                 read.cursor = self.follow_cursor(store);
                 read.ask_background = ask_permission;
             }
+            Store::CameraRoll => read.cursor = self.follow_cursor(store),
+            Store::Files => read.folder_refs = self.follow_folder_refs(),
             _ => {}
         }
         wire::ShellEffect {
@@ -270,7 +296,7 @@ impl crate::handle::HandleState {
             } else {
                 inner.watching.remove(&store)
             };
-            if !changed {
+            if !changed && store != Store::Files {
                 return;
             }
         }
@@ -280,9 +306,36 @@ impl crate::handle::HandleState {
                 wire::ShellPhoneWatch {
                     system: store.key().to_owned(),
                     on,
+                    folder_refs: if store == Store::Files {
+                        self.follow_folder_refs()
+                    } else {
+                        Vec::new()
+                    },
                 },
             )),
         });
+    }
+
+    /// Active Files origin refs in this open vault. Native grant storage is keyed by these opaque
+    /// refs, so a shell can read only grants enrolled in this vault.
+    fn follow_folder_refs(&self) -> Vec<String> {
+        let Ok(reader) = self.reader_for_follow() else {
+            return Vec::new();
+        };
+        reader
+            .run(
+                &centraid_domain::apps::entity::FOLLOWED_STORES,
+                &centraid_domain::read::Args::new().text("system", Store::Files.origin_system()),
+            )
+            .map(|result| {
+                result
+                    .rows
+                    .into_iter()
+                    .filter(|row| row.retired_at.is_none())
+                    .map(|row| row.r#ref)
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn follow_status(&self, store: Store) -> wire::FollowStatus {
@@ -405,6 +458,7 @@ impl crate::handle::HandleState {
             output_json: "{}".to_owned(),
             ..Default::default()
         };
+        let mut camera_roll_has_more = false;
         match grant {
             wire::FollowGrant::Unspecified => {
                 return Err(refused(
@@ -419,15 +473,44 @@ impl crate::handle::HandleState {
             }
             granted => {
                 self.follow_set_habit(store, true);
-                self.follow_watch(store, true);
+                if !matches!(store, Store::Files | Store::CameraRoll) {
+                    self.follow_watch(store, true);
+                }
                 self.follower
                     .lock()
                     .reports
                     .entry(store)
                     .or_default()
                     .blocked = None;
-                self.follow_merge(store, request, granted, &mut response)?;
+                if self
+                    .follow_merge(store, request, granted, &mut response)
+                    .is_err()
+                {
+                    response.declined = true;
+                    response.sentence = "The phone store could not be read. Try again.".to_owned();
+                    let mut inner = self.follower.lock();
+                    let report = inner.reports.entry(store).or_default();
+                    report.read = None;
+                    if store == Store::CameraRoll {
+                        report.camera_roll_pages = None;
+                    }
+                } else if store == Store::CameraRoll {
+                    camera_roll_has_more = request
+                        .input_json
+                        .parse::<Value>()
+                        .ok()
+                        .and_then(|value| value.get("complete").and_then(Value::as_bool))
+                        == Some(false);
+                }
             }
+        }
+        // A Files enrol/read may have added new folder origins. Refresh the shell watch with the
+        // exact current-vault refs after the merge has committed them.
+        if matches!(store, Store::Files | Store::CameraRoll) && !response.declined {
+            self.follow_watch(store, true);
+        }
+        if camera_roll_has_more && !response.declined {
+            self.follower.lock().queued.insert(store);
         }
         let queued = self.follower.lock().queued.remove(&store);
         if queued && self.follow_enrolled(store) {
@@ -452,41 +535,76 @@ impl crate::handle::HandleState {
             serde_json::from_str::<Value>(&request.input_json)
                 .map_err(|error| refused(format!("the snapshot is not JSON: {error}")))?
         };
+        if store == Store::CameraRoll
+            && (snapshot.get("origin").and_then(Value::as_object).is_none()
+                || snapshot.get("records").and_then(Value::as_array).is_none()
+                || snapshot.get("complete").and_then(Value::as_bool).is_none())
+        {
+            return Err(refused("the camera roll page is incomplete"));
+        }
         let mut passes: Vec<(&str, Value)> = Vec::new();
         if store == Store::Health {
             for (part, command) in [
                 ("workouts", "follow.health"),
                 ("readings", "follow.health_readings"),
+                ("totals", "measurement.record"),
             ] {
                 if let Some(input) = snapshot.get(part) {
                     passes.push((command, input.clone()));
                 }
             }
+        } else if matches!(store, Store::Calendar | Store::Files | Store::Reminders) {
+            if let Some(snapshots) = snapshot.get("snapshots").and_then(Value::as_array) {
+                passes.extend(
+                    snapshots
+                        .iter()
+                        .cloned()
+                        .map(|snapshot| (store.command(), snapshot)),
+                );
+            } else if !snapshot.is_null() {
+                passes.push((store.command(), snapshot));
+            }
         } else if !snapshot.is_null() {
             passes.push((store.command(), snapshot));
         }
+        let multiple_passes = passes.len() > 1;
         let install = self.follow_install();
         let (mut count, mut doubted, mut incomplete) =
             (0u32, 0u32, grant == wire::FollowGrant::Limited);
         let mut outputs = Vec::new();
-        for (command, mut input) in passes {
-            if let Some(origin) = input.get_mut("origin").and_then(Value::as_object_mut)
-                && origin.contains_key("cursor")
-            {
+        for (index, (command, mut input)) in passes.into_iter().enumerate() {
+            if store == Store::CameraRoll {
+                incomplete |= input.get("complete").and_then(Value::as_bool) == Some(false);
+                // A page cannot prove that assets beyond its cursor disappeared. Deletions are
+                // supplied explicitly through `gone`; never settle an entire origin per page.
+                input["complete"] = Value::Bool(false);
+            }
+            if let Some(origin) = input.get_mut("origin").and_then(Value::as_object_mut) {
                 origin.insert("device_id".to_owned(), Value::String(install.clone()));
             }
             count += u32::try_from(
                 input
                     .get("records")
                     .and_then(Value::as_array)
+                    .or_else(|| input.get("days").and_then(Value::as_array))
                     .map_or(0, Vec::len),
             )
             .unwrap_or(u32::MAX);
-            incomplete |= input.get("complete").and_then(Value::as_bool) == Some(false);
-            let key = if request.invoke_key.is_empty() {
-                format!("follow:{}:{}:{command}", store.key(), request.ask_id)
-            } else {
+            if store != Store::CameraRoll {
+                incomplete |= input.get("complete").and_then(Value::as_bool) == Some(false);
+            }
+            let nonce = self.follower.lock().launch_nonce;
+            let base = if request.invoke_key.is_empty() {
+                format!("follow:{}:{nonce}:{}", store.key(), request.ask_id)
+            } else if !multiple_passes {
                 request.invoke_key.clone()
+            } else {
+                format!("{}:follow:{}", request.invoke_key, store.key())
+            };
+            let key = if request.invoke_key.is_empty() || multiple_passes {
+                format!("{base}:{command}:{index}")
+            } else {
+                base
             };
             let outcome = self.command(command, &input, &key)?;
             if outcome.status != centraid_vault::CommandStatus::Executed {
@@ -511,9 +629,23 @@ impl crate::handle::HandleState {
         let mut inner = self.follower.lock();
         let report = inner.reports.entry(store).or_default();
         if !response.declined {
-            report.read = Some(count);
+            if store == Store::CameraRoll {
+                let total = report.camera_roll_pages.unwrap_or(0).saturating_add(count);
+                let has_more = request
+                    .input_json
+                    .parse::<Value>()
+                    .ok()
+                    .and_then(|value| value.get("complete").and_then(Value::as_bool))
+                    == Some(false);
+                report.camera_roll_pages = has_more.then_some(total);
+                report.read = Some(total);
+            } else {
+                report.read = Some(count);
+            }
             report.doubted = doubted;
             report.incomplete = incomplete;
+        } else if store == Store::CameraRoll {
+            report.camera_roll_pages = None;
         }
         report.refused.clone_from(&request.refused);
         report.background_refused = request.background_refused;
@@ -581,6 +713,8 @@ impl crate::handle::HandleState {
             inner.current.remove(&store);
             inner.queued.remove(&store);
             inner.reports.remove(&store);
+        } else if store == Store::Files {
+            self.follow_watch(store, true);
         }
         self.follow_changed();
         Ok(wire::FollowResponse {

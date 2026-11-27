@@ -12,6 +12,7 @@ use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
+use super::search_view;
 use super::selector::{Act, Handler, Sel};
 use crate::strings::{Locale, fill, home as home_words, photos as words, shared};
 
@@ -20,7 +21,6 @@ pub const ALBUMS: &str = "photos/albums";
 pub const PLACES: &str = "photos/places";
 pub const NEW_ALBUM: &str = "photos/albums/new";
 pub const NEW_PLACE: &str = "photos/places/new";
-pub const FREE_SPACE: &str = "photos/free-space";
 pub const TRASH: &str = "photos/trash";
 
 const EN: Locale = Locale::En;
@@ -38,7 +38,6 @@ pub fn registry() -> Registry {
         .exact(PLACES, || Box::new(PlacesList::default()))
         .exact(NEW_ALBUM, || Box::new(NewAlbumForm::default()))
         .exact(NEW_PLACE, || Box::new(NewPlaceForm::default()))
-        .exact(FREE_SPACE, || Box::new(FreeSpaceSheet))
         .exact(TRASH, || Box::new(PhotosTrash::default()))
         .exact("photos/trash/empty", || Box::new(EmptyTrashConfirm))
         .with(Box::new(|key| {
@@ -49,6 +48,25 @@ pub fn registry() -> Registry {
                 return Some(Box::new(SlideshowStage { id: id.to_owned() }));
             }
             if let Some(rest) = key.strip_prefix("photos/photo/") {
+                if let Some(id) = rest.strip_suffix("/link") {
+                    return Some(Box::new(super::link_picker::LinkPicker::new(
+                        id.to_owned(),
+                        format!("photos/photo/{id}"),
+                        words::title(EN),
+                    )));
+                }
+                if let Some(id) = rest.strip_suffix("/edited-copy") {
+                    return Some(Box::new(EditedCopyPage {
+                        source_id: id.to_owned(),
+                    }));
+                }
+                if let Some(id) = rest.strip_suffix("/versions") {
+                    return Some(super::versions::page(
+                        &format!("photos/photo/{id}/versions"),
+                        id,
+                        &words::title(EN),
+                    ));
+                }
                 if let Some(id) = rest.strip_suffix("/albums") {
                     return Some(Box::new(PickAlbumForPhoto {
                         photo_id: id.to_owned(),
@@ -316,12 +334,6 @@ fn photos_band(b: &mut Build<'_>, active_tab: &str) -> wire::RoomBand {
     let mut more_items = vec![
         blocks::menu_item(
             sel,
-            "more/free-space",
-            &words::more_free_space(EN),
-            Handler::Open(FREE_SPACE.to_owned()),
-        ),
-        blocks::menu_item(
-            sel,
             "more/export",
             &words::more_export(EN),
             Handler::Tag("more:export".to_owned()),
@@ -354,7 +366,11 @@ fn handle_more_or_nav(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
         "tab:tab/library" => Some(Outcome::replace(PHOTOS)),
         "tab:tab/albums" => Some(Outcome::replace(ALBUMS)),
         "tab:tab/places" => Some(Outcome::replace(PLACES)),
-        "more:export" => Some(Outcome::say(&words::export_note(EN))),
+        "more:export" => Some(super::export::ask(
+            "photo.export_zip",
+            json!({}),
+            &shared::owner_reason_export(EN),
+        )),
         _ => None,
     }
 }
@@ -371,6 +387,12 @@ fn selection_actions(sel: &mut Sel, ids: &[String]) -> Vec<wire::RoomMenuItem> {
     );
     trash.destructive = true;
     vec![
+        blocks::menu_item(
+            sel,
+            "selection/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(ids)),
+        ),
         blocks::menu_item(
             sel,
             "selection/star",
@@ -437,18 +459,34 @@ impl RoomScreen for LibraryPage {
             }
         };
 
-        let mut rows = answer.rows;
-        if !term.is_empty() {
-            let needle = term.to_lowercase();
-            rows.retain(|row| row.title.to_lowercase().contains(&needle));
+        let rows = answer.rows;
+        if !term.is_empty()
+            && let Err(sentence) =
+                search_view::load(b.ui, b.door, &["photo", "album", "place"], &term)
+        {
+            return room(wire::RoomKind::AppPlace, PHOTOS)
+                .title(&words::title(EN))
+                .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                .build();
         }
 
-        let ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
+        let ids: Vec<String> = if term.is_empty() {
+            rows.iter().map(|r| r.id.clone()).collect()
+        } else {
+            b.ui.search_hits().iter().map(|r| r.id.clone()).collect()
+        };
         b.ui.list(ids);
 
         let selecting = b.ui.selecting();
         let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
-        let count_str = words::photos_count(EN, rows.len() as u64);
+        let count_str = words::photos_count(
+            EN,
+            if term.is_empty() {
+                rows.len()
+            } else {
+                b.ui.search_hits().len()
+            } as u64,
+        );
 
         let mut f_videos = blocks::menu_item(
             &mut b.sel,
@@ -482,7 +520,18 @@ impl RoomScreen for LibraryPage {
         );
 
         let mut content = Vec::new();
-        if rows.is_empty() {
+        if !term.is_empty() {
+            content = search_view::rows(&mut b.sel, b.ui, selecting);
+            if content.is_empty() {
+                let body = fill(&words::empty_search_body(EN), &[("term", &term)]);
+                content.push(blocks::empty(
+                    glyph("Search", "photos"),
+                    &words::empty_search_title(EN),
+                    &body,
+                    None,
+                ));
+            }
+        } else if rows.is_empty() {
             if term.is_empty() {
                 let add = blocks::action(
                     &mut b.sel,
@@ -569,7 +618,7 @@ impl RoomScreen for LibraryPage {
         let sel_label = words::selected_count(EN, picked.len() as u64);
         let band = photos_band(b, PHOTOS);
 
-        room(wire::RoomKind::AppPlace, PHOTOS)
+        let mut built = room(wire::RoomKind::AppPlace, PHOTOS)
             .title(&words::title(EN))
             .subtitle(&count_str)
             .filter(&mut b.sel, filter_menu, b.ui)
@@ -581,16 +630,63 @@ impl RoomScreen for LibraryPage {
                 &words::add_photo(EN),
                 Handler::Tag("add:photo".to_owned()),
             )
+            .key(
+                &mut b.sel,
+                "header/select",
+                wire::RoomKeyRole::Tool,
+                "Check",
+                &shared::menu_select(EN),
+                Handler::SelectMode(true),
+            )
             .band(band)
             .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
             .selection(&mut b.sel, b.ui, &sel_label, sel_actions)
             .ready(content)
-            .build()
+            .build();
+        if let Some(search) = built.search.as_mut() {
+            search_view::decorate(&mut b.sel, search, b.ui);
+        }
+        built
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::attachments::handle(e, tag, input) {
+            return outcome;
+        }
+        if let Some(out) = super::export::handle(e, tag, input) {
+            return out;
+        }
         if let Some(out) = handle_more_or_nav(e, tag) {
             return out;
+        }
+        if tag == "selection/trash" {
+            let ids: Vec<String> = e.ui.picked().map(str::to_owned).collect();
+            if ids.is_empty() {
+                return Outcome::default();
+            }
+            return match e.door.act(&Act::new("entity.trash", json!({ "ids": ids }))) {
+                Ok(done) => {
+                    e.ui.select_mode(false);
+                    Outcome::done(&done.sentence, done.undo)
+                }
+                Err(refused) => Outcome::refuse(&refused.0),
+            };
+        }
+        if tag == "selection/star" {
+            let ids: Vec<String> = e.ui.picked().map(str::to_owned).collect();
+            if ids.is_empty() {
+                return Outcome::default();
+            }
+            return match e.door.act(&Act::new(
+                "flag.set/starred",
+                json!({ "flag": "starred", "ids": ids }),
+            )) {
+                Ok(done) => {
+                    e.ui.select_mode(false);
+                    Outcome::done(&done.sentence, done.undo)
+                }
+                Err(refused) => Outcome::refuse(&refused.0),
+            };
         }
         if tag == "zoom"
             && let Input::Option(opt) = input
@@ -611,7 +707,11 @@ impl RoomScreen for LibraryPage {
             return Outcome::default();
         }
         if tag == "add:photo" {
-            return Outcome::say(&words::add_photo_note(EN));
+            return super::attachments::ask("photo", "");
+        }
+        if tag == "next:search/more" {
+            e.ui.advance_search_page();
+            return Outcome::default();
         }
         if tag.starts_with("next:") {
             self.loaded = (self.loaded + 50).min(500);
@@ -707,8 +807,39 @@ impl RoomScreen for PhotoViewer {
             }
             facts.push(f);
         }
+        if let (Some(source_id), Some(source_title)) = (
+            photo.edited_from.as_deref(),
+            photo.edited_from_title.as_deref(),
+        ) {
+            let source = blocks::fact(
+                &words::fact_edited_from(EN),
+                source_title,
+                wire::RoomFactKind::Text,
+            );
+            facts.push(blocks::fact_actions(
+                &mut b.sel,
+                source,
+                "fact/edited-from",
+                Some(Handler::Open(format!("photos/photo/{source_id}"))),
+                None,
+            ));
+        }
 
         let mut details_blocks = vec![blocks::facts(facts)];
+
+        if let Ok(rev) = b.run(
+            &entity_reads::REVISION_HEAD,
+            &Args::new().text("id", &self.id),
+        ) && let Some(head) = rev.rows.first()
+            && head.count > 0
+        {
+            details_blocks.push(blocks::earlier_versions(
+                &mut b.sel,
+                &shared::versions_summary(EN, head.count as u64),
+                u32::try_from(head.count).unwrap_or(u32::MAX),
+                Handler::Open(format!("photos/photo/{}/versions", self.id)),
+            ));
+        }
 
         if let Ok(links) = b.run(&entity_reads::LINKED, &Args::new().text("id", &self.id)) {
             let mut linked_rows = Vec::new();
@@ -725,13 +856,23 @@ impl RoomScreen for PhotoViewer {
                             &target.title,
                             Handler::Tag(format!("open:{}:{}", target.kind, target.id)),
                         )
+                        .menu(super::link_picker::unlink_menu(&mut b.sel, &target.id))
                         .build(),
                     );
                 }
             }
-            if !linked_rows.is_empty() {
-                details_blocks.push(blocks::linked(&words::footer_linked(EN), linked_rows, None));
-            }
+            let add = blocks::action(
+                &mut b.sel,
+                "footer/linked/add",
+                &shared::link_add(EN),
+                "",
+                Handler::Tag("link:add".to_owned()),
+            );
+            details_blocks.push(blocks::linked(
+                &words::footer_linked(EN),
+                linked_rows,
+                Some(add),
+            ));
         }
 
         if let Ok(backlinks) = b.run(
@@ -783,56 +924,64 @@ impl RoomScreen for PhotoViewer {
         } else {
             words::menu_star(EN)
         };
+        let mut menu_items = vec![
+            blocks::menu_item(
+                &mut b.sel,
+                "viewer/menu/star",
+                &star_label,
+                Handler::Act(star_act),
+            ),
+            blocks::menu_item(
+                &mut b.sel,
+                "viewer/menu/details",
+                &words::menu_details(EN),
+                Handler::Tag("details:toggle".to_owned()),
+            ),
+            blocks::menu_item(
+                &mut b.sel,
+                "viewer/menu/organize",
+                &shared::organize(EN),
+                Handler::Open(super::organize::route(std::slice::from_ref(&self.id))),
+            ),
+            blocks::menu_item(
+                &mut b.sel,
+                "viewer/menu/slideshow",
+                &words::menu_slideshow(EN),
+                Handler::Open(format!("photos/slideshow/{}", self.id)),
+            ),
+            blocks::menu_item(
+                &mut b.sel,
+                "viewer/menu/album",
+                &words::menu_add_to_album(EN),
+                Handler::Open(format!("photos/photo/{}/albums", self.id)),
+            ),
+            blocks::menu_item(
+                &mut b.sel,
+                "viewer/menu/place",
+                &words::menu_set_place(EN),
+                Handler::Open(format!("photos/photo/{}/place", self.id)),
+            ),
+        ];
+        if photo.form == "photo" {
+            menu_items.push(blocks::menu_item(
+                &mut b.sel,
+                "viewer/menu/edited-copy",
+                &words::edited_copy_action(EN),
+                Handler::Tag("edited-copy".to_owned()),
+            ));
+        }
+        menu_items.extend([
+            blocks::menu_item(
+                &mut b.sel,
+                "viewer/menu/download",
+                &words::menu_download(EN),
+                Handler::Tag("download".to_owned()),
+            ),
+            trash,
+        ]);
         let menu = blocks::menu(
             "viewer/menu",
-            vec![blocks::menu_section(
-                "",
-                vec![
-                    blocks::menu_item(
-                        &mut b.sel,
-                        "viewer/menu/star",
-                        &star_label,
-                        Handler::Act(star_act),
-                    ),
-                    blocks::menu_item(
-                        &mut b.sel,
-                        "viewer/menu/details",
-                        &words::menu_details(EN),
-                        Handler::Tag("details:toggle".to_owned()),
-                    ),
-                    blocks::menu_item(
-                        &mut b.sel,
-                        "viewer/menu/slideshow",
-                        &words::menu_slideshow(EN),
-                        Handler::Open(format!("photos/slideshow/{}", self.id)),
-                    ),
-                    blocks::menu_item(
-                        &mut b.sel,
-                        "viewer/menu/album",
-                        &words::menu_add_to_album(EN),
-                        Handler::Open(format!("photos/photo/{}/albums", self.id)),
-                    ),
-                    blocks::menu_item(
-                        &mut b.sel,
-                        "viewer/menu/place",
-                        &words::menu_set_place(EN),
-                        Handler::Open(format!("photos/photo/{}/place", self.id)),
-                    ),
-                    blocks::menu_item(
-                        &mut b.sel,
-                        "viewer/menu/download",
-                        &words::menu_download(EN),
-                        Handler::Tag("download".to_owned()),
-                    ),
-                    blocks::menu_item(
-                        &mut b.sel,
-                        "viewer/menu/share",
-                        &words::menu_share(EN),
-                        Handler::Tag("share".to_owned()),
-                    ),
-                    trash,
-                ],
-            )],
+            vec![blocks::menu_section("", menu_items)],
             &mut b.sel,
         );
 
@@ -885,14 +1034,38 @@ impl RoomScreen for PhotoViewer {
             .build()
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::export::handle(e, tag, input) {
+            return outcome;
+        }
+        if let Some(outcome) = super::link_picker::handle_unlink(e, tag, &self.id) {
+            return outcome;
+        }
+        if tag == "link:add" {
+            return Outcome::push(&format!("photos/photo/{}/link", self.id));
+        }
+        if tag == "edited-copy" {
+            return Outcome::push(&format!("photos/photo/{}/edited-copy", self.id));
+        }
         match tag {
             "details:toggle" => {
                 self.details_open = !self.details_open;
                 Outcome::default()
             }
-            "download" => Outcome::say(&words::download_note(EN)),
-            "share" => Outcome::say(&words::shared(EN)),
+            "download" => {
+                let reader = match e.door.reader() {
+                    Ok(reader) => reader,
+                    Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+                };
+                let photo = match reader.run(&reads::BY_ID, &Args::new().text("id", &self.id)) {
+                    Ok(answer) => answer.rows.into_iter().next(),
+                    Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+                };
+                let Some(photo) = photo else {
+                    return Outcome::refuse(&words::not_found(EN));
+                };
+                super::export::download_original(e, &photo.blob)
+            }
             "trash" => {
                 let act = Act::new("entity.trash", json!({ "ids": [&self.id] }));
                 match e.door.act(&act) {
@@ -911,6 +1084,73 @@ impl RoomScreen for PhotoViewer {
 
 struct SlideshowStage {
     id: String,
+}
+
+struct EditedCopyPage {
+    source_id: String,
+}
+
+impl RoomScreen for EditedCopyPage {
+    fn key(&self) -> String {
+        format!("photos/photo/{}/edited-copy", self.source_id)
+    }
+
+    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let photo = match b.run(&reads::BY_ID, &Args::new().text("id", &self.source_id)) {
+            Ok(answer) => answer.rows.into_iter().next(),
+            Err(refused) => {
+                return room(wire::RoomKind::Sheet, &self.key())
+                    .title(&words::edited_copy_title(EN))
+                    .back(&mut b.sel, &words::title(EN))
+                    .failed(&mut b.sel, &refused.0, &shared::kit_retry(EN))
+                    .build();
+            }
+        };
+        let Some(photo) = photo else {
+            return room(wire::RoomKind::Sheet, &self.key())
+                .title(&words::edited_copy_title(EN))
+                .back(&mut b.sel, &words::title(EN))
+                .failed(&mut b.sel, &words::not_found(EN), &shared::kit_done(EN))
+                .build();
+        };
+        if photo.form != "photo" {
+            return room(wire::RoomKind::Sheet, &self.key())
+                .title(&words::edited_copy_title(EN))
+                .back(&mut b.sel, &words::title(EN))
+                .ready(vec![blocks::prose(&words::edited_copy_source_invalid(EN))])
+                .build();
+        }
+        let action = blocks::row(
+            &mut b.sel,
+            "edited-copy/choose",
+            &words::edited_copy_choose(EN),
+            Handler::Tag("choose".to_owned()),
+        )
+        .into_block();
+        room(wire::RoomKind::Sheet, &self.key())
+            .title(&words::edited_copy_title(EN))
+            .subtitle(&photo.title)
+            .back(&mut b.sel, &words::title(EN))
+            .ready(vec![blocks::prose(&words::edited_copy_body(EN)), action])
+            .build()
+    }
+
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(mut outcome) = super::attachments::handle(e, tag, input) {
+            if outcome
+                .status
+                .as_ref()
+                .is_some_and(|status| !status.refused)
+            {
+                outcome.nav = super::screen::Nav::Pop;
+            }
+            return outcome;
+        }
+        if tag == "choose" {
+            return super::attachments::ask("edited", &self.source_id);
+        }
+        Outcome::default()
+    }
 }
 
 impl RoomScreen for SlideshowStage {
@@ -2185,43 +2425,6 @@ impl RoomScreen for MergePlaceConfirm {
                 }
                 Err(refused) => Outcome::refuse(&refused.0),
             };
-        }
-        Outcome::default()
-    }
-}
-
-struct FreeSpaceSheet;
-
-impl RoomScreen for FreeSpaceSheet {
-    fn key(&self) -> String {
-        FREE_SPACE.to_owned()
-    }
-
-    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
-        let block = blocks::confirm(
-            &mut b.sel,
-            Confirm {
-                class: wire::RoomConfirmClass::Outlined,
-                title: &words::free_space_title(EN),
-                body: &words::free_space_body(EN),
-                warning: "",
-                confirm_label: &words::free_space_action(EN),
-                confirm: Handler::Tag("free".to_owned()),
-                cancel_label: &shared::kit_cancel(EN),
-                cancel: Handler::Back,
-            },
-        );
-        room(wire::RoomKind::Sheet, FREE_SPACE)
-            .title(&words::free_space_title(EN))
-            .ready(vec![block])
-            .build()
-    }
-
-    fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
-        if tag == "free" {
-            let mut out = Outcome::say(&words::free_space_done(EN));
-            out.nav = super::screen::Nav::Pop;
-            return out;
         }
         Outcome::default()
     }

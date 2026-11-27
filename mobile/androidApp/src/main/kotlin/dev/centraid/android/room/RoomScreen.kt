@@ -1,5 +1,6 @@
 package dev.centraid.android.room
 
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,6 +49,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -85,6 +89,10 @@ import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.LocalBandSearchKey
+import dev.centraid.android.kit.LocalAppAccentId
+import dev.centraid.android.kit.LocalBandHazeState
+import dev.centraid.android.kit.LocalBandOpaqueFallback
+import dev.centraid.android.kit.rememberHighTextContrast
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SecureWindow
 import dev.centraid.android.kit.SheetRoom
@@ -94,6 +102,7 @@ import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.bandFloor
 import dev.centraid.android.kit.bandGround
+import dev.centraid.android.kit.bandStrip
 import dev.centraid.android.kit.kitCard
 import dev.centraid.android.kit.kitStatusPill
 import dev.centraid.android.kit.kitTextStyle
@@ -102,6 +111,8 @@ import dev.centraid.android.kit.readableColumn
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import androidx.compose.runtime.CompositionLocalProvider
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 
@@ -115,20 +126,30 @@ internal fun RoomView(
     modifier: Modifier = Modifier,
     inlineSheet: Boolean = false,
 ) {
-    if (room.secure) SecureWindow(secure = true)
-    val backSelector = room.header_?.back?.selector_id.orEmpty()
-    if (backSelector.isNotEmpty()) {
-        BackHandler { onTap(backSelector) }
+    val canCaptureBackdrop = !room.secure && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !rememberHighTextContrast()
+    val hazeState = remember(room.key, room.secure, canCaptureBackdrop) {
+        if (canCaptureBackdrop) HazeState(initialBlurEnabled = true) else null
     }
-
-    when (room.kind) {
-        RoomKind.ROOM_KIND_STAGE -> RoomStageLayout(room, onTap, onChange, onCanvas, modifier)
-        RoomKind.ROOM_KIND_SHEET -> if (inlineSheet) {
-            RoomSheetBody(room, onTap, onChange, onCanvas, modifier)
-        } else {
-            RoomSheetModal(room, onTap, onChange, onCanvas, modifier)
+    CompositionLocalProvider(
+        LocalAppAccentId provides room.hue_key,
+        LocalBandHazeState provides hazeState,
+        LocalBandOpaqueFallback provides room.secure,
+    ) {
+        if (room.secure) SecureWindow(secure = true)
+        val backSelector = room.header_?.back?.selector_id.orEmpty()
+        if (backSelector.isNotEmpty()) {
+            BackHandler { onTap(backSelector) }
         }
-        else -> RoomStandardLayout(room, onTap, onChange, onScrolled, onCanvas, modifier)
+
+        when (room.kind) {
+            RoomKind.ROOM_KIND_STAGE -> RoomStageLayout(room, onTap, onChange, onCanvas, modifier)
+            RoomKind.ROOM_KIND_SHEET -> if (inlineSheet) {
+                RoomSheetBody(room, onTap, onChange, onCanvas, modifier)
+            } else {
+                RoomSheetModal(room, onTap, onChange, onCanvas, modifier)
+            }
+            else -> RoomStandardLayout(room, onTap, onChange, onScrolled, onCanvas, modifier)
+        }
     }
 }
 
@@ -145,6 +166,8 @@ private fun RoomStandardLayout(
     val showBand = !isEditor && room.band != null && room.selection?.on != true && room.search?.open_ != true
     val listState = rememberLazyListState()
     val readyBlocks = room.ready?.blocks.orEmpty()
+    var footerHeightPx by remember(room.key) { mutableIntStateOf(0) }
+    val density = LocalDensity.current
     val fullWidthCanvas = readyBlocks.any { block ->
         block.photo_grid != null ||
             (block.calendar_grid != null && block.calendar_grid!!.view != RoomCalendarView.ROOM_CALENDAR_VIEW_LIST)
@@ -212,9 +235,15 @@ private fun RoomStandardLayout(
                     val search = room.search
                     LazyColumn(
                         state = listState,
-                        contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp),
+                        contentPadding = PaddingValues(
+                            top = 6.dp,
+                            bottom = with(density) { footerHeightPx.toDp() } + 24.dp,
+                        ),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("room-scroll-content")
+                            .then(LocalBandHazeState.current?.let { Modifier.hazeSource(it) } ?: Modifier),
                     ) {
                         if (search != null && search.open_ && search.containers.isNotEmpty()) {
                             itemsIndexed(
@@ -242,16 +271,23 @@ private fun RoomStandardLayout(
                     }
                 }
             }
-        }
-
-        Column(Modifier.fillMaxWidth().readableColumn()) {
-            room.status_line?.let { statusLine ->
-                RoomStatusLineSlot(statusLine, onTap)
-            }
-            when {
-                room.selection?.on == true -> RoomSelectionSlot(room.selection!!, onTap)
-                room.search?.open_ == true -> RoomSearchSlot(room.search!!, onTap, onChange)
-                showBand -> RoomBandSlot(room.band!!, onTap)
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .readableColumn()
+                    .bandStrip()
+                    .onSizeChanged { footerHeightPx = it.height }
+                    .testTag("room-glass-footer"),
+            ) {
+                room.status_line?.let { statusLine ->
+                    RoomStatusLineSlot(statusLine, onTap)
+                }
+                when {
+                    room.selection?.on == true -> RoomSelectionSlot(room.selection!!, onTap)
+                    room.search?.open_ == true -> RoomSearchSlot(room.search!!, onTap, onChange)
+                    showBand -> RoomBandSlot(room.band!!, onTap)
+                }
             }
         }
     }

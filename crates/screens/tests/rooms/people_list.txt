@@ -23,6 +23,7 @@ room app_place key="people"
         menu #row/44f76807-49f2-7707-819d-f521f7803c2a/menu
           section
             item "Open" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/open
+            item "Move or tag" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/organize
             item "Edit" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/edit
             item "Star" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/star
             item "Share" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/share
@@ -33,6 +34,7 @@ room app_place key="people"
         menu #row/01900000-0000-7000-8000-000000000010/menu
           section
             item "Open" #row/01900000-0000-7000-8000-000000000010/menu/open
+            item "Move or tag" #row/01900000-0000-7000-8000-000000000010/menu/organize
             item "Edit" #row/01900000-0000-7000-8000-000000000010/menu/edit
             item "Unstar" #row/01900000-0000-7000-8000-000000000010/menu/star
             item "Share" #row/01900000-0000-7000-8000-000000000010/menu/share
@@ -43,6 +45,7 @@ room app_place key="people"
         menu #row/01900000-0000-7000-8000-000000000020/menu
           section
             item "Open" #row/01900000-0000-7000-8000-000000000020/menu/open
+            item "Move or tag" #row/01900000-0000-7000-8000-000000000020/menu/organize
             item "Edit" #row/01900000-0000-7000-8000-000000000020/menu/edit
             item "Star" #row/01900000-0000-7000-8000-000000000020/menu/star
             item "Share" #row/01900000-0000-7000-8000-000000000020/menu/share

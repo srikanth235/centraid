@@ -11,6 +11,7 @@ use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
+use super::search_view;
 use super::selector::{Act, Handler};
 use super::shell::UNITS_KEY;
 use crate::strings::{Locale, fill, health as words, home as home_words, shared};
@@ -21,6 +22,7 @@ pub const NEW_WORKOUT: &str = "health/workouts/new";
 pub const VITALS: &str = "health/vitals";
 pub const NEW_READING: &str = "health/reading/new";
 pub const KINDS: &str = "health/kinds";
+pub const EXPORT: &str = "health/export";
 pub const TRASH: &str = "health/trash";
 
 const EN: Locale = Locale::En;
@@ -46,6 +48,7 @@ pub fn registry() -> Registry {
         .exact(VITALS, || Box::new(VitalsRoom::default()))
         .exact(NEW_READING, || Box::new(ReadingForm::new_reading()))
         .exact(KINDS, || Box::new(WorkoutKindsRoom))
+        .exact(EXPORT, || Box::new(ExportChoiceRoom))
         .exact(TRASH, || Box::new(HealthTrash::default()))
         .exact("health/trash/empty", || Box::new(EmptyTrashConfirm))
         .with(Box::new(|key| {
@@ -58,6 +61,20 @@ pub fn registry() -> Registry {
                 return Some(Box::new(DayFiguresForm::new(day.to_owned())));
             }
             if let Some(rest) = key.strip_prefix("health/workout/") {
+                if let Some(id) = rest.strip_suffix("/link") {
+                    return Some(Box::new(super::link_picker::LinkPicker::new(
+                        id.to_owned(),
+                        format!("health/workout/{id}"),
+                        words::workouts_title(EN),
+                    )));
+                }
+                if let Some(id) = rest.strip_suffix("/versions") {
+                    return Some(super::versions::page(
+                        &format!("health/workout/{id}/versions"),
+                        id,
+                        &words::workouts_title(EN),
+                    ));
+                }
                 if let Some(id) = rest.strip_suffix("/edit") {
                     return Some(Box::new(WorkoutForm::edit_workout(id.to_owned())));
                 }
@@ -190,31 +207,8 @@ fn metric_label(metric: &str) -> String {
     }
 }
 
-fn epoch_ms_to_ymd(ms: i64) -> (i32, u32, u32) {
-    let days = ms.div_euclid(86_400_000);
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y = (yoe as i64) + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = y + i64::from(m <= 2);
-    (year as i32, m as u32, d as u32)
-}
-
-fn day_from_ms(ms: i64) -> String {
-    let (y, m, d) = epoch_ms_to_ymd(ms);
-    format!("{y:04}-{m:02}-{d:02}")
-}
-
 fn shift_day(day: &str, delta_days: i64) -> String {
-    let iso = format!("{day}T12:00:00.000Z");
-    centraid_vault::time::recurrence::parse_instant_ms(&iso)
-        .map(|ms| day_from_ms(ms + delta_days * 86_400_000))
-        .unwrap_or_else(|| day.to_owned())
+    centraid_domain::civil::shift_day(day, delta_days).unwrap_or_else(|| day.to_owned())
 }
 
 fn draft_key(door: &dyn Door) -> Option<String> {
@@ -305,8 +299,62 @@ fn handle_band_nav(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
         "tab:tab/summary" => Some(Outcome::replace(HEALTH)),
         "tab:tab/workouts" => Some(Outcome::replace(WORKOUTS)),
         "tab:tab/vitals" => Some(Outcome::replace(VITALS)),
-        "more:export" => Some(Outcome::say(&words::export_note(EN))),
+        "more:export" => Some(Outcome::push(EXPORT)),
         _ => None,
+    }
+}
+
+struct ExportChoiceRoom;
+
+impl RoomScreen for ExportChoiceRoom {
+    fn key(&self) -> String {
+        EXPORT.to_owned()
+    }
+
+    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let choices = [
+            ("measurements", words::export_measurements(EN)),
+            ("readings", words::export_readings(EN)),
+            ("workouts", words::export_workouts(EN)),
+        ];
+        let rows: Vec<wire::RoomBlock> = choices
+            .into_iter()
+            .map(|(kind, title)| {
+                blocks::row(
+                    &mut b.sel,
+                    &format!("export/{kind}"),
+                    &title,
+                    Handler::Tag(format!("health-export:{kind}")),
+                )
+                .into_block()
+            })
+            .collect();
+        room(wire::RoomKind::PushedPage, EXPORT)
+            .title(&words::export_title(EN))
+            .back(&mut b.sel, &words::title(EN))
+            .ready(vec![
+                blocks::section(&mut b.sel, "export/kinds", &words::export_heading(EN))
+                    .blocks(rows)
+                    .into_block(),
+            ])
+            .build()
+    }
+
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::export::handle(e, tag, input) {
+            return outcome;
+        }
+        let Some(kind) = tag.strip_prefix("health-export:") else {
+            return Outcome::default();
+        };
+        if !matches!(kind, "measurements" | "readings" | "workouts") {
+            return Outcome::default();
+        }
+        super::export::ask(
+            "health.export_csv",
+            json!({"what": kind}),
+            &shared::owner_reason_export(EN),
+        )
     }
 }
 
@@ -318,8 +366,8 @@ struct SummaryRoom {
 }
 
 impl SummaryRoom {
-    fn active_day(&mut self, now_ms: i64) -> String {
-        self.day.get_or_insert_with(|| day_from_ms(now_ms)).clone()
+    fn active_day(&mut self, door: &dyn Door) -> String {
+        self.day.get_or_insert_with(|| door.today()).clone()
     }
 
     fn metric(&self) -> &str {
@@ -333,7 +381,7 @@ impl RoomScreen for SummaryRoom {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
-        let day = self.active_day(b.door.now_ms());
+        let day = self.active_day(b.door);
         let units = member_units(b.door);
         let owner = match owner_id(b) {
             Ok(id) => id,
@@ -360,18 +408,33 @@ impl RoomScreen for SummaryRoom {
         };
 
         let metric = self.metric().to_owned();
-        let from_day = shift_day(&day, -13);
-        let trend = b
-            .run(
-                &reads::METRIC_TREND,
-                &Args::new()
-                    .text("metric", &metric)
-                    .text("person", &owner)
-                    .day("from_day", &from_day)
-                    .day("to_day", &day),
-            )
-            .map(|a| a.rows)
-            .unwrap_or_default();
+        let from_day = shift_day(&day, -28);
+        let trend = match b.run(
+            &reads::METRIC_TREND,
+            &Args::new()
+                .text("metric", &metric)
+                .text("person", &owner)
+                .day("from_day", &from_day)
+                .day("to_day", &day),
+        ) {
+            Ok(answer) => answer.rows,
+            Err(refused) => {
+                return room(wire::RoomKind::AppPlace, HEALTH)
+                    .title(&words::title(EN))
+                    .band(health_band(b, HEALTH))
+                    .failed(&mut b.sel, &refused.0, &shared::kit_retry(EN))
+                    .build();
+            }
+        };
+        let typical = reads::typical_range(
+            &day,
+            &trend
+                .iter()
+                .map(|row| (row.day.clone(), row.value))
+                .collect::<Vec<_>>(),
+        );
+        let phone_health_enrolled =
+            super::follow::status(b.door, "health").is_some_and(|status| status.enrolled);
 
         let mut blocks_out = Vec::new();
         let metric_options: Vec<wire::RoomOption> = SUMMARY_METRICS
@@ -394,7 +457,22 @@ impl RoomScreen for SummaryRoom {
             min_val = min_val.min(row.value);
             max_val = max_val.max(row.value);
         }
-        let points: Vec<wire::RoomChartPoint> = trend
+        // The chart is the recent two weeks; the typical range below uses the
+        // full prior 28 completed days. Keep the chart's axis and copy aligned.
+        let chart_from = shift_day(&day, -13);
+        let chart_rows = trend
+            .iter()
+            .filter(|row| row.day >= chart_from)
+            .collect::<Vec<_>>();
+        let chart_min = chart_rows
+            .iter()
+            .map(|row| row.value)
+            .fold(f64::INFINITY, f64::min);
+        let chart_max = chart_rows
+            .iter()
+            .map(|row| row.value)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let points: Vec<wire::RoomChartPoint> = chart_rows
             .iter()
             .enumerate()
             .map(|(idx, row)| {
@@ -403,26 +481,34 @@ impl RoomScreen for SummaryRoom {
                     id: format!("day:{}", row.day),
                     x: idx as f64,
                     y: row.value,
-                    y_low: if trend.len() >= 3 { min_val } else { 0.0 },
-                    y_high: if trend.len() >= 3 { max_val } else { 0.0 },
+                    y_low: if chart_rows.len() >= 3 {
+                        chart_min
+                    } else {
+                        0.0
+                    },
+                    y_high: if chart_rows.len() >= 3 {
+                        chart_max
+                    } else {
+                        0.0
+                    },
                     x_label: row.day[5..].to_owned(),
                     y_label: formatted.clone(),
                     a11y_label: format!("{}: {formatted}", row.day),
                 }
             })
             .collect();
-        let y_ticks = if trend.is_empty() {
+        let y_ticks = if chart_rows.is_empty() {
             Vec::new()
         } else {
-            let unit = trend[0].unit.as_str();
+            let unit = chart_rows[0].unit.as_str();
             vec![
                 wire::RoomChartTick {
-                    at: min_val,
-                    label: fmt_metric_value(units, &metric, unit, min_val, None),
+                    at: chart_min,
+                    label: fmt_metric_value(units, &metric, unit, chart_min, None),
                 },
                 wire::RoomChartTick {
-                    at: max_val,
-                    label: fmt_metric_value(units, &metric, unit, max_val, None),
+                    at: chart_max,
+                    label: fmt_metric_value(units, &metric, unit, chart_max, None),
                 },
             ]
         };
@@ -457,7 +543,11 @@ impl RoomScreen for SummaryRoom {
             empty_sentence: fill(&words::summary_chart_empty(EN), &[("metric", &mlabel)]),
         }));
 
-        if totals.is_empty() && trend.is_empty() && !first::holds(b, "workout") {
+        if totals.is_empty()
+            && trend.is_empty()
+            && !first::holds(b, "workout")
+            && !phone_health_enrolled
+        {
             let (sentence, label) = if b.door.reminders_source() {
                 (
                     home_words::first_open_health(EN),
@@ -514,6 +604,16 @@ impl RoomScreen for SummaryRoom {
                     ));
                 }
             }
+            if phone_health_enrolled
+                && day == b.door.today()
+                && !totals.iter().any(|row| row.metric == "steps")
+            {
+                rows.push(
+                    blocks::still_row(&mut b.sel, "total/steps", &metric_label("steps"))
+                        .trailing(&words::summary_today_nothing(EN), wire::RoomTone::Neutral)
+                        .into_block(),
+                );
+            }
             blocks_out.push(
                 blocks::section(&mut b.sel, "section/totals", &words::summary_heading(EN))
                     .blocks(rows)
@@ -527,6 +627,60 @@ impl RoomScreen for SummaryRoom {
                     &words::take_phone_value(EN),
                 ));
             }
+        }
+
+        let range_heading = words::summary_typical_heading(EN);
+        let range_period = fill(
+            &words::summary_typical_period(EN),
+            &[("metric", &metric_label(&metric))],
+        );
+        let range_row = if day == b.door.today() {
+            if let Some(range) = typical {
+                let lower = fmt_metric_value(
+                    units,
+                    &metric,
+                    trend.first().map_or("", |row| row.unit.as_str()),
+                    range.lower,
+                    None,
+                );
+                let upper = fmt_metric_value(
+                    units,
+                    &metric,
+                    trend.first().map_or("", |row| row.unit.as_str()),
+                    range.upper,
+                    None,
+                );
+                let value = fill(
+                    &words::summary_typical_value(EN),
+                    &[("lower", &lower), ("upper", &upper)],
+                );
+                let detail = fill(
+                    &words::summary_typical_days(EN),
+                    &[
+                        ("count", &range.observed_days.to_string()),
+                        ("metric", &metric_label(&metric).to_lowercase()),
+                    ],
+                );
+                blocks::still_row(&mut b.sel, "typical/range", &range_period)
+                    .meta(&detail)
+                    .trailing(&value, wire::RoomTone::Neutral)
+                    .into_block()
+            } else {
+                blocks::still_row(&mut b.sel, "typical/range", &range_period)
+                    .meta(&words::summary_typical_wait(EN))
+                    .into_block()
+            }
+        } else {
+            // This comparison is historical navigation; the helper is defined
+            // against the member's current local day, so don't relabel history.
+            wire::RoomBlock::default()
+        };
+        if range_row.kind.is_some() {
+            blocks_out.push(
+                blocks::section(&mut b.sel, "section/typical", &range_heading)
+                    .block(range_row)
+                    .into_block(),
+            );
         }
 
         room(wire::RoomKind::AppPlace, HEALTH)
@@ -559,11 +713,11 @@ impl RoomScreen for SummaryRoom {
         }
         match tag {
             "day:prev" => {
-                let current = self.active_day(e.door.now_ms());
+                let current = self.active_day(e.door);
                 self.day = Some(shift_day(&current, -1));
             }
             "day:next" => {
-                let current = self.active_day(e.door.now_ms());
+                let current = self.active_day(e.door);
                 self.day = Some(shift_day(&current, 1));
             }
             "metric:pick" => {
@@ -719,6 +873,70 @@ struct WorkoutsRoom {
     loaded: usize,
 }
 
+fn workout_selection_actions(
+    sel: &mut super::selector::Sel,
+    ids: &[String],
+    unstar: Option<bool>,
+) -> Vec<wire::RoomMenuItem> {
+    if ids.is_empty() {
+        return Vec::new();
+    }
+    let mut trash = blocks::menu_item(
+        sel,
+        "selection/trash",
+        &shared::trash_move(EN),
+        Handler::Act(Act::new("entity.trash", json!({ "ids": ids }))),
+    );
+    trash.destructive = true;
+    let mut actions = Vec::new();
+    if super::organize::can_organize("workout") {
+        actions.push(blocks::menu_item(
+            sel,
+            "selection/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(ids)),
+        ));
+    }
+    if let Some(unstar) = unstar {
+        actions.push(blocks::menu_item(
+            sel,
+            "selection/star",
+            &if unstar {
+                words::workout_menu_unstar(EN)
+            } else {
+                words::workout_menu_star(EN)
+            },
+            Handler::Act(Act::new(
+                if unstar {
+                    "flag.clear/starred"
+                } else {
+                    "flag.set/starred"
+                },
+                json!({ "flag": "starred", "ids": ids }),
+            )),
+        ));
+    }
+    actions.push(trash);
+    actions
+}
+
+fn workout_search_unstar(b: &mut Build<'_>, ids: &[String]) -> Option<bool> {
+    if ids.is_empty() {
+        return None;
+    }
+    let mut all_starred = true;
+    for id in ids {
+        let workout = b
+            .run(&reads::WORKOUT_BY_ID, &Args::new().text("id", id))
+            .ok()?
+            .rows
+            .into_iter()
+            .next()?;
+        all_starred &= workout.starred_at.is_some();
+    }
+    Some(all_starred)
+}
+
 impl WorkoutsRoom {
     fn page_size(&self) -> usize {
         if self.loaded == 0 { 50 } else { self.loaded }
@@ -731,6 +949,55 @@ impl RoomScreen for WorkoutsRoom {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let query = b.ui.search_term().trim().to_owned();
+        if !query.is_empty() {
+            if let Err(sentence) = search_view::load(b.ui, b.door, &["workout"], &query) {
+                return room(wire::RoomKind::AppPlace, WORKOUTS)
+                    .title(&words::workouts_title(EN))
+                    .band(health_band(b, WORKOUTS))
+                    .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                    .build();
+            }
+            let selecting = b.ui.selecting();
+            let mut content = search_view::rows(&mut b.sel, b.ui, selecting);
+            if content.is_empty() {
+                content.push(blocks::empty(
+                    glyph("Search", "app.health"),
+                    &words::empty_search_title(EN),
+                    &fill(&words::empty_search_body(EN), &[("term", &query)]),
+                    None,
+                ));
+            }
+            let ids: Vec<String> =
+                b.ui.search_hits()
+                    .iter()
+                    .map(|target| target.id.clone())
+                    .collect();
+            b.ui.list(ids);
+            let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
+            let unstar = workout_search_unstar(b, &picked);
+            let actions = workout_selection_actions(&mut b.sel, &picked, unstar);
+            let selected_count = shared::selected_count(EN, picked.len() as u64);
+            let mut built = room(wire::RoomKind::AppPlace, WORKOUTS)
+                .title(&words::workouts_title(EN))
+                .key(
+                    &mut b.sel,
+                    "key/add",
+                    wire::RoomKeyRole::Add,
+                    "Add",
+                    &words::workout_add(EN),
+                    Handler::Open(NEW_WORKOUT.to_owned()),
+                )
+                .band(health_band(b, WORKOUTS))
+                .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
+                .selection(&mut b.sel, b.ui, &selected_count, actions)
+                .ready(content)
+                .build();
+            if let Some(search) = built.search.as_mut() {
+                search_view::decorate(&mut b.sel, search, b.ui);
+            }
+            return built;
+        }
         let units = member_units(b.door);
         let page = match b.reload(&reads::WORKOUTS, &Args::new(), self.page_size()) {
             Ok(ans) => ans,
@@ -742,6 +1009,15 @@ impl RoomScreen for WorkoutsRoom {
                     .build();
             }
         };
+        b.ui.list(page.rows.iter().map(|workout| workout.id.clone()));
+        let selecting = b.ui.selecting();
+        let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
+        let unstar = !picked.is_empty()
+            && page
+                .rows
+                .iter()
+                .filter(|workout| picked.contains(&workout.id))
+                .all(|workout| workout.starred_at.is_some());
         let blocks_out = if page.rows.is_empty() {
             vec![blocks::empty(
                 glyph("Activity", "app.health"),
@@ -795,53 +1071,73 @@ impl RoomScreen for WorkoutsRoom {
                         Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
                     );
                     trash_item.destructive = true;
+                    let mut menu_items = vec![
+                        blocks::menu_item(
+                            &mut b.sel,
+                            &format!("row/{id}/menu/open"),
+                            &shared::kit_open(EN),
+                            Handler::Open(format!("health/workout/{id}")),
+                        ),
+                        blocks::menu_item(
+                            &mut b.sel,
+                            &format!("row/{id}/menu/edit"),
+                            &words::workout_menu_edit(EN),
+                            Handler::Open(format!("health/workout/{id}/edit")),
+                        ),
+                        blocks::menu_item(
+                            &mut b.sel,
+                            &format!("row/{id}/menu/star"),
+                            &if starred {
+                                words::workout_menu_unstar(EN)
+                            } else {
+                                words::workout_menu_star(EN)
+                            },
+                            Handler::Act(star_act),
+                        ),
+                    ];
+                    if !selecting {
+                        if super::organize::can_organize("workout") {
+                            menu_items.push(blocks::menu_item(
+                                &mut b.sel,
+                                &format!("row/{id}/menu/organize"),
+                                &shared::organize(EN),
+                                Handler::Open(super::organize::route(std::slice::from_ref(id))),
+                            ));
+                        }
+                        menu_items.push(blocks::menu_item(
+                            &mut b.sel,
+                            &format!("row/{id}/menu/select"),
+                            &shared::menu_select(EN),
+                            Handler::SelectMode(true),
+                        ));
+                        menu_items.push(trash_item);
+                    }
                     let menu = blocks::menu(
                         &format!("row/{id}/menu"),
-                        vec![blocks::menu_section(
-                            "",
-                            vec![
-                                blocks::menu_item(
-                                    &mut b.sel,
-                                    &format!("row/{id}/menu/open"),
-                                    &shared::kit_open(EN),
-                                    Handler::Open(format!("health/workout/{id}")),
-                                ),
-                                blocks::menu_item(
-                                    &mut b.sel,
-                                    &format!("row/{id}/menu/edit"),
-                                    &words::workout_menu_edit(EN),
-                                    Handler::Open(format!("health/workout/{id}/edit")),
-                                ),
-                                blocks::menu_item(
-                                    &mut b.sel,
-                                    &format!("row/{id}/menu/star"),
-                                    &if starred {
-                                        words::workout_menu_unstar(EN)
-                                    } else {
-                                        words::workout_menu_star(EN)
-                                    },
-                                    Handler::Act(star_act),
-                                ),
-                                trash_item,
-                            ],
-                        )],
+                        vec![blocks::menu_section("", menu_items)],
                         &mut b.sel,
                     );
-                    blocks::row(
+                    let mut row = blocks::row(
                         &mut b.sel,
                         &format!("row/{id}"),
                         title,
-                        Handler::Open(format!("health/workout/{id}")),
+                        if selecting {
+                            Handler::Pick(id.clone())
+                        } else {
+                            Handler::Open(format!("health/workout/{id}"))
+                        },
                     )
                     .meta(&parts.join(" · "))
-                    .menu(menu)
-                    .swipe(
-                        &mut b.sel,
-                        &format!("row/{id}/swipe"),
-                        &shared::trash_move(EN),
-                        Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
-                    )
-                    .into_block()
+                    .selected(b.ui.is_picked(id));
+                    if !selecting {
+                        row = row.menu(menu).swipe(
+                            &mut b.sel,
+                            &format!("row/{id}/swipe"),
+                            &shared::trash_move(EN),
+                            Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
+                        );
+                    }
+                    row.into_block()
                 })
                 .collect();
             let mut section =
@@ -853,6 +1149,8 @@ impl RoomScreen for WorkoutsRoom {
             vec![section.into_block()]
         };
 
+        let selection = workout_selection_actions(&mut b.sel, &picked, Some(unstar));
+        let selected_count = shared::selected_count(EN, picked.len() as u64);
         room(wire::RoomKind::AppPlace, WORKOUTS)
             .title(&words::workouts_title(EN))
             .key(
@@ -864,6 +1162,7 @@ impl RoomScreen for WorkoutsRoom {
                 Handler::Open(NEW_WORKOUT.to_owned()),
             )
             .band(health_band(b, WORKOUTS))
+            .selection(&mut b.sel, b.ui, &selected_count, selection)
             .ready(blocks_out)
             .build()
     }
@@ -871,6 +1170,10 @@ impl RoomScreen for WorkoutsRoom {
     fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
         if let Some(outcome) = handle_band_nav(e, tag) {
             return outcome;
+        }
+        if tag == "next:search/more" {
+            e.ui.advance_search_page();
+            return Outcome::default();
         }
         if tag == "next_page" {
             self.loaded = self.page_size().saturating_add(50);
@@ -1045,23 +1348,35 @@ impl RoomScreen for WorkoutDetailRoom {
             ));
         }
 
-        if let Ok(links) = b.run(&entity_reads::LINKED, &Args::new().text("id", &self.id))
-            && !links.rows.is_empty()
-        {
+        if let Ok(links) = b.run(&entity_reads::LINKED, &Args::new().text("id", &self.id)) {
             let rows = links
                 .rows
                 .iter()
-                .map(|other_id| {
-                    let label = b
+                .filter_map(|other_id| {
+                    let target = b
                         .run(&entity_reads::META_BY_ID, &Args::new().text("id", other_id))
                         .ok()
-                        .and_then(|a| a.rows.into_iter().next())
-                        .map(|m| m.title)
-                        .unwrap_or_else(|| other_id.clone());
-                    blocks::still_row(&mut b.sel, &format!("link/{other_id}"), &label).build()
+                        .and_then(|a| a.rows.into_iter().next())?;
+                    Some(
+                        blocks::row(
+                            &mut b.sel,
+                            &format!("link/{}", target.id),
+                            &target.title,
+                            Handler::Tag(format!("open:{}:{}", target.kind, target.id)),
+                        )
+                        .menu(super::link_picker::unlink_menu(&mut b.sel, &target.id))
+                        .build(),
+                    )
                 })
                 .collect();
-            blocks_out.push(blocks::linked(&words::linked_heading(EN), rows, None));
+            let add = blocks::action(
+                &mut b.sel,
+                "footer/linked/add",
+                &shared::link_add(EN),
+                "",
+                Handler::Tag("link:add".to_owned()),
+            );
+            blocks_out.push(blocks::linked(&words::linked_heading(EN), rows, Some(add)));
         }
 
         if let Ok(mentions) = b.run(
@@ -1089,7 +1404,7 @@ impl RoomScreen for WorkoutDetailRoom {
                 &mut b.sel,
                 &words::earlier_versions_summary(EN),
                 u32::try_from(head.count).unwrap_or(u32::MAX),
-                Handler::Tag("earlier".to_owned()),
+                Handler::Open(format!("health/workout/{}/versions", self.id)),
             ));
         }
 
@@ -1117,6 +1432,12 @@ impl RoomScreen for WorkoutDetailRoom {
             Handler::Act(Act::new("entity.trash", json!({ "ids": [self.id] }))),
         );
         trash_item.destructive = true;
+        let organizer = blocks::menu_item(
+            &mut b.sel,
+            "menu/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(std::slice::from_ref(&self.id))),
+        );
         let menu = blocks::menu(
             "header/menu",
             vec![blocks::menu_section(
@@ -1138,6 +1459,7 @@ impl RoomScreen for WorkoutDetailRoom {
                         },
                         Handler::Act(star_act),
                     ),
+                    organizer,
                     trash_item,
                 ],
             )],
@@ -1151,6 +1473,17 @@ impl RoomScreen for WorkoutDetailRoom {
             .ready(blocks_out)
             .build()
     }
+
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+        if let Some(outcome) = super::link_picker::handle_unlink(e, tag, &self.id) {
+            return outcome;
+        }
+        if tag == "link:add" {
+            Outcome::push(&format!("health/workout/{}/link", self.id))
+        } else {
+            Outcome::default()
+        }
+    }
 }
 
 struct WorkoutForm {
@@ -1158,6 +1491,7 @@ struct WorkoutForm {
     loaded: bool,
     drafted: bool,
     dirty: bool,
+    confirm_discard: bool,
     expected_rev: Option<i64>,
     selected_type: String,
 }
@@ -1169,6 +1503,7 @@ impl WorkoutForm {
             loaded: false,
             drafted: false,
             dirty: false,
+            confirm_discard: false,
             expected_rev: None,
             selected_type: "run".to_owned(),
         }
@@ -1180,6 +1515,7 @@ impl WorkoutForm {
             loaded: false,
             drafted: false,
             dirty: false,
+            confirm_discard: false,
             expected_rev: None,
             selected_type: "run".to_owned(),
         }
@@ -1228,6 +1564,25 @@ impl RoomScreen for WorkoutForm {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        if self.confirm_discard {
+            let confirm = blocks::confirm(
+                &mut b.sel,
+                Confirm {
+                    class: wire::RoomConfirmClass::Outlined,
+                    title: &words::discard_title(EN),
+                    body: &words::discard_body(EN),
+                    warning: "",
+                    confirm_label: &words::discard_confirm(EN),
+                    confirm: Handler::Tag("discard:yes".to_owned()),
+                    cancel_label: &words::discard_keep(EN),
+                    cancel: Handler::Tag("discard:no".to_owned()),
+                },
+            );
+            return room(wire::RoomKind::Sheet, &self.key())
+                .title(&words::discard_title(EN))
+                .ready(vec![confirm])
+                .build();
+        }
         let units = member_units(b.door);
         let kinds = b
             .run(&reads::WORKOUT_KINDS, &Args::new())
@@ -1283,7 +1638,7 @@ impl RoomScreen for WorkoutForm {
                 }
                 self.drafted = true;
             } else {
-                let default_start = format!("{}T07:00:00.000Z", day_from_ms(b.door.now_ms()));
+                let default_start = b.door.at_time(&b.door.today(), 7, 0);
                 b.ui.fields.get_or("starts", &default_start);
             }
             self.loaded = true;
@@ -1422,8 +1777,20 @@ impl RoomScreen for WorkoutForm {
             return Outcome::default();
         }
         if tag == "workout:cancel" {
+            if self.dirty || self.drafted {
+                self.confirm_discard = true;
+                return Outcome::default();
+            }
             self.clear_draft(e.door);
             return Outcome::pop();
+        }
+        if tag == "discard:yes" {
+            self.clear_draft(e.door);
+            return Outcome::pop();
+        }
+        if tag == "discard:no" {
+            self.confirm_discard = false;
+            return Outcome::default();
         }
         if tag != "workout:save" {
             return Outcome::default();
@@ -1742,6 +2109,7 @@ struct ReadingForm {
     loaded: bool,
     dirty: bool,
     expected_rev: Option<i64>,
+    confirm_discard: bool,
 }
 
 impl ReadingForm {
@@ -1752,6 +2120,7 @@ impl ReadingForm {
             loaded: false,
             dirty: false,
             expected_rev: None,
+            confirm_discard: false,
         }
     }
 
@@ -1762,6 +2131,7 @@ impl ReadingForm {
             loaded: false,
             dirty: false,
             expected_rev: None,
+            confirm_discard: false,
         }
     }
 }
@@ -1775,6 +2145,25 @@ impl RoomScreen for ReadingForm {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        if self.confirm_discard {
+            let confirm = blocks::confirm(
+                &mut b.sel,
+                Confirm {
+                    class: wire::RoomConfirmClass::Outlined,
+                    title: &words::discard_title(EN),
+                    body: &words::discard_body(EN),
+                    warning: "",
+                    confirm_label: &words::discard_confirm(EN),
+                    confirm: Handler::Tag("discard:yes".to_owned()),
+                    cancel_label: &words::discard_keep(EN),
+                    cancel: Handler::Tag("discard:no".to_owned()),
+                },
+            );
+            return room(wire::RoomKind::Sheet, &self.key())
+                .title(&words::discard_title(EN))
+                .ready(vec![confirm])
+                .build();
+        }
         let units = member_units(b.door);
         if !self.loaded {
             if let Some(id) = &self.id {
@@ -1882,7 +2271,7 @@ impl RoomScreen for ReadingForm {
                 save_label: &shared::kit_save(EN),
                 save: Handler::Tag("reading:save".to_owned()),
                 cancel_label: &shared::kit_cancel(EN),
-                cancel: Handler::Back,
+                cancel: Handler::Tag("reading:cancel".to_owned()),
                 save_enabled: true,
                 dirty: self.dirty,
                 drafted: false,
@@ -1902,6 +2291,20 @@ impl RoomScreen for ReadingForm {
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if tag == "reading:cancel" {
+            if self.dirty {
+                self.confirm_discard = true;
+                return Outcome::default();
+            }
+            return Outcome::pop();
+        }
+        if tag == "discard:yes" {
+            return Outcome::pop();
+        }
+        if tag == "discard:no" {
+            self.confirm_discard = false;
+            return Outcome::default();
+        }
         if tag == "reading:metric" {
             if let Input::Option(code) = input {
                 self.metric = code.clone();

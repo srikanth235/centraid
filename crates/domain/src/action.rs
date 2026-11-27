@@ -89,7 +89,7 @@ pub const ACTION_VERBS: [&str; 76] = [
 ];
 
 /// The verbs only core services and followers call.
-pub const SYSTEM_VERBS: [&str; 21] = [
+pub const SYSTEM_VERBS: [&str; 22] = [
     "advance_cursor",
     "calendar",
     "camera_roll",
@@ -105,6 +105,7 @@ pub const SYSTEM_VERBS: [&str; 21] = [
     "mark_used",
     "reminders",
     "remember_layout",
+    "restore_many",
     "save_turn",
     "settle_proposal",
     "stage",
@@ -113,10 +114,11 @@ pub const SYSTEM_VERBS: [&str; 21] = [
     "write",
 ];
 
-/// Commands whose verb is an action verb and which are still a core service's: the health
-/// follower's day totals. Every followed store's pass (`follow.contacts`, …) has a system verb
-/// of its own, so only `follow.stop` and `follow.take_stated` are actions.
-pub const SYSTEM_COMMANDS: [&str; 1] = ["measurement.record"];
+/// Commands called by a core service or room host that have an action-like command name but are
+/// not exposed as member actions. This includes the health follower's day totals and atomic
+/// multi-record history restoration. Every followed store's pass (`follow.contacts`, …) has a
+/// system verb of its own, so only `follow.stop` and `follow.take_stated` are actions.
+pub const SYSTEM_COMMANDS: [&str; 2] = ["measurement.record", "history.restore_many"];
 
 /// The most ids an action takes at once.
 pub const MAX_TARGETS: usize = 500;

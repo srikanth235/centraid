@@ -59,7 +59,7 @@ const GROUPS: [&str; 21] = [
 
 /// The closed list of verbs. A new verb is a decision of its own: it is added here, in the change
 /// that adds the command.
-const VERBS: [&str; 97] = [
+const VERBS: [&str; 98] = [
     "add",
     "add_date",
     "add_guest",
@@ -132,6 +132,7 @@ const VERBS: [&str; 97] = [
     "replace",
     "respond",
     "restore",
+    "restore_many",
     "restore_version",
     "retitle",
     "save_contact_point",

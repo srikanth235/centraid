@@ -9,6 +9,7 @@ use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
+use super::search_view;
 use super::selector::{Act, Handler};
 use crate::strings::{Locale, calendar as words, fill, home as home_words, shared};
 
@@ -49,6 +50,20 @@ pub fn registry() -> Registry {
                 return Some(Box::new(TrashCalendarConfirm { id: id.to_owned() }));
             }
             if let Some(rest) = key.strip_prefix("calendar/event/") {
+                if let Some(id) = rest.strip_suffix("/link") {
+                    return Some(Box::new(super::link_picker::LinkPicker::new(
+                        id.to_owned(),
+                        format!("calendar/event/{id}"),
+                        words::app_title(EN),
+                    )));
+                }
+                if let Some(id) = rest.strip_suffix("/versions") {
+                    return Some(super::versions::page(
+                        &format!("calendar/event/{id}/versions"),
+                        id,
+                        &words::app_title(EN),
+                    ));
+                }
                 if let Some(id) = rest.strip_suffix("/edit") {
                     return Some(Box::new(EventForm::edit_event(id.to_owned())));
                 }
@@ -105,14 +120,17 @@ fn fmt_ymd(y: i32, m: u32, d: u32) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
-fn today_iso(now_ms: i64) -> String {
-    let (y, m, d) = epoch_ms_to_ymd(now_ms);
-    fmt_ymd(y, m, d)
-}
-
-fn now_minute_of(now_ms: i64) -> u32 {
-    let secs = now_ms.div_euclid(1_000).rem_euclid(86_400);
-    u32::try_from(secs / 60).unwrap_or(0)
+fn now_minute_of(local: &str) -> u32 {
+    let Some(time) = local.get(11..16) else {
+        return 0;
+    };
+    let Some((hour, minute)) = time.split_once(':') else {
+        return 0;
+    };
+    let (Ok(hour), Ok(minute)) = (hour.parse::<u32>(), minute.parse::<u32>()) else {
+        return 0;
+    };
+    hour.saturating_mul(60).saturating_add(minute).min(1439)
 }
 
 fn shift_day(day: &str, delta: i64) -> String {
@@ -250,7 +268,11 @@ fn handle_band_tag(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
         "nav:home" => Some(Outcome::replace(super::shell::HOME)),
         "tab:tab/calendar" => Some(Outcome::replace(CALENDAR)),
         "tab:tab/calendars" => Some(Outcome::replace(CALENDARS)),
-        "more:export" => Some(Outcome::say(&words::export_note(EN))),
+        "more:export" => Some(super::export::ask(
+            "event.export_ics",
+            json!({}),
+            &shared::owner_reason_export(EN),
+        )),
         _ => None,
     }
 }
@@ -291,6 +313,84 @@ fn event_covers_day(ev: &reads::EventSummary, day: &str) -> bool {
     start_day <= day && end_day >= day
 }
 
+struct SelectionRow<'a> {
+    id: &'a str,
+    kind: &'a str,
+    title: &'a str,
+    meta: &'a str,
+    open: String,
+    selected: bool,
+    selecting: bool,
+}
+
+fn selection_row(sel: &mut super::selector::Sel, row: SelectionRow<'_>) -> wire::RoomBlock {
+    let SelectionRow {
+        id,
+        kind,
+        title,
+        meta,
+        open,
+        selected,
+        selecting,
+    } = row;
+    let mut menu_items = vec![blocks::menu_item(
+        sel,
+        &format!("row/{id}/menu/open"),
+        &shared::kit_open(EN),
+        Handler::Open(open.clone()),
+    )];
+    if !selecting {
+        if super::organize::can_organize(kind) {
+            menu_items.push(blocks::menu_item(
+                sel,
+                &format!("row/{id}/menu/organize"),
+                &shared::organize(EN),
+                Handler::Open(super::organize::route(std::slice::from_ref(&id))),
+            ));
+        }
+        menu_items.push(blocks::menu_item(
+            sel,
+            &format!("row/{id}/menu/select"),
+            &shared::menu_select(EN),
+            Handler::SelectMode(true),
+        ));
+        let mut trash = blocks::menu_item(
+            sel,
+            &format!("row/{id}/menu/trash"),
+            &shared::trash_move(EN),
+            Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
+        );
+        trash.destructive = true;
+        menu_items.push(trash);
+    }
+    let menu = blocks::menu(
+        &format!("row/{id}/menu"),
+        vec![blocks::menu_section("", menu_items)],
+        sel,
+    );
+    let mut row = blocks::row(
+        sel,
+        &format!("row/{id}"),
+        title,
+        if selecting {
+            Handler::Pick(id.to_owned())
+        } else {
+            Handler::Open(open)
+        },
+    )
+    .meta(meta)
+    .selected(selected);
+    if !selecting {
+        row = row.menu(menu).swipe(
+            sel,
+            &format!("row/{id}/swipe"),
+            &shared::trash_move(EN),
+            Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
+        );
+    }
+    row.into_block()
+}
+
 #[derive(Default)]
 struct CalendarRoot {
     anchor_day: Option<String>,
@@ -303,7 +403,7 @@ impl RoomScreen for CalendarRoot {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
-        let today = today_iso(b.door.now_ms());
+        let today = b.door.today();
         if self.anchor_day.is_none() {
             self.anchor_day = Some(today.clone());
         }
@@ -317,7 +417,36 @@ impl RoomScreen for CalendarRoot {
         let anchor = self.anchor_day.clone().unwrap_or_else(|| today.clone());
         let lens = b.ui.lens().unwrap_or("day").to_owned();
         let needs_reply_only = b.ui.is_filtered(FILTER_NEEDS_REPLY);
-        let search_term = b.ui.search_term().trim().to_ascii_lowercase();
+        let search_term = b.ui.search_term().trim().to_owned();
+        if !search_term.is_empty() {
+            if let Err(sentence) = search_view::load(b.ui, b.door, &["event", "task"], &search_term)
+            {
+                return room(wire::RoomKind::AppPlace, CALENDAR)
+                    .title(&words::app_title(EN))
+                    .band(calendar_band(b, CALENDAR))
+                    .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                    .build();
+            }
+            let mut content = search_view::rows(&mut b.sel, b.ui, false);
+            if content.is_empty() {
+                content.push(blocks::empty(
+                    glyph("Search", ""),
+                    &words::empty_search_title(EN),
+                    &fill(&words::empty_search_body(EN), &[("term", &search_term)]),
+                    None,
+                ));
+            }
+            let mut built = room(wire::RoomKind::AppPlace, CALENDAR)
+                .title(&words::app_title(EN))
+                .band(calendar_band(b, CALENDAR))
+                .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
+                .ready(content)
+                .build();
+            if let Some(search) = built.search.as_mut() {
+                search_view::decorate(&mut b.sel, search, b.ui);
+            }
+            return built;
+        }
 
         let days = visible_days(&lens, &anchor);
         let first_day = days.first().cloned().unwrap_or_else(|| anchor.clone());
@@ -604,15 +733,118 @@ impl RoomScreen for CalendarRoot {
             view: view_enum(&lens) as i32,
             anchor_day: anchor.clone(),
             days: grid_days,
-            now_minute: now_minute_of(b.door.now_ms()),
+            now_minute: now_minute_of(&b.door.now_local()),
             prev_selector_id,
             next_selector_id,
             today_selector_id,
             create_selector_id,
         });
 
+        let list_view = lens == "list";
+        let mut list_rows = Vec::new();
+        let mut list_ids = Vec::new();
+        if list_view {
+            for event in &all_events {
+                if (needs_reply_only && !event.needs_reply)
+                    || (!search_term.is_empty()
+                        && !event.title.to_ascii_lowercase().contains(&search_term)
+                        && !event.location.as_deref().is_some_and(|location| {
+                            location.to_ascii_lowercase().contains(&search_term)
+                        }))
+                {
+                    continue;
+                }
+                let id = event.id.clone();
+                let date = event.starts.get(..10).unwrap_or(&event.starts);
+                let time = if event.timing == "all-day" {
+                    words::all_day_label(EN)
+                } else {
+                    time_minutes(&event.starts)
+                        .map(|(_, label)| label)
+                        .unwrap_or_default()
+                };
+                list_rows.push((
+                    id.clone(),
+                    "event",
+                    event.title.clone(),
+                    format!("{date} · {time}"),
+                    format!("calendar/event/{id}"),
+                ));
+                list_ids.push(id);
+            }
+            if !needs_reply_only {
+                for task in &tasks {
+                    let Some(date) = task.due.as_deref().and_then(|due| due.get(..10)) else {
+                        continue;
+                    };
+                    if date < first_day.as_str()
+                        || date > last_day.as_str()
+                        || (!search_term.is_empty()
+                            && !task.title.to_ascii_lowercase().contains(&search_term))
+                    {
+                        continue;
+                    }
+                    let id = task.id.clone();
+                    let label = task
+                        .due
+                        .as_deref()
+                        .filter(|_| task.due_timing.as_deref() != Some("all-day"))
+                        .and_then(time_minutes)
+                        .map(|(_, time)| format!("{date} · {time}"))
+                        .unwrap_or_else(|| format!("{date} · {}", words::all_day_label(EN)));
+                    list_rows.push((
+                        id.clone(),
+                        "task",
+                        task.title.clone(),
+                        label,
+                        format!("reminders/task/{id}"),
+                    ));
+                    list_ids.push(id);
+                }
+            }
+        }
+        b.ui.list(list_ids);
+        let selecting = b.ui.selecting();
+        let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
+        let selection = if list_view && !picked.is_empty() {
+            let mut trash = blocks::menu_item(
+                &mut b.sel,
+                "selection/trash",
+                &shared::trash_move(EN),
+                Handler::Act(Act::new("entity.trash", json!({ "ids": &picked }))),
+            );
+            trash.destructive = true;
+            vec![
+                blocks::menu_item(
+                    &mut b.sel,
+                    "selection/organize",
+                    &shared::organize(EN),
+                    Handler::Open(super::organize::route(&picked)),
+                ),
+                trash,
+            ]
+        } else {
+            Vec::new()
+        };
+        let selected_count = shared::selected_count(EN, picked.len() as u64);
+        let mut calendar_rows = Vec::with_capacity(list_rows.len());
+        for (id, kind, title, meta, open) in list_rows {
+            calendar_rows.push(selection_row(
+                &mut b.sel,
+                SelectionRow {
+                    id: &id,
+                    kind,
+                    title: &title,
+                    meta: &meta,
+                    open,
+                    selected: b.ui.is_picked(&id),
+                    selecting,
+                },
+            ));
+        }
+
         let mut content = vec![view_choice];
-        if anchor == today && !overdue_rows.is_empty() {
+        if !list_view && anchor == today && !overdue_rows.is_empty() {
             content.push(
                 blocks::section(&mut b.sel, "section/overdue", &words::overdue_heading(EN))
                     .blocks(overdue_rows)
@@ -643,7 +875,17 @@ impl RoomScreen for CalendarRoot {
             );
             content.push(card);
         }
-        content.push(grid);
+        if list_view {
+            if !calendar_rows.is_empty() {
+                content.push(
+                    blocks::section(&mut b.sel, "section/calendar-list", &words::view_list(EN))
+                        .blocks(calendar_rows)
+                        .into_block(),
+                );
+            }
+        } else {
+            content.push(grid);
+        }
 
         let mut frame = room(wire::RoomKind::AppPlace, CALENDAR)
             .title(&words::app_title(EN))
@@ -665,10 +907,16 @@ impl RoomScreen for CalendarRoot {
                 Handler::FilterClear,
             );
         }
+        if list_view {
+            frame = frame.selection(&mut b.sel, b.ui, &selected_count, selection);
+        }
         frame.ready(content).build()
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(out) = super::export::handle(e, tag, input) {
+            return out;
+        }
         if let Some(out) = handle_band_tag(e, tag) {
             return out;
         }
@@ -682,27 +930,24 @@ impl RoomScreen for CalendarRoot {
         };
         match tag {
             "cal:prev" => {
-                let cur = self
-                    .anchor_day
-                    .clone()
-                    .unwrap_or_else(|| today_iso(e.door.now_ms()));
+                let cur = self.anchor_day.clone().unwrap_or_else(|| e.door.today());
                 self.anchor_day = Some(shift_day(&cur, -step_days));
                 Outcome::default()
             }
             "cal:next" => {
-                let cur = self
-                    .anchor_day
-                    .clone()
-                    .unwrap_or_else(|| today_iso(e.door.now_ms()));
+                let cur = self.anchor_day.clone().unwrap_or_else(|| e.door.today());
                 self.anchor_day = Some(shift_day(&cur, step_days));
                 Outcome::default()
             }
             "cal:today" => {
-                self.anchor_day = Some(today_iso(e.door.now_ms()));
+                self.anchor_day = Some(e.door.today());
                 Outcome::default()
             }
             "view-choice" => {
                 if let Input::Option(choice) = input {
+                    if choice != "list" {
+                        e.ui.select_mode(false);
+                    }
                     e.ui.set_lens(choice);
                     save_lens(e.door, choice);
                 }
@@ -717,7 +962,7 @@ impl RoomScreen for CalendarRoot {
                 }
                 Input::Canvas(wire::room_canvas_event::Kind::CalendarCreate(create)) => {
                     let day = if create.day.is_empty() {
-                        today_iso(e.door.now_ms())
+                        e.door.today()
                     } else {
                         create.day.clone()
                     };
@@ -727,6 +972,9 @@ impl RoomScreen for CalendarRoot {
             },
             other => {
                 if let Some(v) = other.strip_prefix("view:") {
+                    if v != "list" {
+                        e.ui.select_mode(false);
+                    }
                     e.ui.set_lens(v);
                     save_lens(e.door, v);
                 }
@@ -1145,6 +1393,12 @@ impl RoomScreen for EventDetailRoom {
         );
         trash.destructive = true;
         menu_items.push(trash);
+        menu_items.push(blocks::menu_item(
+            &mut b.sel,
+            "menu/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(std::slice::from_ref(&self.id))),
+        ));
         let page_menu = blocks::menu(
             "event/menu",
             vec![blocks::menu_section("", menu_items)],
@@ -1318,22 +1572,33 @@ impl RoomScreen for EventDetailRoom {
             ));
         }
 
-        if !linked_ids.is_empty() {
+        {
             let mut rows = Vec::new();
             for lid in &linked_ids {
                 if let Ok(ans) = b.run(&entity_reads::META_BY_ID, &Args::new().text("id", lid))
                     && let Some(meta) = ans.rows.into_iter().next()
                 {
                     rows.push(
-                        blocks::still_row(&mut b.sel, &format!("link/{}", meta.id), &meta.title)
-                            .meta(&meta.kind)
-                            .build(),
+                        blocks::row(
+                            &mut b.sel,
+                            &format!("link/{}", meta.id),
+                            &meta.title,
+                            Handler::Tag(format!("open:{}:{}", meta.kind, meta.id)),
+                        )
+                        .meta(&meta.kind)
+                        .menu(super::link_picker::unlink_menu(&mut b.sel, &meta.id))
+                        .build(),
                     );
                 }
             }
-            if !rows.is_empty() {
-                content.push(blocks::linked(&words::section_linked(EN), rows, None));
-            }
+            let add = blocks::action(
+                &mut b.sel,
+                "footer/linked/add",
+                &shared::link_add(EN),
+                "",
+                Handler::Tag("link:add".to_owned()),
+            );
+            content.push(blocks::linked(&words::section_linked(EN), rows, Some(add)));
         }
 
         if !mentioned.is_empty() {
@@ -1353,7 +1618,7 @@ impl RoomScreen for EventDetailRoom {
                 &mut b.sel,
                 &words::earlier_versions_label(EN),
                 u32::try_from(head.count).unwrap_or(u32::MAX),
-                Handler::Tag("event:versions".to_owned()),
+                Handler::Open(format!("calendar/event/{}/versions", self.id)),
             ));
         }
 
@@ -1369,6 +1634,117 @@ impl RoomScreen for EventDetailRoom {
             content.push(blocks::origin(&mut b.sel, &line, None));
         }
 
+        if let Ok(differences) = b.run(
+            &entity_reads::PHONE_DIFFERENCES,
+            &Args::new().text("id", &event.id),
+        ) {
+            for source in differences
+                .rows
+                .iter()
+                .filter(|source| source.system == "calendar")
+            {
+                let attendees = b
+                    .run(&reads::GUESTS, &Args::new().text("event_id", &event.id))
+                    .ok()
+                    .filter(|answer| answer.rows.len() < 100)
+                    .map(|answer| {
+                        Value::Array(
+                            answer.rows.into_iter().filter_map(|guest| {
+                                let email = guest.address?;
+                                let mut value = json!({ "email": email, "role": guest.role, "state": guest.status });
+                                if let Some(name) = guest.name { value["name"] = json!(name); }
+                                if guest.organizer { value["organizer"] = Value::Bool(true); }
+                                Some(value)
+                            }).collect(),
+                        )
+                    });
+                let reminders = b
+                    .run(&reads::REMINDERS, &Args::new().text("event_id", &event.id))
+                    .ok()
+                    .filter(|answer| answer.rows.len() < 20)
+                    .map(|answer| {
+                        if answer.rows.is_empty() {
+                            Value::Null
+                        } else {
+                            json!(
+                                answer
+                                    .rows
+                                    .iter()
+                                    .map(|alert| alert.offset_min)
+                                    .collect::<Vec<_>>()
+                            )
+                        }
+                    });
+                let mut current = vec![
+                    (
+                        "title",
+                        words::field_title(EN),
+                        Value::String(event.title.clone()),
+                    ),
+                    (
+                        "starts",
+                        words::field_starts(EN),
+                        Value::String(event.starts.clone()),
+                    ),
+                    (
+                        "ends",
+                        words::field_ends(EN),
+                        event.ends.clone().map(Value::String).unwrap_or(Value::Null),
+                    ),
+                    (
+                        "location",
+                        words::field_location(EN),
+                        event
+                            .location
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                    (
+                        "description",
+                        words::field_notes(EN),
+                        event
+                            .description
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                    (
+                        "url",
+                        words::field_url(EN),
+                        event.url.clone().map(Value::String).unwrap_or(Value::Null),
+                    ),
+                    (
+                        "rule",
+                        words::field_repeat(EN),
+                        event.rule.clone().map(Value::String).unwrap_or(Value::Null),
+                    ),
+                    (
+                        "timing",
+                        words::field_timing(EN),
+                        Value::String(event.timing.clone()),
+                    ),
+                    (
+                        "zone",
+                        words::field_zone(EN),
+                        event.zone.clone().map(Value::String).unwrap_or(Value::Null),
+                    ),
+                    ("busy", words::field_busy(EN), Value::Bool(event.busy)),
+                ];
+                if let Some(attendees) = attendees {
+                    current.push(("attendees", words::section_guests(EN), attendees));
+                }
+                if let Some(reminders) = reminders {
+                    current.push(("reminders", words::section_alerts(EN), reminders));
+                }
+                if let Some(says) =
+                    super::follow::phone_says(&mut b.sel, b.door, &event.id, source, &current)
+                {
+                    content.push(says);
+                }
+            }
+        }
+
         room(wire::RoomKind::PushedPage, &self.key())
             .title(&event.title)
             .back(&mut b.sel, &words::app_title(EN))
@@ -1378,6 +1754,12 @@ impl RoomScreen for EventDetailRoom {
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        if let Some(outcome) = super::link_picker::handle_unlink(e, tag, &self.id) {
+            return outcome;
+        }
+        if tag == "link:add" {
+            return Outcome::push(&format!("calendar/event/{}/link", self.id));
+        }
         if tag == "event:trash" {
             let act = Act::new("entity.trash", json!({ "ids": [self.id] }));
             return match e.door.act(&act) {
@@ -1418,6 +1800,9 @@ struct EventForm {
     drafted: bool,
     title_error: Option<String>,
     starts_error: Option<String>,
+    ends_error: Option<String>,
+    confirm_discard: bool,
+    dirty: bool,
 }
 
 impl EventForm {
@@ -1433,6 +1818,9 @@ impl EventForm {
             drafted: false,
             title_error: None,
             starts_error: None,
+            ends_error: None,
+            confirm_discard: false,
+            dirty: false,
         }
     }
 
@@ -1448,6 +1836,9 @@ impl EventForm {
             drafted: false,
             title_error: None,
             starts_error: None,
+            ends_error: None,
+            confirm_discard: false,
+            dirty: false,
         }
     }
 
@@ -1497,6 +1888,25 @@ impl RoomScreen for EventForm {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        if self.confirm_discard {
+            let confirm = blocks::confirm(
+                &mut b.sel,
+                Confirm {
+                    class: wire::RoomConfirmClass::Outlined,
+                    title: &words::discard_title(EN),
+                    body: &words::discard_body(EN),
+                    warning: "",
+                    confirm_label: &words::discard_confirm(EN),
+                    confirm: Handler::Tag("discard:yes".to_owned()),
+                    cancel_label: &words::discard_keep(EN),
+                    cancel: Handler::Tag("discard:no".to_owned()),
+                },
+            );
+            return room(wire::RoomKind::Sheet, &self.key())
+                .title(&words::discard_title(EN))
+                .ready(vec![confirm])
+                .build();
+        }
         let calendars = b
             .run(&reads::CALENDARS, &Args::new())
             .map(|a| a.rows)
@@ -1520,10 +1930,7 @@ impl RoomScreen for EventForm {
                     self.repeat = rule_to_choice(ev.rule.as_deref()).to_owned();
                 }
             } else {
-                let default_day = self
-                    .initial_day
-                    .clone()
-                    .unwrap_or_else(|| today_iso(b.door.now_ms()));
+                let default_day = self.initial_day.clone().unwrap_or_else(|| b.door.today());
                 if let Some(key) = draft_key(b.door)
                     && let Some(raw) = b.door.device_get(&key)
                     && let Ok(parsed) = serde_json::from_str::<Value>(&raw)
@@ -1579,28 +1986,71 @@ impl RoomScreen for EventForm {
             &words::field_all_day(EN),
             self.all_day,
         );
-        let mut starts = form::text(
+        let starts_value = b.ui.fields.value("starts").unwrap_or("");
+        let starts_day = starts_value.get(..10).unwrap_or(starts_value);
+        let starts_display = if self.all_day {
+            crate::kit::civil::short_day(EN, starts_day)
+        } else {
+            b.door
+                .wall_time(starts_value)
+                .unwrap_or_else(|| starts_value.to_owned())
+        };
+        let mut starts = form::moment(
             &mut b.sel,
-            &mut b.ui.fields,
             "starts",
             &words::field_starts(EN),
-            wire::RoomTextKind::Line,
-            "",
-            40,
+            wire::RoomMoment {
+                kind: if self.all_day {
+                    wire::RoomMomentKind::Day as i32
+                } else {
+                    wire::RoomMomentKind::DayTime as i32
+                },
+                value: if self.all_day {
+                    starts_day.to_owned()
+                } else {
+                    starts_display.clone()
+                },
+                display: if self.all_day {
+                    crate::kit::civil::short_day(EN, starts_day)
+                } else {
+                    starts_display
+                },
+                ..wire::RoomMoment::default()
+            },
         )
         .required();
         if let Some(err) = &self.starts_error {
             starts = starts.error(err);
         }
-        let ends = form::text(
+        let ends_value = b.ui.fields.value("ends").unwrap_or("");
+        let ends_day = ends_value.get(..10).unwrap_or(ends_value);
+        let ends_wall = if ends_value.is_empty() {
+            String::new()
+        } else if self.all_day {
+            ends_day.to_owned()
+        } else {
+            b.door
+                .wall_time(ends_value)
+                .unwrap_or_else(|| ends_value.to_owned())
+        };
+        let mut ends = form::moment(
             &mut b.sel,
-            &mut b.ui.fields,
             "ends",
             &words::field_ends(EN),
-            wire::RoomTextKind::Line,
-            "",
-            40,
+            wire::RoomMoment {
+                kind: if self.all_day {
+                    wire::RoomMomentKind::Day as i32
+                } else {
+                    wire::RoomMomentKind::DayTime as i32
+                },
+                value: ends_wall.clone(),
+                display: ends_wall,
+                ..wire::RoomMoment::default()
+            },
         );
+        if let Some(err) = &self.ends_error {
+            ends = ends.error(err);
+        }
         let mut fields = vec![title.build(), all_day.build(), starts.build(), ends.build()];
         if !calendars.is_empty() {
             let cal_opts = calendars
@@ -1707,7 +2157,7 @@ impl RoomScreen for EventForm {
             .build(),
         );
 
-        let dirty = !b.ui.fields.value("title").unwrap_or("").trim().is_empty();
+        let dirty = self.dirty || self.drafted;
         let save_spec = form::explicit(
             &mut b.sel,
             Explicit {
@@ -1735,13 +2185,28 @@ impl RoomScreen for EventForm {
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
         match tag {
             "all_day" => {
+                self.dirty = true;
                 if let Input::Flag(on) = input {
+                    if *on != self.all_day {
+                        for (name, default_time) in [("starts", "09:00"), ("ends", "10:00")] {
+                            let current = e.ui.fields.value(name).unwrap_or("").to_owned();
+                            if let Some(field) = e.ui.fields.get_mut(name) {
+                                if *on {
+                                    let local = e.door.wall_time(&current).unwrap_or(current);
+                                    field.set(local.get(..10).unwrap_or(&local));
+                                } else if current.len() == 10 {
+                                    field.set(format!("{current}T{default_time}"));
+                                }
+                            }
+                        }
+                    }
                     self.all_day = *on;
                 }
                 self.save_draft(e);
                 Outcome::default()
             }
             "calendar_id" => {
+                self.dirty = true;
                 if let Input::Option(opt) = input {
                     opt.clone_into(&mut self.calendar_id);
                 }
@@ -1749,6 +2214,7 @@ impl RoomScreen for EventForm {
                 Outcome::default()
             }
             "repeat" => {
+                self.dirty = true;
                 if let Input::Option(opt) = input {
                     opt.clone_into(&mut self.repeat);
                 }
@@ -1756,19 +2222,76 @@ impl RoomScreen for EventForm {
                 Outcome::default()
             }
             "alert" => {
+                self.dirty = true;
                 if let Input::Option(opt) = input {
                     opt.clone_into(&mut self.alert);
                 }
                 self.save_draft(e);
                 Outcome::default()
             }
-            "title" | "starts" | "ends" | "location" | "url" | "guest" | "notes" => {
+            "starts" | "ends" => {
+                self.dirty = true;
+                if let Input::Moment(moment) = input {
+                    let raw = moment.trim();
+                    let value = if self.all_day {
+                        raw.to_owned()
+                    } else if raw.contains('T') && (raw.ends_with('Z') || raw.contains('+')) {
+                        e.door.wall_time(raw).unwrap_or_default()
+                    } else {
+                        raw.to_owned()
+                    };
+                    let resolved = if self.all_day {
+                        crate::kit::civil::epoch_day_of(&value).map(|_| Ok(value.clone()))
+                    } else {
+                        Some(
+                            e.door
+                                .resolve_wall_time(&value)
+                                .map(|resolved| resolved.instant),
+                        )
+                    };
+                    if value.is_empty() || resolved.as_ref().is_none_or(Result::is_err) {
+                        if tag == "starts" {
+                            self.starts_error = Some(shared::date_invalid(EN));
+                        } else {
+                            self.ends_error = Some(shared::date_invalid(EN));
+                        }
+                    } else {
+                        let stored = resolved.and_then(Result::ok).unwrap_or(value);
+                        if let Some(field) = e.ui.fields.get_mut(tag) {
+                            field.set(&stored);
+                        }
+                        if tag == "starts" {
+                            self.starts_error = None;
+                        } else {
+                            self.ends_error = None;
+                        }
+                    }
+                }
+                self.save_draft(e);
+                Outcome::default()
+            }
+            "title" | "location" | "url" | "guest" | "notes" => {
+                self.dirty = true;
                 self.save_draft(e);
                 Outcome::default()
             }
             "form:cancel" => {
+                let dirty = self.dirty || self.drafted;
+                if dirty {
+                    self.confirm_discard = true;
+                    Outcome::default()
+                } else {
+                    self.clear_draft(e.door);
+                    Outcome::pop()
+                }
+            }
+            "discard:yes" => {
                 self.clear_draft(e.door);
                 Outcome::pop()
+            }
+            "discard:no" => {
+                self.confirm_discard = false;
+                Outcome::default()
             }
             "form:save" => {
                 let title = e.ui.fields.value("title").unwrap_or("").trim().to_owned();
@@ -1783,7 +2306,25 @@ impl RoomScreen for EventForm {
                     self.starts_error = Some(words::error_starts_required(EN));
                     return Outcome::default();
                 }
+                let valid_timing = |raw: &str| {
+                    if self.all_day {
+                        crate::kit::civil::epoch_day_of(raw.get(..10).unwrap_or(raw)).is_some()
+                    } else if centraid_vault::time::has_zone_designator(raw) {
+                        centraid_vault::time::recurrence::parse_instant_ms(raw).is_some()
+                    } else {
+                        e.door.resolve_wall_time(raw).is_ok()
+                    }
+                };
+                if !valid_timing(&raw_starts) {
+                    self.starts_error = Some(shared::date_invalid(EN));
+                    return Outcome::default();
+                }
                 self.starts_error = None;
+                if !raw_ends.is_empty() && !valid_timing(&raw_ends) {
+                    self.ends_error = Some(shared::date_invalid(EN));
+                    return Outcome::default();
+                }
+                self.ends_error = None;
 
                 let (starts, ends, timing) = if self.all_day {
                     let s = raw_starts.get(..10).unwrap_or(&raw_starts).to_owned();

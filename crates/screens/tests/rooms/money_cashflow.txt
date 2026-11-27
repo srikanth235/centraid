@@ -14,6 +14,8 @@ room app_place key="money/cashflow"
         item "Categories" #more/categories
         item "Transfers" #more/transfers
         item "Match dismissals" #more/dismissals
+        item "Match lines" #more/match-lines
+        item "Recurring" #more/recurring
         item "Import CSV" #more/import-csv
         item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash

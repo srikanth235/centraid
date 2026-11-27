@@ -3252,7 +3252,7 @@ mod what_a_member_reads {
                 state.status.unwrap().sentence,
                 "The check didn't finish. Try again."
             );
-            assert_eq!(state.action_label, "Retry");
+            assert_eq!(state.action_label, "Try again");
             assert_eq!(state.action, wire::BackupCheckAction::Check as i32);
             assert!(
                 state.rows.is_empty(),
@@ -3274,7 +3274,7 @@ mod what_a_member_reads {
             let mut page = Check::resting(true, None);
             let effects = page.update(done(wire::VaultCalled::default()), &ctx);
             assert!(effects.is_empty());
-            assert_eq!(page.drawn(&ctx).action_label, "Retry");
+            assert_eq!(page.drawn(&ctx).action_label, "Try again");
             // A backup that opened: kept.
             let answer = wire::Response {
                 kind: Some(wire::response::Kind::CheckBackup(

@@ -1,19 +1,4 @@
-//! The v1 twin of v0's `VaultApi` — the surface a handler sees.
-//!
-//! Eight verbs, and the honest state of each. A stub here is a **typed
-//! refusal**, never an empty answer: an empty page reads as "no data" and the
-//! truth is "this build cannot answer yet", and those produce different
-//! screens (#1020, D-1020-C11).
-//!
-//! | Verb | State | Why |
-//! |---|---|---|
-//! | [`page`] | live | D1's `page_raw` plus the access plane's filters and mask |
-//! | `invoke` | live | D1's command plane, gate order and all, behind `act` and [`crate::Handle::command`] |
-//! | [`describe`] | live | the registered definition, so a shell can render a form |
-//! | [`parked`] | live | the outcomes waiting on somebody's decision |
-//! | [`search`] | **stub** | the FTS plane is wave 4 |
-//! | [`resolve`] | **stub** | entity resolution is wave 4 |
-//! | [`content`] | **stub** | content path minting is wave 3 |
+//! The typed read and command operations exposed by the core.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::commands::{Command, Registry};
@@ -496,57 +481,7 @@ pub fn describe(registry: &Registry, name: &str) -> Result<serde_json::Value> {
     }))
 }
 
-/// Full-text search. **Stub**: the FTS plane is wave 4.
-pub fn search(_query: &str) -> Result<Vec<wire::Row>> {
-    Err(CoreError::NotYetAvailable {
-        what: "search",
-        lands_in: "wave 4 (the FTS plane)",
-    })
-}
-
-/// Entity resolution. **Stub**: wave 4.
-pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
-    Err(CoreError::NotYetAvailable {
-        what: "resolve",
-        lands_in: "wave 4 (entity resolution)",
-    })
-}
-
-// THE REVEAL ROUTER IS GONE, AND THE RULE IT ENCODED SURVIVES IN THE COMMAND
-// (#1029 §1). `reveal` answered "who performs this reveal" — the gateway for a
-// sealed column, the seat for a Locker cell — and the answer was the trust
-// premise: a Locker key must never be on a host the member does not hold.
-// There is one host (#1029 §6), so the question has one answer and nothing
-// ever called this function: a Locker reveal runs in `crate::locker::phone`,
-// behind the unlock, after `locker.mark_used` stamps the item, and
-// the SEALED-COLUMN arm served connector tokens, which leave with the
-// connectors. The access plane's reveal judgement went with that arm
-// (R-1047-D2): `centraid_vault::Verb` is `read` and `act`, so no access path
-// can be written that opens a Locker cell even by mistake.
-
-/// MAKE THIS FILE A VAULT (#1029 W5, hand-off 1).
-///
-/// The door `Core::open` with `create` left missing. `Vault::create` lays the
-/// migrations down; `Vault::found` writes the two rows that make those tables a
-/// vault — the `vault` row and its owner's person — inside one commit, and
-/// until this function existed nothing over the C ABI could reach it. A phone
-/// could create a file that could never say which vault it was, which is
-/// exactly what `Shelf.FoundRefusal.NOT_FOUNDED` was refusing honestly.
-///
-/// **A SECOND FOUND IS REFUSED, AND THE VAULT THAT IS HERE IS LEFT ALONE.**
-/// `Vault::found` mints a fresh id and inserts unconditionally, so running it
-/// twice would write a second self person beside the first — and `vault` holds
-/// one row (`CHECK (id = 1)`), so the insert would fail half-way into a file
-/// the shell took for founded. The refusal carries `ERROR_CODE_VAULT_ALREADY_HELD` and names the id already
-/// here, so a shell that raced itself can tell "I founded it" from "something
-/// is wrong".
-///
-/// **WHAT THE NEW VAULT HOLDS is the request's `content`** (`vault.proto`'s
-/// `FoundContent`). `UNSPECIFIED` — a found that names no content — is the
-/// found and nothing else. `STARTERS` adds the teaching rows of
-/// [`crate::starters`] to the member's own vault through the command plane, and
-/// a refused starter leaves the vault founded rather than failing it. A
-/// content this build does not know is refused before the file is read.
+/// Found a vault file and optionally add starter rows.
 pub fn found(
     vault: &Vault,
     registry: &Registry,
@@ -560,9 +495,6 @@ pub fn found(
                 request.content
             ),
         })?;
-    // A vault has a name (`vault.name` is `CHECK (length(trim(name)) > 0)`), so a
-    // blank one is refused here, before the file is touched. The shells found
-    // with `Shelf.DEFAULT_VAULT_NAME` and the member renames it afterwards.
     if request.display_name.trim().is_empty() {
         return Err(CoreError::InvalidRequest {
             detail: "a vault needs a name".to_owned(),
@@ -581,14 +513,6 @@ pub fn found(
     Ok(wire::FoundResponse {
         vault_id: founded.self_id.clone(),
         owner_party_id: founded.self_id,
-    })
-}
-
-/// Mint a path for content. **Stub**: wave 3.
-pub fn content(_content_id: &str) -> Result<String> {
-    Err(CoreError::NotYetAvailable {
-        what: "content",
-        lands_in: "wave 3 (content path minting)",
     })
 }
 
@@ -948,27 +872,5 @@ mod tests {
         }
         assert_eq!(vault.self_id().expect("read"), None);
         let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    #[test]
-    fn the_stubs_are_typed_refusals_and_never_empty_answers() {
-        assert!(matches!(
-            search("anything"),
-            Err(CoreError::NotYetAvailable { what: "search", .. })
-        ));
-        assert!(matches!(
-            resolve("anything"),
-            Err(CoreError::NotYetAvailable {
-                what: "resolve",
-                ..
-            })
-        ));
-        assert!(matches!(
-            content("anything"),
-            Err(CoreError::NotYetAvailable {
-                what: "content",
-                ..
-            })
-        ));
     }
 }

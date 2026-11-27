@@ -68,7 +68,7 @@ Each with its reason in the module, and each recorded as a decision.
 | Consumer | What it uses |
 | --- | --- |
 | `crates/core` | `Vault` and its commands and doors; `backup::{snapshot, engine, state, staging, store, restore, retention, files, naming}` for the phone's passes. |
-| `crates/core` (`api.rs`) | `Vault::page_raw`, `page::and_row_filters`, `page::apply_field_mask`, `commands::Registry`, until the read registry in `crates/domain` **(target)** replaces them. |
+| `crates/core` (`api.rs`) | `Vault::page_raw`, `page::and_row_filters`, `page::apply_field_mask`, and `commands::Registry` remain low-level vault mechanisms. App-plane screen reads use the typed Rust read registry in `crates/domain`. |
 | `crates/blobs` | `bytes::BlobStore`, which `ContentBytes` implements, and the device state's `local_bytes`. |
 | `crates/centraid` | `backup::restore::restore_check` for `doctor`, and `backup::drill::dump` for the restore drill. |
 

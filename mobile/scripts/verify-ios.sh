@@ -79,6 +79,8 @@ CENTRAID_SIMULATOR="$simulator" CENTRAID_DEMO_DIR="$artifacts/demo-vault" \
   bash "$root/mobile/scripts/demo-vault.sh" ios 2>&1 | tee "$seed_log"
 CENTRAID_DEV_SEED="$(sed -n 's/^CENTRAID_DEMO_SEED=//p' "$seed_log")"
 test -n "$CENTRAID_DEV_SEED"
+container="$(xcrun simctl get_app_container "$simulator" dev.centraid.Centraid data)"
+test -f "$container/Documents/demo-vault/vault.db" || { echo "error: demo vault was not placed in the app container" >&2; exit 1; }
 xcrun simctl terminate "$simulator" dev.centraid.Centraid || true
 documents_listing
 TEST_RUNNER_CENTRAID_DEV_SEED="$CENTRAID_DEV_SEED" \

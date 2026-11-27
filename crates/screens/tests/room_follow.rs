@@ -41,6 +41,7 @@ struct Shell<'a> {
     reads: u32,
     permission_asks: u32,
     watches: Vec<(String, bool)>,
+    watch_refs: Vec<Vec<String>>,
     settings: Vec<String>,
     forgotten: Vec<String>,
     room: Option<wire::RoomShown>,
@@ -53,6 +54,7 @@ impl<'a> Shell<'a> {
             reads: 0,
             permission_asks: 0,
             watches: Vec::new(),
+            watch_refs: Vec::new(),
             settings: Vec::new(),
             forgotten: Vec::new(),
             room: None,
@@ -93,7 +95,10 @@ impl<'a> Shell<'a> {
                         self.permission_asks += u32::from(read.ask_permission);
                         reads.push(effect);
                     }
-                    Some(K::PhoneWatch(watch)) => self.watches.push((watch.system, watch.on)),
+                    Some(K::PhoneWatch(watch)) => {
+                        self.watches.push((watch.system, watch.on));
+                        self.watch_refs.push(watch.folder_refs);
+                    }
                     Some(K::OpenSettings(open)) => self.settings.push(open.system),
                     Some(K::ReleaseGrant(release)) => self.forgotten.push(release.r#ref),
                     other => panic!("an effect the follower never asks: {other:?}"),
@@ -623,6 +628,55 @@ fn health_resumes_from_the_cursor_the_origin_holds_and_never_asks_in_a_pass() {
 }
 
 #[test]
+fn health_pass_merges_workouts_readings_and_daily_totals_together() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = phone(dir.path());
+    let mut shell = Shell::new(&handle);
+    shell.open("health");
+    shell.tap("Follow Health");
+    let ask = shell.pump().remove(0);
+    let done = shell.answer(
+        &ask,
+        wire::FollowGrant::Limited,
+        json!({
+            "workouts": {
+                "origin": { "ref": "health:primary", "label": "Health", "cursor": "hk-1" },
+                "records": [{ "external_id": "workout-1", "fields": {
+                    "kind": "run", "starts": "2026-03-04T07:00:00Z", "ends": "2026-03-04T07:45:00Z"
+                }}],
+                "complete": false
+            },
+            "readings": {
+                "origin": { "ref": "health:primary", "label": "Health", "cursor": "hk-1" },
+                "records": [{ "external_id": "weight-1", "fields": {
+                    "metric": "weight_kg", "at": "2026-03-04T08:00:00Z", "value": 72.4
+                }}],
+                "complete": false
+            },
+            "totals": {
+                "origin": { "system": "health", "ref": "health:primary", "cursor": "hk-1" },
+                "days": [{ "day": "2026-03-04", "metric": "steps", "value": 1042 }]
+            }
+        }),
+    );
+    assert!(!done.declined, "{done:?}");
+    let output: serde_json::Value = serde_json::from_str(&done.output_json).unwrap();
+    assert_eq!(
+        output.as_array().unwrap().len(),
+        3,
+        "all three command results"
+    );
+    let status = shell
+        .verb(wire::FollowVerb::Status, "health")
+        .status
+        .unwrap();
+    assert!(
+        status.read && status.incomplete && status.count == 3,
+        "{status:?}"
+    );
+}
+
+#[test]
 fn reminders_that_the_phone_does_not_have_say_so_and_are_never_read() {
     let dir = tempfile::tempdir().unwrap();
     let handle = phone(dir.path());
@@ -681,6 +735,10 @@ fn a_followed_folder_is_stopped_from_its_page_and_its_grant_is_released() {
         read_of(&ask).ask_permission,
         "the picker is the ask, and only the tap opens it"
     );
+    assert!(
+        read_of(&ask).folder_refs.is_empty(),
+        "first enrol has no refs yet"
+    );
     let done = shell.answer(
         &ask,
         wire::FollowGrant::Granted,
@@ -688,6 +746,7 @@ fn a_followed_folder_is_stopped_from_its_page_and_its_grant_is_released() {
     );
     assert!(!done.declined, "{done:?}");
     shell.pump();
+    assert_eq!(shell.watch_refs.last().unwrap(), &["/Documents/Taxes"]);
     assert_eq!(
         shell.verb(wire::FollowVerb::Trigger, "").asked,
         1,
@@ -695,6 +754,7 @@ fn a_followed_folder_is_stopped_from_its_page_and_its_grant_is_released() {
     );
     let pass = shell.pump().remove(0);
     assert!(!read_of(&pass).ask_permission);
+    assert_eq!(read_of(&pass).folder_refs, ["/Documents/Taxes"]);
     shell.answer(&pass, wire::FollowGrant::Granted, json!({ "origin": { "ref": "/Documents/Taxes", "label": "Taxes" }, "records": [], "complete": true }));
 
     shell.open("docs/followed");
@@ -751,6 +811,7 @@ fn android_has_no_reminders_source_and_its_first_open_offers_no_import() {
                 tab: "reminders".to_owned(),
                 root: true,
                 platform: platform.to_owned(),
+                ..Default::default()
             }),
         )
         .remove(0);

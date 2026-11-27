@@ -17,6 +17,7 @@ room app_place key="notes/journal"
         menu #journal/01900000-0000-7000-8000-000000001040/menu
           section
             item "Open" #journal/01900000-0000-7000-8000-000000001040/menu/open
+            item "Move or tag" #journal/01900000-0000-7000-8000-000000001040/menu/organize
             item "Pin" #journal/01900000-0000-7000-8000-000000001040/menu/pin
             item "Share" #journal/01900000-0000-7000-8000-000000001040/menu/share
             item "Select" #journal/01900000-0000-7000-8000-000000001040/menu/select

@@ -105,9 +105,8 @@ final class AccessibilityAuditTests: XCTestCase {
         for root in Self.roots where only?.contains(root.name) ?? true {
             try open(app, tile: root.tile)
             // A TAP THAT OPENED NOTHING must not file Home's issues under this screen's name.
-            let end = Date().addingTimeInterval(15)
-            while homeShowing(app) && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
-            guard !(homeShowing(app)) else {
+            let opened = waitUntil(timeout: 15) { !homeShowing(app) }
+            guard opened else {
                 print("OPEN-DIAG|\(root.name)|\(String(app.debugDescription.prefix(5000)))")
                 XCTFail("\(mode) / \(root.name): the page did not open (Home is still showing)")
                 continue
@@ -168,8 +167,8 @@ final class AccessibilityAuditTests: XCTestCase {
         if app.el("wall/unlock").waitForExistence(timeout: 5) { return }
         for _ in 0..<3 {
             XCUIDevice.shared.press(.home)
-            Thread.sleep(forTimeInterval: 2)
             app.activate()
+            _ = app.wait(for: .runningForeground, timeout: 10)
             if app.el("wall/unlock").waitForExistence(timeout: 10) { return }
         }
     }
@@ -372,9 +371,7 @@ final class AccessibilityAuditTests: XCTestCase {
         // At the largest sizes a tap can land while the grid is still settling and open nothing:
         // an audit of "the app" would then read Home under another screen's name.
         for _ in 0..<3 {
-            let end = Date().addingTimeInterval(6)
-            while homeShowing(app) && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
-            if !(homeShowing(app)) { return }
+            if waitUntil(timeout: 6, { !homeShowing(app) }) { return }
             if app.hittable(key) { press() }
         }
     }
@@ -386,6 +383,26 @@ final class AccessibilityAuditTests: XCTestCase {
     @MainActor private func homeShowing(_ app: XCUIApplication) -> Bool {
         let key = app.el("tab/backup")
         return app.hittable(key)
+    }
+
+    @MainActor private func waitUntil(timeout: TimeInterval, _ condition: @escaping @MainActor () -> Bool) -> Bool {
+        var last = false
+        let predicate = NSPredicate { _, _ in
+            last = MainActor.assumeIsolated { condition() }
+            return last
+        }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    @MainActor private func waitForStableHierarchy(_ app: XCUIApplication, timeout: TimeInterval = 5) -> Bool {
+        var previous: String?
+        var stable = 0
+        return waitUntil(timeout: timeout) {
+            let current = app.debugDescription
+            if current == previous { stable += 1 } else { stable = 0; previous = current }
+            return stable >= 2
+        }
     }
 
     /// Back to Home by the way a member goes: the home capsule of an app's band,
@@ -464,7 +481,7 @@ final class AccessibilityAuditTests: XCTestCase {
                 .map { alert.buttons[$0] }
                 .first { $0.exists }
             (decline ?? alert.buttons.firstMatch).tap()
-            Thread.sleep(forTimeInterval: 1)
+            _ = waitUntil(timeout: 3) { !alert.exists }
         }
     }
 
@@ -782,7 +799,7 @@ final class AccessibilityAuditTests: XCTestCase {
     @MainActor private func audit(_ app: XCUIApplication, mode: String, screen: String, restore: (() -> Void)? = nil) {
         // Let the screen settle: the audit reads a hierarchy, not a transition.
         _ = app.wait(for: .runningForeground, timeout: 5)
-        Thread.sleep(forTimeInterval: 1)
+        _ = waitForStableHierarchy(app)
         clearSystemAlerts(app)
         // PROOF ON REQUEST: `CENTRAID_UI_PROOF_DIR` (a directory) takes a screenshot of each audited
         // screen, as the audit finds it, for the exemptions that cite one. Unset, nothing is written.
@@ -830,7 +847,8 @@ final class AccessibilityAuditTests: XCTestCase {
                     // forward, and from the third refusal on start the app afresh and
                     // walk back to this screen.
                     app.activate()
-                    Thread.sleep(forTimeInterval: 8)
+                    _ = app.wait(for: .runningForeground, timeout: 8)
+                    _ = waitForStableHierarchy(app, timeout: 8)
                     if attempt >= 2, let restore {
                         app.terminate()
                         app.launch()
@@ -852,7 +870,7 @@ final class AccessibilityAuditTests: XCTestCase {
         var again = 0
         while !sweep.isEmpty, again < 2 {
             again += 1
-            Thread.sleep(forTimeInterval: 3)
+            _ = waitForStableHierarchy(app)
             let appFrame = app.frame
             var seen: [String] = []
             _ = try? app.performAccessibilityAudit(for: .dynamicType) { issue in

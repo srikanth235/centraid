@@ -55,7 +55,7 @@
 //! 6. **An input property may be `x-minted`** (an id the core mints when the
 //!    caller states none: Locker seals a secret against its row's id, so the id
 //!    must exist before the write) **or carry `aliases`** (the names chat and the
-//!    training harness say it under: `title` is `name`, `effort_min` is `effort`).
+//!    training harness say it under: `title` is `name`, `effort_minutes` is `effort`).
 
 use std::collections::BTreeSet;
 

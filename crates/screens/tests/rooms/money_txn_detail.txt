@@ -8,6 +8,7 @@ room pushed_page key="money/txn/b1325743-ba29-7670-846c-cecdcf8c7cb5"
           item "Star" #menu/star
           item "Share" #menu/share
           item "Move to trash" destructive #menu/trash
+          item "Move or tag" #menu/organize
   ready
     hero "Corner Co-op" noun="Transaction"
       line "-$60.00"

@@ -1,4 +1,6 @@
-# Vitest test context and fixtures
+# Vitest test context and fixtures (target)
+
+This guidance applies if a TypeScript test project is added. Centraid currently has no Vitest project.
 
 ## Built-in Context
 

@@ -10,7 +10,7 @@ use centraid_domain::READS;
 use centraid_domain::apps::{self, entity};
 use centraid_domain::read::plan::{Allowlist, Finding};
 use centraid_domain::read::{Args, Key, Param, ParamTy, ReadDecl, ReadError, Shape, desc, param};
-use common::World;
+use common::{World, Year3Shape};
 
 fn root() -> std::path::PathBuf {
     centraid_ontology::scratch::repo_root()
@@ -317,6 +317,334 @@ fn a_page_walk_serves_each_row_once_newest_first_and_the_extra_row_only_decides_
     let mut newest_first = made.clone();
     newest_first.reverse();
     assert_eq!(seen, newest_first);
+}
+
+fn walk_ids<R: 'static>(
+    reader: &centraid_domain::read::Reader,
+    read: &centraid_domain::read::Read<R>,
+    args: Args,
+    expected: usize,
+    id_of: impl Fn(&R) -> String,
+) -> Vec<String> {
+    let mut seen = Vec::with_capacity(expected);
+    let mut after: Option<String> = None;
+    loop {
+        let asked = after
+            .as_ref()
+            .map_or_else(|| args.clone(), |cursor| args.clone().after(cursor));
+        let page = reader
+            .run(read, &asked)
+            .unwrap_or_else(|error| panic!("{}: {error}", read.decl.name));
+        assert!(
+            page.rows.len() <= read.decl.bound,
+            "{} returned an oversized window",
+            read.decl.name
+        );
+        seen.extend(page.rows.iter().map(&id_of));
+        match page.next {
+            Some(next) => after = Some(next),
+            None => break,
+        }
+    }
+    assert_eq!(
+        seen.len(),
+        expected,
+        "{} covers every fixture row",
+        read.decl.name
+    );
+    assert_eq!(
+        seen.iter().collect::<BTreeSet<_>>().len(),
+        expected,
+        "{} repeats no row",
+        read.decl.name
+    );
+    seen
+}
+
+#[test]
+fn named_year3_shape_walks_bounded_hot_reads_for_every_domain_app() {
+    use centraid_domain::apps::{
+        calendar, chat, docs, entity as entities, health, locker, money, notes, people, photos,
+        reminders,
+    };
+
+    let shape = Year3Shape::YEAR_3;
+    assert_eq!(
+        shape.rows(),
+        27_600,
+        "the named corpus models three years of app rows"
+    );
+    let world = World::new("read-registry-year3");
+    let ids = world.seed_year3();
+    let reader = world.reader();
+
+    let people_seen = walk_ids(&reader, &people::LIST, Args::new(), shape.people, |row| {
+        row.id.clone()
+    });
+    assert!(people_seen.contains(&ids.first_person));
+    let contact_window = reader
+        .run(
+            &people::CONTACT_POINTS,
+            &Args::new().text("person", &ids.first_person),
+        )
+        .expect("bounded contact-point window");
+    assert_eq!(contact_window.rows.len(), people::CONTACT_POINTS.decl.bound);
+    assert!(contact_window.rows.len() < shape.contact_points);
+    assert_eq!(
+        walk_ids(&reader, &people::LIST_STARRED, Args::new(), 1, |row| row
+            .id
+            .clone())
+        .len(),
+        1
+    );
+    assert_eq!(
+        walk_ids(
+            &reader,
+            &entities::STARRED,
+            Args::new().text("kind", "person"),
+            1,
+            |row| row.id.clone()
+        )
+        .len(),
+        1
+    );
+
+    assert_eq!(
+        walk_ids(
+            &reader,
+            &photos::LIBRARY_GRID,
+            Args::new(),
+            shape.photos,
+            |row| row.id.clone()
+        )
+        .len(),
+        shape.photos
+    );
+    assert_eq!(
+        walk_ids(&reader, &chat::THREADS, Args::new(), shape.threads, |row| {
+            row.id.clone()
+        })
+        .len(),
+        shape.threads
+    );
+    let messages = reader
+        .run(
+            &chat::MESSAGES,
+            &Args::new().text("thread_id", &ids.first_thread),
+        )
+        .expect("bounded chat turns");
+    assert_eq!(messages.rows.len(), shape.messages / shape.threads);
+    assert!(messages.rows.len() <= chat::MESSAGES.decl.bound);
+
+    let note_ids = walk_ids(&reader, &notes::LIST, Args::new(), shape.notes, |row| {
+        row.id.clone()
+    });
+    assert!(
+        !note_ids[..notes::LIST.decl.bound].contains(&ids.special_note),
+        "special row sits past the ordinary first window"
+    );
+    assert_eq!(
+        walk_ids(&reader, &notes::PINNED, Args::new(), 1, |row| row
+            .id
+            .clone()),
+        vec![ids.special_note.clone()]
+    );
+    assert_eq!(
+        walk_ids(
+            &reader,
+            &docs::TOP_LEVEL,
+            Args::new(),
+            shape.documents,
+            |row| row.id.clone()
+        )
+        .len(),
+        shape.documents
+    );
+    assert_eq!(
+        walk_ids(
+            &reader,
+            &calendar::RANGE_SHORT,
+            Args::new()
+                .text("low", "2025-01-01")
+                .text("high", "2027-01-01"),
+            shape.events,
+            |row| row.id.clone()
+        )
+        .len(),
+        shape.events
+    );
+    assert_eq!(
+        walk_ids(
+            &reader,
+            &reminders::INBOX,
+            Args::new(),
+            shape.tasks,
+            |row| row.id.clone()
+        )
+        .len(),
+        shape.tasks
+    );
+
+    assert_eq!(
+        walk_ids(
+            &reader,
+            &money::TXN_ACTIVITY,
+            Args::new(),
+            shape.transactions,
+            |row| row.id.clone()
+        )
+        .len(),
+        shape.transactions
+    );
+    assert_eq!(
+        walk_ids(
+            &reader,
+            &health::WORKOUTS,
+            Args::new(),
+            shape.workouts,
+            |row| row.id.clone()
+        )
+        .len(),
+        shape.workouts
+    );
+    assert_eq!(
+        walk_ids(
+            &reader,
+            &health::READINGS_BY_METRIC,
+            Args::new()
+                .text("person", &ids.reading_person)
+                .text("metric", &ids.reading_metric),
+            shape.readings,
+            |row| row.id.clone()
+        )
+        .len(),
+        shape.readings
+    );
+    assert_eq!(
+        walk_ids(
+            &reader,
+            &locker::ITEMS,
+            Args::new(),
+            shape.locker_items,
+            |row| row.id.clone()
+        )
+        .len(),
+        shape.locker_items
+    );
+
+    let inbox_count = reader
+        .run(&reminders::INBOX_COUNT, &Args::new())
+        .expect("exact inbox count");
+    assert_eq!(inbox_count.rows, vec![shape.tasks as i64]);
+    let health_window = reader
+        .run(
+            &health::METRIC_TREND,
+            &Args::new()
+                .text("metric", &ids.measurement_metric)
+                .text("person", &ids.reading_person)
+                .day("from_day", "2025-01-01")
+                .day("to_day", "2025-12-31"),
+        )
+        .expect("bounded health trend");
+    assert_eq!(health_window.rows.len(), health::METRIC_TREND.decl.bound);
+}
+
+#[test]
+fn money_match_hands_and_candidates_are_paged_without_dropping_dense_matches() {
+    let world = World::new("money-match-pages");
+    let account = world.made(
+        "account.add",
+        serde_json::json!({ "title": "Everyday", "type": "checking", "currency": "USD" }),
+    );
+    let hand = world.made(
+        "txn.add",
+        serde_json::json!({
+            "account_id": account,
+            "posted_on": "2026-03-02",
+            "amount_minor": -4250,
+            "title": "Whole Foods"
+        }),
+    );
+    let records: Vec<serde_json::Value> = (0..55)
+        .map(|number| {
+            serde_json::json!({
+                "external_id": format!("statement:{number:03}"),
+                "fields": {
+                    "title": format!("WHOLE FOODS {number:03}"),
+                    "posted_on": "2026-03-03",
+                    "amount_minor": -4250,
+                    "line": { "memo": "market", "imported_from": "csv" }
+                }
+            })
+        })
+        .collect();
+    world.ok(
+        "follow.statement",
+        serde_json::json!({
+            "origin": { "ref": account, "label": "Everyday", "fills": account },
+            "records": records
+        }),
+    );
+    let reader = world.reader();
+    let hands = reader
+        .run(
+            &apps::money::MATCH_PROPOSALS,
+            &Args::new().text("account", &account).int("days", 5),
+        )
+        .expect("matching hand rows");
+    assert_eq!(hands.rows.len(), 1);
+    assert!(hands.next.is_none());
+    assert_eq!(hands.rows[0].hand_id, hand);
+    assert_eq!(hands.rows[0].hand_title, "Whole Foods");
+    assert_eq!(hands.rows[0].currency, "USD");
+
+    let mut candidates = Vec::new();
+    let mut after = None;
+    let mut pages = 0;
+    loop {
+        let mut args = Args::new().text("hand", &hand).int("days", 5);
+        if let Some(cursor) = after.take() {
+            args = args.after(cursor);
+        }
+        let page = reader
+            .run(&apps::money::MATCH_CANDIDATES, &args)
+            .expect("candidate page");
+        assert!(page.rows.len() <= apps::money::MATCH_CANDIDATES.decl.bound);
+        candidates.extend(
+            page.rows
+                .into_iter()
+                .map(|candidate| candidate.statement_id),
+        );
+        pages += 1;
+        match page.next {
+            Some(cursor) => after = Some(cursor),
+            None => break,
+        }
+    }
+    assert_eq!(pages, 2, "the 55 pairs cross the 50 row page boundary");
+    assert_eq!(candidates.len(), 55);
+    let distinct: BTreeSet<&str> = candidates.iter().map(String::as_str).collect();
+    assert_eq!(distinct.len(), 55, "no candidate repeats across pages");
+
+    let dismissed = candidates[0].clone();
+    world.ok(
+        "txn.dismiss_match",
+        serde_json::json!({ "hand_id": hand, "statement_id": dismissed }),
+    );
+    let candidates = reader
+        .run(
+            &apps::money::MATCH_CANDIDATES,
+            &Args::new().text("hand", &hand).int("days", 5),
+        )
+        .expect("dismissed candidate page");
+    assert_eq!(candidates.rows.len(), 50);
+    assert!(candidates.next.is_some());
+    assert!(
+        !candidates
+            .rows
+            .iter()
+            .any(|row| row.statement_id == dismissed)
+    );
 }
 
 #[test]

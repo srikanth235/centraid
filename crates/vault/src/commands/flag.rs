@@ -81,23 +81,32 @@ fn flag_of(word: &str) -> Result<Flag> {
 fn set(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: FlagInput = ctx.parse_input()?;
     let (set, _) = flag_of(&input.flag)?.statements();
-    let mut changed = 0;
+    let mut changed_ids = Vec::new();
     for id in ctx.target_ids() {
-        changed += ctx
+        let changed = ctx
             .connection()
             .execute(set, rusqlite::params![id, ctx.now])?;
+        if changed > 0 {
+            changed_ids.push(id);
+        }
     }
-    Ok(serde_json::json!({ "changed": changed > 0, "count": changed }))
+    Ok(
+        serde_json::json!({ "changed": !changed_ids.is_empty(), "count": changed_ids.len(), "changed_ids": changed_ids }),
+    )
 }
 
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: FlagInput = ctx.parse_input()?;
     let (_, clear) = flag_of(&input.flag)?.statements();
-    let mut changed = 0;
+    let mut changed_ids = Vec::new();
     for id in ctx.target_ids() {
-        changed += ctx.connection().execute(clear, [id.as_str()])?;
+        if ctx.connection().execute(clear, [id.as_str()])? > 0 {
+            changed_ids.push(id);
+        }
     }
-    Ok(serde_json::json!({ "changed": changed > 0, "count": changed }))
+    Ok(
+        serde_json::json!({ "changed": !changed_ids.is_empty(), "count": changed_ids.len(), "changed_ids": changed_ids }),
+    )
 }
 
 /// A sentence when this entity takes no flag: it is missing or is in the trash.

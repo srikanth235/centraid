@@ -1,7 +1,7 @@
 use rusqlite::Row;
 
 use crate::kind::{Export, Footer, KindDecl, Share, Trash, exported, plain};
-use crate::read::{DEFAULT_PAGE, ParamTy, Read, ReadDecl, Shape, desc, param, read};
+use crate::read::{DEFAULT_PAGE, ParamTy, Read, ReadDecl, Shape, asc, desc, param, read};
 
 use super::{Trashed, trash};
 
@@ -325,6 +325,25 @@ pub const TAGS: Read<TagRow> = read(
     TagRow::of,
 );
 
+/// A keyset-paged tag list for pickers whose lists must reach every tag.
+pub const TAGS_PAGE: Read<TagRow> = read(
+    ReadDecl {
+        name: "notes.tags_page",
+        shape: Shape::PagedList,
+        sql: "SELECT c.id, e.title, c.key, c.color \
+              FROM concept c JOIN entity e ON e.id = c.id \
+              WHERE c.kind = 'tag' AND e.deleted_at IS NULL \
+                AND (c.key, c.id) > (:after_key, :after_id) \
+              ORDER BY c.key ASC, c.id ASC LIMIT :n",
+        params: &[],
+        reads: &["concept", "entity"],
+        across: &[],
+        bound: DEFAULT_PAGE,
+        cursor: &[asc("key", "after_key"), asc("id", "after_id")],
+    },
+    TagRow::of,
+);
+
 pub const TAG_BY_ID: Read<TagRow> = read(
     ReadDecl {
         name: "notes.tag_by_id",
@@ -410,6 +429,7 @@ pub const READS: &[ReadDecl] = &[
     MENTIONS.decl,
     NOTEBOOKS.decl,
     TAGS.decl,
+    TAGS_PAGE.decl,
     TAG_BY_ID.decl,
     BY_TAG.decl,
     NOTE_TAGS.decl,

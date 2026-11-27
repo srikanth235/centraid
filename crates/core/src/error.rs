@@ -167,11 +167,6 @@ impl CoreError {
             Self::Closed | Self::Poisoned { .. } | Self::Invariant { .. } => ErrorCode::Internal,
             Self::BackupFromNewerBuild { .. } => ErrorCode::BackupFromNewerBuild,
             Self::BackupUnreadable { .. } => ErrorCode::BackupUnreadable,
-            // THE VERSION WINDOW, not `Internal`. "This app and that core are
-            // not the same build" is the same remedy as "these two are too far
-            // apart to talk" — update the one the diagnostics screen names —
-            // and a shell that branched on `Internal` would offer a restart,
-            // which cannot fix it (#1020 wave 3).
             Self::StaleCore { .. } => ErrorCode::VersionWindow,
             Self::Unavailable { .. } => ErrorCode::PeerUnreachable,
             Self::GatewayRefused { .. } => ErrorCode::Unauthorized,
@@ -199,21 +194,7 @@ impl CoreError {
         }
     }
 
-    /// THE OWNER-FACING SENTENCE, derived from [`Self::code`] and nothing else.
-    ///
-    /// Lane E's shell showed a member
-    /// `entity id is already held by another kind: core_party (#916)` — a
-    /// SQLite `RAISE(ABORT)` from a trigger, carried out through `detail`
-    /// because that was the only string on the message (#1020 wave 3, lane E
-    /// finding 2). `error.proto` already said that no free-text reason reaches
-    /// a member; it just gave a shell nothing else to render.
-    ///
-    /// So this function reads the CODE, never `self`'s own `Display`. That is
-    /// the whole mechanism: a database message, a file path, a SQL fragment or
-    /// a panic payload cannot reach a member through a function that does not
-    /// look at them. `to_wire` keeps the raw text in `detail` for the audit
-    /// trail, which is where `action.proto`'s rule for `ActResponse.reason` says
-    /// a predicate belongs.
+    /// Builds member-facing words from the error code, never its diagnostic detail.
     #[must_use]
     pub fn sentence(&self) -> String {
         sentence_for_code(self.code()).to_owned()
@@ -251,13 +232,7 @@ impl CoreError {
     }
 }
 
-/// THE OWNER-FACING SENTENCE for a code.
-///
-/// One table, reached by `CoreError::sentence` and by any path that produces a
-/// code without a `CoreError` variant of its own. A shell may render it
-/// verbatim or branch on the code and use its own words;
-/// what it must not do is render `Error.detail`, which is where the raw
-/// predicate lives (#1020 wave 3, lane E finding 2).
+/// Member-facing sentence for a wire error code.
 #[must_use]
 pub fn sentence_for_code(code: ErrorCode) -> &'static str {
     use ErrorCode as C;
@@ -422,14 +397,6 @@ mod tests {
         assert!(error.to_string().contains("wave 3"));
     }
 
-    /// **NO REFUSAL PAYLOAD SHIPS SQL.** The demonstrated red for lane E
-    /// finding 2 (#1020 wave 3).
-    ///
-    /// The refusal a member actually saw was a SQLite `RAISE(ABORT)` from an
-    /// entity-kind trigger, reaching the screen through `Error.detail` because
-    /// that was the only string the message carried. The sentence is now built
-    /// from the code, so the trigger's words cannot get into it — and `detail`
-    /// still carries them, because the audit trail is what they are for.
     #[test]
     fn the_owner_facing_sentence_carries_no_database_text_and_the_detail_still_does() {
         // Verbatim, from `contracts/schema/vault-ddl.sql`'s trigger and from

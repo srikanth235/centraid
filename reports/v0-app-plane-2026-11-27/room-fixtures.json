@@ -1,0 +1,176 @@
+{
+  "artifact_format": "prost-encoded centraid.core.v1.Room",
+  "coverage_notes": [
+    "These artifacts prove Rust Room output only; they are not native-device approval.",
+    "Owner authentication, OS save sheets, clipboard behavior, and hardware picker behavior are not simulated.",
+    "This capture includes the unanswered ambiguous slash-date question with import blocked, the preview after explicit date order choice, CSV mapping, account currency confirmation, linked transfer, a second statement import reporting one unchanged row, and split statement-says detail.",
+    "People captures cover root/detail, populated editor, version list, link picker, selection mode, and a real registered Phone-stated title difference. The link picker capture does not commit a link; the selection capture does not commit a bulk action.",
+    "People import review/confirmation, successful vCard export, attachment staging, OS clipboard, and native share sheets are not captured here. Import and effect outcomes remain shell-owned; see room_people and room_link_picker behavior tests for supported interactions.",
+    "Each fixture records its source behavior test or registered-command sequence in the fixture manifest; unsupported or native-owned work is stated here rather than drawn as completed."
+  ],
+  "fixtures": [
+    {
+      "file": "people_root.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "People root after registering a person with a work email",
+      "screen_key": "people",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "people_detail.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Person detail with persisted role, organization, and contact point",
+      "screen_key": "person/01900000-0000-7000-8000-000000009101",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "people_edit_form.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Person editor populated from registered person and contact-point commands",
+      "screen_key": "person/01900000-0000-7000-8000-000000009101/edit",
+      "source_test": "room_people::new_and_edit_person_forms_keep_and_clear_d1_drafts"
+    },
+    {
+      "file": "people_versions.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Earlier person revisions after a registered retitle command",
+      "screen_key": "person/01900000-0000-7000-8000-000000009101/versions",
+      "source_test": "room_people::person_detail_shows_timeline_footers_catch_up_and_date_reminder_toggle"
+    },
+    {
+      "file": "people_link_picker.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Link picker with another registered person available; no link has been committed",
+      "screen_key": "person/01900000-0000-7000-8000-000000009101/link",
+      "source_test": "room_link_picker::link_picker_adds_a_search_result_and_undoes_the_link"
+    },
+    {
+      "file": "people_selection_mode.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "People list selection mode before a bulk action",
+      "screen_key": "people",
+      "source_test": "room_people::home_tile_opens_people_and_list_flows_work"
+    },
+    {
+      "file": "people_phone_says.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Phone-stated title difference with a field-scoped take action",
+      "screen_key": "person/7b0fd6bc-00f8-7fbc-82f7-d6983bc51c79",
+      "source_test": "vault/tests/lane_follow_people.rs::a_person_reports_title_scalars_and_points_while_they_differ_and_nothing_once_equal"
+    },
+    {
+      "file": "money_root.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Money activity with a checking account and posted expense",
+      "screen_key": "money",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "money_selection_mode.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Two selected transactions before one bulk category action and one Undo",
+      "screen_key": "money",
+      "source_test": "room_money::home_tile_opens_money_activity_and_list_flows_work"
+    },
+    {
+      "file": "money_import_mapping.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "CSV mapping preview from source rows supplied out of date order",
+      "screen_key": "money/import-csv",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "money_csv_date_order_question.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Ambiguous slash dates pause import and ask the member to choose month/day or day/month",
+      "screen_key": "money/import-csv",
+      "source_test": "room_money::ambiguous_slash_dates_are_not_importable_until_member_chooses_order"
+    },
+    {
+      "file": "money_ambiguous_csv_date_order.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Slash dates that can be read as month/day or day/month, with the member's explicit month/day choice visible",
+      "screen_key": "money/import-csv",
+      "source_test": "room_money::csv_import_maps_columns_previews_three_rows_and_imports"
+    },
+    {
+      "file": "money_currency_correction.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Currency change confirmation before committing account currency correction",
+      "screen_key": "money/account/01900000-0000-7000-8000-000000009106/currency",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "money_recurring.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Derived recurring observation summary from three imported monthly statements",
+      "screen_key": "money/recurring",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "money_match_proposals.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Hand-entered transaction list with statement match proposals",
+      "screen_key": "money/matches/account/01900000-0000-7000-8000-000000009102",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "money_match_candidates.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Statement candidates shown for explicit review before any match commit",
+      "screen_key": "money/matches/hand/01900000-0000-7000-8000-000000009109",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "money_transfer.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Transfer list after a registered linked transfer command",
+      "screen_key": "money/transfers",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "money_detail.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Transaction detail for a persisted checking expense",
+      "screen_key": "money/txn/01900000-0000-7000-8000-000000009103",
+      "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+    },
+    {
+      "file": "money_statement_reimport_unchanged.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "After a second statement import with a new invoke key reports one unchanged row and no duplicate transaction",
+      "screen_key": "money",
+      "source_test": "vault/tests/money.rs::a_statement_is_followed_line_by_line_and_a_reimport_writes_nothing"
+    },
+    {
+      "file": "money_statement_says.pb",
+      "native_owner_or_save_effect_performed": false,
+      "origin": "real Core registered commands + Room runtime",
+      "scenario": "Edited statement entry showing both split parts and the retained values the statement originally supplied",
+      "screen_key": "money/txn/8325d613-75c4-7fc4-8793-df9048a0d43b",
+      "source_test": "room_money::txn_detail_shows_splits_statement_says_and_footers"
+    }
+  ],
+  "generated_by": "crates/screens/tests/review_room_artifacts.rs::emit_review_room_artifacts_when_opted_in",
+  "native_os_owner_or_save_effects_simulated": false,
+  "schema_version": 1
+}

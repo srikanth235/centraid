@@ -27,12 +27,8 @@ internal object BandPolicy {
     const val SEARCH_GLYPH: Int = 17
     const val SEARCH_GLYPH_LEAD: Int = 10
 
-    /**
-     * HOW HIGH THE BAND'S PLATE FLOATS: Material 3's level 3 (6dp), the elevation of its floating
-     * toolbar. The plate is opaque, so the shadow is what lifts it off the page the content runs
-     * under. iOS draws the same controls as Liquid Glass; each platform uses its own primitive.
-     */
-    const val BAND_ELEVATION: Int = 6
+    /** A small lift under the frosted plate; the translucent ground provides most of its depth. */
+    const val BAND_ELEVATION: Int = 3
 
     /** Breathing room under a scroller's last row, beyond the band (`BandMetrics`' foot margin). */
     const val FOOT_MARGIN: Int = 24

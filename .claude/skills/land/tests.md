@@ -6,10 +6,10 @@ A test says what must stay true, on counts and data, the same on every machine. 
 
 - Never assert on seconds. Assert on counts: statements, calls, rows, reads asked, permission prompts. Work is bounded by construction.
 - A test that needs "now" is handed one. Rust vault tests use `FixedClock` and `SeededIds` from `centraid_vault::clock`. The screens `Driver` takes the instant it seeds at.
-- Pure machines take instants as arguments and hold no timer. `crates/screens/src/follow/gate.rs` is the model.
+- Pure machines take instants as arguments and hold no timer. `crates/core/src/follow/mod.rs` is the model.
 - Write the attacker and the fault. A rule is tested by writing the bad row with raw SQL and watching the database refuse it, not by calling the command that refuses it; a durability promise by causing the fault for real: a child process killed with SIGKILL mid-founding, a page of the file overwritten, a lower-rung file opened through `Vault::open_with`, a clock moved years. A test that only calls the happy path proves the sentence, not the guarantee.
-- A plan is checked in place of a timing. `crates/core/tests/query_plans.rs` plans every read over a year-three vault and fails on a full scan of a big table or a sort after a paged read, unless `contracts/ledgers/query-plans.json` allows it; an entry no read needs any more fails it too, so the ledger only shrinks. The other direction, the index a read is served by, is named on the product's own statement and never a copy of its text: the sweep's `WALKS` table names it for an app's read, planned as the vault composes it, and `crates/vault/tests/index_walks.rs` for a statement of the vault's own, through a constant the command also runs.
-- `crates/core/tests/year3_writes.rs` keeps what a timing used to guard: the writes are correct at scale.
+- A plan is checked in place of a timing. `crates/domain/tests/read_registry.rs` plans every read over a year-three vault and fails on a full scan of a big table or a sort after a paged read, unless `contracts/ledgers/query-plans.json` allows it; an entry no read needs any more fails it too, so the ledger only shrinks. The other direction, the index a read is served by, is named on the product's own statement and never a copy of its text: the sweep's `WALKS` table names it for an app's read, planned as the vault composes it, and `crates/vault/tests/index_walks.rs` for a statement of the vault's own, through a constant the command also runs.
+- A dedicated year-three write stress test is a target; current read-plan coverage is in `crates/domain/tests/read_registry.rs`.
 
 ## Shared fixtures in `contracts/`
 
@@ -26,12 +26,7 @@ A test says what must stay true, on counts and data, the same on every machine. 
 
 ## Year-three scale tests
 
-- `centraid_apps_kit::fixtures` writes a declared profile for an app (`YEAR3_NOTES`, `YEAR3_PEOPLE`, `YEAR3_EVENTS`, `YEAR3_TASKS`, `YEAR3_DOCS`, `YEAR3_PHOTOS`). Money has its own `centraid_apps_money::year3`.
-- Each app except Locker has `crates/apps/<app>/tests/year3.rs` (reminders is `task_year3.rs`). They use a fixed seed, so two runs write identical rows.
-- The unignored tests run a smaller profile of the same shape through the same statements, so the generator cannot rot. The full profile is `#[ignore]`d and runs with `cargo test -p <crate> --test year3 -- --ignored --nocapture`.
-- They assert properties a count cannot state: a window is walked past one page, trash and pins outlive the window, a memo is on no shelf. Any timing they print is information.
-- Reads go through `centraid_apps_kit::testdoor::TestDoor`.
-- The shared year-three vault for core tests is `crates/core/tests/year3_corpus`.
+Year-three scale tests for the app domains and the shared core corpus are not implemented yet (target). `crates/core/tests/assist_scale.rs` builds its own bounded data set; it is not a shared year-three corpus.
 
 ## Screens: Rust `Driver` tests
 
@@ -49,11 +44,4 @@ A test says what must stay true, on counts and data, the same on every machine. 
 ## Shells and TypeScript
 
 - Android unit tests are under `mobile/androidApp/src/test/kotlin`, the JVM binding's under `mobile/core/src/jvmTest`, and iOS's under `mobile/iosApp/Tests`. What can and cannot be run on a machine is in [mobile](mobile.md).
-- TypeScript tests use `@centraid/test-kit` (`packages/test-kit`):
-  - `useFakeClock` replaces fake timers and restores them even when the test throws;
-  - `seededRandom` replaces `Math.random`;
-  - `tempDir` and `tempDirSync` own the removal of a scratch directory;
-  - `flushMacrotasks` and `forEachSequentially` give a consistent yield and ordering;
-  - `fc` re-exports fast-check for property tests;
-  - `/vitest` holds the project presets. A test with no assertion fails.
-- oxlint bans `vi.useFakeTimers`, `vi.setSystemTime`, `Math.random` and `mkdtemp` in tests, and points at the kit.
+- The TypeScript test toolkit and related frontend test stack were removed; no TypeScript package tests remain.

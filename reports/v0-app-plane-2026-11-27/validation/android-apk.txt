@@ -1,0 +1,68 @@
+Picked up JAVA_TOOL_OPTIONS: -Duser.home=/tmp/centraid-robolectric-home
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :core:androidPreBuild UP-TO-DATE
+> Task :core:preAndroidMainBuild UP-TO-DATE
+> Task :core:generateAndroidMainEmptyResourceFiles UP-TO-DATE
+> Task :core:kmpPartiallyResolvedDependenciesChecker
+> Task :core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:generateCommonMainProtos UP-TO-DATE
+> Task :core:compileAndroidMain UP-TO-DATE
+> Task :core:bundleAndroidMainClassesToCompileJar UP-TO-DATE
+> Task :core:processAndroidMainJavaRes UP-TO-DATE
+> Task :core:writeAndroidMainAarMetadata UP-TO-DATE
+> Task :core:processAndroidMainManifest UP-TO-DATE
+> Task :core:mergeAndroidMainJniLibFolders
+> Task :core:mergeAndroidMainNativeLibs NO-SOURCE
+> Task :core:copyAndroidMainJniLibsProjectOnly
+> Task :androidApp:preBuild UP-TO-DATE
+> Task :androidApp:preDebugBuild UP-TO-DATE
+> Task :androidApp:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :androidApp:generateDebugResources UP-TO-DATE
+> Task :androidApp:packageDebugResources UP-TO-DATE
+> Task :androidApp:processDebugNavigationResources UP-TO-DATE
+> Task :androidApp:parseDebugLocalResources UP-TO-DATE
+> Task :androidApp:generateDebugRFile UP-TO-DATE
+> Task :androidApp:compileDebugKotlin UP-TO-DATE
+> Task :androidApp:javaPreCompileDebug UP-TO-DATE
+> Task :androidApp:compileDebugJavaWithJavac NO-SOURCE
+> Task :androidApp:generateDebugAssets UP-TO-DATE
+> Task :androidApp:mergeDebugAssets UP-TO-DATE
+> Task :androidApp:compressDebugAssets
+> Task :core:bundleLibRuntimeToDirAndroidMain
+> Task :androidApp:generateDebugGlobalSynthetics
+> Task :androidApp:processDebugJavaRes UP-TO-DATE
+> Task :androidApp:checkDebugDuplicateClasses
+> Task :androidApp:mergeDebugJavaResource
+> Task :androidApp:desugarDebugFileDependencies
+> Task :androidApp:l8DexDesugarLibDebug
+> Task :androidApp:mergeExtDexDebug
+> Task :androidApp:checkDebugAarMetadata UP-TO-DATE
+> Task :androidApp:mapDebugSourceSetPaths UP-TO-DATE
+> Task :androidApp:compileDebugNavigationResources UP-TO-DATE
+> Task :androidApp:mergeDebugResources UP-TO-DATE
+> Task :androidApp:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :androidApp:extractDeepLinksDebug UP-TO-DATE
+> Task :androidApp:processDebugMainManifest UP-TO-DATE
+> Task :androidApp:processDebugManifest UP-TO-DATE
+> Task :androidApp:processDebugManifestForPackage UP-TO-DATE
+> Task :androidApp:processDebugResources UP-TO-DATE
+> Task :androidApp:mergeLibDexDebug
+> Task :androidApp:dexBuilderDebug
+> Task :androidApp:mergeProjectDexDebug
+> Task :androidApp:mergeDebugJniLibFolders
+> Task :androidApp:validateSigningDebug
+> Task :androidApp:writeDebugAppMetadata
+> Task :androidApp:writeDebugSigningConfigVersions
+> Task :androidApp:mergeDebugNativeLibs
+
+> Task :androidApp:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libcentraid_core_ffi.so, libimage_processing_util_jni.so, libjnidispatch.so, libsurface_util_jni.so. Run with --info option to learn more.
+
+> Task :androidApp:packageDebug
+> Task :androidApp:createDebugApkListingFileRedirect
+> Task :androidApp:assembleDebug
+
+BUILD SUCCESSFUL in 2m 15s
+48 actionable tasks: 22 executed, 26 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html

@@ -1,0 +1,15 @@
+PASS mobile/iosApp/Design/Words.swift
+PASS mobile/iosApp/Sources/Chat/ChatModelDownload.swift
+PASS mobile/iosApp/Sources/Core.swift
+PASS mobile/iosApp/Sources/GatewayBrowser.swift
+PASS mobile/iosApp/Sources/Glance/TodayOpenHandler.swift
+PASS mobile/iosApp/Sources/Kit/RoomView.swift
+PASS mobile/iosApp/Sources/PhoneLibrary.swift
+PASS mobile/iosApp/Sources/RoomStore.swift
+PASS mobile/iosApp/Sources/ScreenPlatform.swift
+PASS mobile/iosApp/Sources/ScreenStore.swift
+PASS mobile/iosApp/Sources/ShellModel.swift
+PASS mobile/iosApp/Tests/GatewayBrowseTests.swift
+PASS mobile/iosApp/Tests/RoomStoreTests.swift
+PASS mobile/iosApp/UITests/AccessibilityAuditTests.swift
+Swift syntax-only: 14 files passed; no SDK typecheck or XCTest

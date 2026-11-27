@@ -5,6 +5,8 @@
 use std::collections::BTreeSet;
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_domain::page::PageCursor;
+use centraid_search::Target;
 
 use super::field::Fields;
 
@@ -46,6 +48,13 @@ impl Place {
 pub struct Ui {
     search_open: bool,
     term: String,
+    search_query: String,
+    search_applied: String,
+    search_after: Option<PageCursor>,
+    search_next: Option<PageCursor>,
+    search_page_loaded: bool,
+    search_hits: Vec<Target>,
+    search_corrected: String,
     selecting: bool,
     picked: BTreeSet<String>,
     listed: Vec<String>,
@@ -71,13 +80,100 @@ impl Ui {
     }
 
     pub fn set_term(&mut self, term: &str) {
+        if self.term != term {
+            self.clear_search_results();
+        }
         self.search_open = true;
         term.clone_into(&mut self.term);
+    }
+
+    pub fn search_query(&self) -> &str {
+        &self.search_query
+    }
+
+    pub fn search_applied(&self) -> &str {
+        &self.search_applied
+    }
+
+    pub fn search_after(&self) -> Option<&PageCursor> {
+        self.search_after.as_ref()
+    }
+
+    pub fn search_next(&self) -> Option<&PageCursor> {
+        self.search_next.as_ref()
+    }
+
+    pub fn search_page_loaded(&self) -> bool {
+        self.search_page_loaded
+    }
+
+    pub fn search_hits(&self) -> &[Target] {
+        &self.search_hits
+    }
+
+    pub fn search_corrected(&self) -> &str {
+        &self.search_corrected
+    }
+
+    pub fn begin_search(&mut self, query: &str) {
+        if self.search_query != query {
+            self.clear_search_results();
+            self.search_query = query.to_owned();
+            self.search_applied = query.to_owned();
+        }
+    }
+
+    pub fn set_search_correction(&mut self, corrected: &str) {
+        self.search_applied = corrected.to_owned();
+        self.search_corrected = corrected.to_owned();
+        self.search_after = None;
+        self.search_next = None;
+        self.search_page_loaded = false;
+        self.search_hits.clear();
+    }
+
+    pub fn append_search_page(&mut self, hits: Vec<Target>, next: Option<PageCursor>) {
+        self.search_hits.extend(hits);
+        self.search_next = next;
+        self.search_page_loaded = true;
+    }
+
+    pub fn advance_search_page(&mut self) -> bool {
+        let Some(next) = self.search_next.take() else {
+            return false;
+        };
+        self.search_after = Some(next);
+        self.search_page_loaded = false;
+        true
+    }
+
+    /// Invalidate cached FTS pages after any committed write while retaining the typed query.
+    pub fn refresh_search(&mut self) {
+        if !self.term.trim().is_empty() {
+            self.search_query.clear();
+            self.search_applied.clear();
+            self.search_after = None;
+            self.search_next = None;
+            self.search_page_loaded = false;
+            self.search_hits.clear();
+            self.search_corrected.clear();
+        }
+    }
+
+    fn clear_search_results(&mut self) {
+        self.search_query.clear();
+        self.search_applied.clear();
+        self.search_after = None;
+        self.search_next = None;
+        self.search_page_loaded = false;
+        self.search_hits.clear();
+        self.search_corrected.clear();
     }
 
     pub fn close_search(&mut self) {
         self.search_open = false;
         self.term.clear();
+        self.clear_search_results();
     }
 
     #[must_use]

@@ -8,6 +8,7 @@ use centraid_domain::read::Args;
 
 use super::blocks::{self, glyph};
 use super::calendar;
+use super::door::Door;
 use super::first;
 use super::frame::{self, room};
 use super::money;
@@ -30,141 +31,60 @@ pub const LOCKER: &str = "locker";
 const EN: Locale = Locale::En;
 const BACKUP_TABLES: [&str; 2] = ["backup", "blob"];
 
-const SEARCH_ENTITY_KINDS: &[&str] = &[
-    "person", "event", "task", "txn", "account", "note", "document", "photo", "workout",
-];
-const SEARCH_CONTAINER_KINDS: &[&str] = &[
-    "calendar",
-    "task_list",
-    "notebook",
-    "folder",
-    "album",
-    "list",
-];
-
 #[must_use]
 pub fn registry() -> Registry {
     Registry::new().exact(HOME, || Box::new(Home))
 }
 
-fn epoch_ms_to_ymd(ms: i64) -> (i32, u32, u32) {
-    let days = ms.div_euclid(86_400_000);
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y = (yoe as i64) + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = y + i64::from(m <= 2);
-    (year as i32, m as u32, d as u32)
-}
-
-fn today_iso(now_ms: i64) -> String {
-    let (y, m, d) = epoch_ms_to_ymd(now_ms);
-    format!("{y:04}-{m:02}-{d:02}")
-}
-
-fn week_before(now_ms: i64) -> String {
-    today_iso(now_ms - 7 * 86_400_000)
-}
-
-fn next_day(now_ms: i64) -> String {
-    today_iso(now_ms + 86_400_000)
-}
-
-fn edit_distance_le_1(a: &str, b: &str) -> bool {
-    let ac: Vec<char> = a.chars().collect();
-    let bc: Vec<char> = b.chars().collect();
-    let (al, bl) = (ac.len(), bc.len());
-    if al.abs_diff(bl) > 1 {
-        return false;
-    }
-    if al == bl {
-        let mut diffs = 0;
-        let mut i = 0;
-        while i < al {
-            if ac[i] != bc[i] {
-                if i + 1 < al && ac[i] == bc[i + 1] && ac[i + 1] == bc[i] {
-                    diffs += 1;
-                    i += 2;
-                    continue;
-                }
-                diffs += 1;
-            }
-            i += 1;
-        }
-        return diffs == 1;
-    }
-    let (short, long) = if al < bl { (&ac, &bc) } else { (&bc, &ac) };
-    let (mut i, mut j, mut skipped) = (0, 0, false);
-    while i < short.len() && j < long.len() {
-        if short[i] == long[j] {
-            i += 1;
-            j += 1;
-        } else if !skipped {
-            skipped = true;
-            j += 1;
-        } else {
-            return false;
-        }
-    }
-    true
-}
-
-fn suggest_correction(term: &str, titles: &[String]) -> Option<String> {
-    let needle = term.trim().to_ascii_lowercase();
-    if needle.chars().count() < 4 || needle.contains(char::is_whitespace) {
-        return None;
-    }
-    let mut best: Option<String> = None;
-    for title in titles {
-        for raw_word in title.split(|c: char| !c.is_alphanumeric()) {
-            let word = raw_word.to_ascii_lowercase();
-            if word.chars().count() < 4 || word == needle {
-                continue;
-            }
-            if edit_distance_le_1(&needle, &word) {
-                match &best {
-                    Some(cur) if cur <= &word => {}
-                    _ => best = Some(word),
-                }
-            }
-        }
-    }
-    best
-}
-
-fn route_for_entity(kind: &str, id: &str) -> String {
+pub(super) fn route_for_entity(kind: &str, id: &str) -> String {
     match kind {
         "person" => format!("person/{id}"),
         "event" => format!("calendar/event/{id}"),
         "task" => format!("reminders/task/{id}"),
         "txn" => format!("money/txn/{id}"),
         "account" => format!("money/account/{id}"),
-        "note" => NOTES.to_owned(),
-        "document" => DOCS.to_owned(),
-        "photo" => PHOTOS.to_owned(),
-        "workout" => HEALTH.to_owned(),
+        "note" => format!("notes/note/{id}"),
+        "document" => format!("docs/doc/{id}"),
+        "photo" => format!("photos/photo/{id}"),
+        "workout" => format!("health/workout/{id}"),
+        "thread" => format!("chat/{id}"),
+        "place" => format!("photos/place/{id}"),
+        "locker_item" => format!("locker/item/{id}"),
+        "notebook" | "folder" | "album" | "calendar" | "task_list" | "list" => {
+            route_for_container(kind, id)
+        }
         _ => HOME.to_owned(),
+    }
+}
+
+pub(super) fn route_for_versions(kind: &str, id: &str) -> String {
+    match kind {
+        "person" => format!("person/{id}/versions"),
+        "event" => format!("calendar/event/{id}/versions"),
+        "task" => format!("reminders/task/{id}/versions"),
+        "txn" => format!("money/txn/{id}/versions"),
+        "note" => format!("notes/note/{id}/versions"),
+        "document" => format!("docs/doc/{id}/versions"),
+        "photo" => format!("photos/photo/{id}/versions"),
+        "workout" => format!("health/workout/{id}/versions"),
+        "locker_item" => format!("locker/item/{id}/versions"),
+        _ => route_for_entity(kind, id),
     }
 }
 
 fn route_for_container(kind: &str, id: &str) -> String {
     match kind {
-        "calendar" => calendar::CALENDARS.to_owned(),
+        "calendar" => format!("calendar/calendar/{id}"),
         "task_list" => format!("reminders/list/{id}"),
         "list" => format!("people/list/{id}"),
-        "notebook" => NOTES.to_owned(),
-        "folder" => DOCS.to_owned(),
-        "album" => PHOTOS.to_owned(),
+        "notebook" => format!("notes/notebook/{id}"),
+        "folder" => format!("docs/folder/{id}"),
+        "album" => format!("photos/album/{id}"),
         _ => HOME.to_owned(),
     }
 }
 
-fn kind_label(kind: &str) -> String {
+pub(super) fn kind_label(kind: &str) -> String {
     match kind {
         "person" => home_words::search_kind_person(EN),
         "event" => home_words::search_kind_event(EN),
@@ -175,6 +95,9 @@ fn kind_label(kind: &str) -> String {
         "document" => home_words::search_kind_document(EN),
         "photo" => home_words::search_kind_photo(EN),
         "workout" => home_words::search_kind_workout(EN),
+        "place" => home_words::app_photos(EN),
+        "thread" => home_words::band_chat(EN),
+        "locker_item" => words::home_locker_tile(EN),
         "calendar" => home_words::app_calendar(EN),
         "task_list" => home_words::app_reminders(EN),
         "notebook" => shared::search_kind_notebook(EN),
@@ -188,11 +111,11 @@ struct Home;
 
 impl Home {
     fn widgets(&mut self, b: &mut Build<'_>) -> Vec<wire::RoomBlock> {
-        let now = b.door.now_ms();
-        let day = today_iso(now);
-        let low = week_before(now);
-        let from = format!("{day}T00:00:00.000Z");
-        let to = format!("{}T00:00:00.000Z", next_day(now));
+        let day = b.door.today();
+        let low = b.door.shift_day(&day, -7);
+        let next = b.door.shift_day(&day, 1);
+        let from = b.door.day_start(&day);
+        let to = b.door.day_start(&next);
         let floating_from = format!("{day}T00:00");
         let floating_to = format!("{day}T23:59");
         let day_one = first::day_one(b);
@@ -324,7 +247,7 @@ impl Home {
             home_words::tile_empty_people(EN)
         };
         let money_line = if has_money {
-            money::month_spend(b, now)
+            money::month_spend(b, b.door.now_ms())
         } else {
             home_words::tile_empty_money(EN)
         };
@@ -535,66 +458,111 @@ impl RoomScreen for Home {
         };
 
         let term = b.ui.search_term().trim().to_owned();
+        let mut search_failure = None;
+        if b.ui.search_open() {
+            // Home's FTS results derive from entity/item text; a write must invalidate every
+            // cached page before the rebuilt room is shown.
+            b.watch(&centraid_vault::model::HOST_TABLES);
+        }
+        if b.ui.search_open() && !term.is_empty() {
+            let container_kinds: Vec<String> = centraid_vault::model::Kind::CONTAINERS
+                .into_iter()
+                .filter(|kind| centraid_vault::model::Kind::SEARCHABLE.contains(kind))
+                .map(|kind| kind.as_str().to_owned())
+                .collect();
+            let request = centraid_search::SearchRequest::across(container_kinds, term.clone(), 50);
+            match b.door.search_page(&request) {
+                Ok(centraid_search::Answer::Data { page, .. }) => {
+                    search_slot.containers = page
+                        .rows
+                        .into_iter()
+                        .map(|target| {
+                            blocks::row(
+                                &mut b.sel,
+                                &format!("search/container/{}", target.id),
+                                &target.title,
+                                Handler::Open(route_for_entity(&target.entity, &target.id)),
+                            )
+                            .meta(&kind_label(&target.entity))
+                            .build()
+                        })
+                        .collect();
+                }
+                Ok(centraid_search::Answer::Denied(_)) => {
+                    search_failure = Some("Search is unavailable right now. Try again.".to_owned());
+                }
+                Err(_) => {
+                    search_failure = Some("Search is unavailable right now. Try again.".to_owned());
+                }
+            }
+            if search_failure.is_none() {
+                match super::search_view::unindexed_title_rows(b, &["list", "calendar"], &term) {
+                    Ok(rows) => search_slot.containers.extend(rows),
+                    Err(error) => search_failure = Some(error),
+                }
+            }
+        }
         let blocks_out = if b.ui.search_open() && !term.is_empty() {
-            let mut all_entities = Vec::new();
-            for kind in SEARCH_ENTITY_KINDS {
-                if let Ok(ans) = b.run(
-                    &entity_reads::BY_KIND_RECENT,
-                    &Args::new().text("kind", *kind),
-                ) {
-                    all_entities.extend(ans.rows);
+            b.ui.begin_search(&term);
+            if !b.ui.search_page_loaded() && search_failure.is_none() {
+                let run_page =
+                    |door: &dyn Door,
+                     query: &str,
+                     after: Option<centraid_domain::page::PageCursor>| {
+                        let mut request = centraid_search::SearchRequest::across(
+                            Vec::<String>::new(),
+                            query.to_owned(),
+                            10,
+                        );
+                        request.page.after = after;
+                        door.search_page(&request)
+                    };
+                let after = b.ui.search_after().cloned();
+                let query = b.ui.search_applied().to_owned();
+                match run_page(b.door, &query, after) {
+                    Ok(centraid_search::Answer::Data { page, .. }) => {
+                        if page.rows.is_empty()
+                            && b.ui.search_after().is_none()
+                            && b.ui.search_corrected().is_empty()
+                        {
+                            match b.door.search_correction(&[], &term, false) {
+                                Ok(Some(corrected)) => {
+                                    b.ui.set_search_correction(&corrected);
+                                    search_slot.corrected = fill(
+                                        &shared::search_corrected(EN),
+                                        &[("corrected", &corrected)],
+                                    );
+                                    match run_page(b.door, &corrected, None) {
+                                        Ok(centraid_search::Answer::Data { page, .. }) => {
+                                            b.ui.append_search_page(page.rows, page.next);
+                                        }
+                                        Ok(centraid_search::Answer::Denied(_)) => {
+                                            search_failure = Some(
+                                                "Search is unavailable right now. Try again."
+                                                    .to_owned(),
+                                            );
+                                        }
+                                        Err(error) => search_failure = Some(error.0),
+                                    }
+                                }
+                                Ok(None) => b.ui.append_search_page(page.rows, page.next),
+                                Err(error) => search_failure = Some(error.0),
+                            }
+                        } else {
+                            b.ui.append_search_page(page.rows, page.next);
+                        }
+                    }
+                    Ok(centraid_search::Answer::Denied(_)) => {
+                        search_failure =
+                            Some("Search is unavailable right now. Try again.".to_owned());
+                    }
+                    Err(error) => search_failure = Some(error.0),
                 }
             }
-            let mut all_containers = Vec::new();
-            for kind in SEARCH_CONTAINER_KINDS {
-                if let Ok(ans) = b.run(
-                    &entity_reads::CONTAINERS_BY_KIND,
-                    &Args::new().text("kind", *kind),
-                ) {
-                    all_containers.extend(ans.rows);
-                }
-            }
-
-            let needle = term.to_ascii_lowercase();
-            let mut matched_entities: Vec<&entity_reads::EntitySearchRow> = all_entities
-                .iter()
-                .filter(|e| e.title.to_ascii_lowercase().contains(&needle))
-                .collect();
-            let mut matched_containers: Vec<&entity_reads::ContainerRow> = all_containers
-                .iter()
-                .filter(|c| c.title.to_ascii_lowercase().contains(&needle))
-                .collect();
-
-            if matched_entities.is_empty() && matched_containers.is_empty() {
-                let vocab: Vec<String> = all_entities
-                    .iter()
-                    .map(|e| e.title.clone())
-                    .chain(all_containers.iter().map(|c| c.title.clone()))
-                    .collect();
-                if let Some(corrected) = suggest_correction(&term, &vocab) {
-                    search_slot.corrected =
-                        fill(&shared::search_corrected(EN), &[("corrected", &corrected)]);
-                    matched_entities = all_entities
-                        .iter()
-                        .filter(|e| e.title.to_ascii_lowercase().contains(&corrected))
-                        .collect();
-                    matched_containers = all_containers
-                        .iter()
-                        .filter(|c| c.title.to_ascii_lowercase().contains(&corrected))
-                        .collect();
-                }
-            }
-
-            for c in &matched_containers {
-                search_slot.containers.push(
-                    blocks::row(
-                        &mut b.sel,
-                        &format!("search/container/{}", c.id),
-                        &c.title,
-                        Handler::Open(route_for_container(&c.kind, &c.id)),
-                    )
-                    .meta(&kind_label(&c.kind))
-                    .build(),
+            if !b.ui.search_corrected().is_empty() {
+                search_slot.corrected = fill(
+                    &shared::search_corrected(EN),
+                    &[("corrected", b.ui.search_corrected())],
                 );
             }
             search_slot.ask = Some(
@@ -602,13 +570,13 @@ impl RoomScreen for Home {
                     &mut b.sel,
                     "search/ask",
                     &fill(&shared::search_ask_about(EN), &[("term", &term)]),
-                    Handler::Open(CHAT.to_owned()),
+                    Handler::Ask(term.clone()),
                 )
                 .mark(blocks::glyph_mark("NewChat", ""))
                 .build(),
             );
 
-            if matched_entities.is_empty() && matched_containers.is_empty() {
+            if b.ui.search_hits().is_empty() && search_slot.containers.is_empty() {
                 vec![blocks::empty(
                     glyph("Search", ""),
                     &home_words::home_search_no_match_headline(EN),
@@ -619,33 +587,53 @@ impl RoomScreen for Home {
                     None,
                 )]
             } else {
-                let mut by_kind: BTreeMap<String, Vec<&entity_reads::EntitySearchRow>> =
-                    BTreeMap::new();
-                for row in matched_entities {
-                    by_kind.entry(row.kind.clone()).or_default().push(row);
+                let mut by_kind: BTreeMap<String, Vec<centraid_search::Target>> = BTreeMap::new();
+                for row in b.ui.search_hits().iter().cloned() {
+                    if matches!(
+                        row.entity.as_str(),
+                        "notebook" | "folder" | "album" | "calendar" | "task_list" | "list"
+                    ) {
+                        continue;
+                    }
+                    by_kind.entry(row.entity.clone()).or_default().push(row);
                 }
                 let mut sections = Vec::new();
-                for (kind, rows) in by_kind {
+                let kinds: Vec<String> = by_kind.keys().cloned().collect();
+                for (section_index, (kind, rows)) in by_kind.into_iter().enumerate() {
                     let heading = kind_label(&kind);
                     let row_blocks: Vec<wire::RoomBlock> = rows
                         .into_iter()
-                        .take(10)
                         .map(|r| {
                             blocks::row(
                                 &mut b.sel,
                                 &format!("search/hit/{}", r.id),
                                 &r.title,
-                                Handler::Open(route_for_entity(&r.kind, &r.id)),
+                                Handler::Open(if r.in_earlier_version {
+                                    route_for_versions(&r.entity, &r.id)
+                                } else {
+                                    route_for_entity(&r.entity, &r.id)
+                                }),
                             )
-                            .meta(&heading)
+                            .meta(if r.in_earlier_version {
+                                "In an earlier version"
+                            } else if r.snippet.is_empty() {
+                                heading.as_str()
+                            } else {
+                                &r.snippet
+                            })
                             .into_block()
                         })
                         .collect();
-                    sections.push(
+                    let section =
                         blocks::section(&mut b.sel, &format!("search/section/{kind}"), &heading)
-                            .blocks(row_blocks)
-                            .into_block(),
-                    );
+                            .blocks(row_blocks);
+                    let section =
+                        if section_index + 1 == kinds.len() && b.ui.search_next().is_some() {
+                            section.next_page(&mut b.sel, "search/more")
+                        } else {
+                            section
+                        };
+                    sections.push(section.into_block());
                 }
                 sections
             }
@@ -653,7 +641,7 @@ impl RoomScreen for Home {
             self.widgets(b)
         };
 
-        let mut built = room(wire::RoomKind::Home, HOME)
+        let builder = room(wire::RoomKind::Home, HOME)
             .title(&vault_title)
             .subtitle(&backup_status)
             .key(
@@ -664,9 +652,14 @@ impl RoomScreen for Home {
                 &settings_words::settings_title(EN),
                 Handler::Open(SETTINGS.to_owned()),
             )
-            .band(band)
-            .ready(blocks_out)
-            .build();
+            .band(band);
+        let mut built = if let Some(sentence) = search_failure.as_deref() {
+            builder
+                .failed(&mut b.sel, sentence, &shared::kit_retry(EN))
+                .build()
+        } else {
+            builder.ready(blocks_out).build()
+        };
         built.search = Some(search_slot);
         built
     }
@@ -678,6 +671,10 @@ impl RoomScreen for Home {
             first::START => {
                 first::mark_welcomed(e.door);
                 Outcome::replace(HOME)
+            }
+            tag if tag.starts_with("next:search/section/") => {
+                e.ui.advance_search_page();
+                Outcome::default()
             }
             tag if tag.starts_with("go:") => Outcome::push(&tag["go:".len()..]),
             _ => Outcome::default(),

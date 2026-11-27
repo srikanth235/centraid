@@ -12,6 +12,7 @@ use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
+use super::search_view;
 use super::selector::{Act, Handler, Sel};
 use crate::strings::{Locale, fill, home as home_words, money as words, shared};
 
@@ -78,6 +79,20 @@ pub fn registry() -> Registry {
                 return Some(Box::new(PurgeConfirm { id: id.to_owned() }));
             }
             if let Some(rest) = key.strip_prefix("money/txn/") {
+                if let Some(id) = rest.strip_suffix("/link") {
+                    return Some(Box::new(super::link_picker::LinkPicker::new(
+                        id.to_owned(),
+                        format!("money/txn/{id}"),
+                        words::title(EN),
+                    )));
+                }
+                if let Some(id) = rest.strip_suffix("/versions") {
+                    return Some(super::versions::page(
+                        &format!("money/txn/{id}/versions"),
+                        id,
+                        &words::title(EN),
+                    ));
+                }
                 if let Some(id) = rest.strip_suffix("/edit") {
                     return Some(Box::new(TxnForm::edit_txn(id.to_owned())));
                 }
@@ -113,6 +128,7 @@ pub fn registry() -> Registry {
             }
             None
         }))
+        .merge(super::money_metrics::registry())
 }
 
 fn mint_uuid_v7(now_ms: i64) -> String {
@@ -176,7 +192,7 @@ fn save_last_used_account(door: &dyn Door, account_id: &str) {
     }
 }
 
-fn fmt_minor(minor: i64, currency: &str) -> String {
+pub(super) fn fmt_minor(minor: i64, currency: &str) -> String {
     let exp = u32::from(fmt_money::minor_units(currency));
     fmt_money::format(&Amount::new(minor, currency, exp), LOCALE_TAG)
 }
@@ -201,9 +217,8 @@ fn epoch_ms_to_ymd(ms: i64) -> (i32, u32, u32) {
     (year as i32, m as u32, d as u32)
 }
 
-fn today_iso(now_ms: i64) -> String {
-    let (y, m, d) = epoch_ms_to_ymd(now_ms);
-    format!("{y:04}-{m:02}-{d:02}")
+fn valid_civil_day(day: &str) -> bool {
+    crate::kit::civil::epoch_day_of(day).is_some()
 }
 
 fn current_ym(now_ms: i64) -> (i32, u32) {
@@ -299,7 +314,7 @@ fn account_type_label(code: &str) -> String {
     }
 }
 
-fn money_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
+pub(super) fn money_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
     let tabs = vec![
         frame::tab(
             sel,
@@ -369,6 +384,18 @@ fn money_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         ),
         blocks::menu_item(
             sel,
+            "more/match-lines",
+            &words::more_match_lines(EN),
+            Handler::Open(super::money_metrics::MATCH_ACCOUNTS.to_owned()),
+        ),
+        blocks::menu_item(
+            sel,
+            "more/recurring",
+            &words::more_recurring(EN),
+            Handler::Open(super::money_metrics::RECURRING.to_owned()),
+        ),
+        blocks::menu_item(
+            sel,
             "more/import-csv",
             &words::more_import_csv(EN),
             Handler::Open(IMPORT_CSV.to_owned()),
@@ -397,13 +424,17 @@ fn money_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
     band
 }
 
-fn handle_band_nav(tag: &str) -> Option<Outcome> {
+pub(super) fn handle_band_nav(tag: &str) -> Option<Outcome> {
     match tag {
         "nav:home" => Some(Outcome::replace(super::shell::HOME)),
         "tab:tab/activity" => Some(Outcome::replace(MONEY)),
         "tab:tab/spending" => Some(Outcome::replace(SPENDING)),
         "tab:tab/cashflow" => Some(Outcome::replace(CASHFLOW)),
-        "more:export" => Some(Outcome::say(&words::export_note(EN))),
+        "more:export" => Some(super::export::ask(
+            "txn.export_csv",
+            json!({}),
+            &shared::owner_reason_export(EN),
+        )),
         _ => None,
     }
 }
@@ -454,6 +485,12 @@ fn txn_row_menu(sel: &mut Sel, txn: &reads::TxnSummary) -> wire::RoomMenu {
         ),
         blocks::menu_item(
             sel,
+            &format!("row/{id}/menu/organize"),
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(std::slice::from_ref(id))),
+        ),
+        blocks::menu_item(
+            sel,
             &format!("row/{id}/menu/select"),
             &words::menu_select(EN),
             Handler::SelectMode(true),
@@ -487,6 +524,48 @@ impl RoomScreen for ActivityRoom {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let query = b.ui.search_term().trim().to_owned();
+        if !query.is_empty() {
+            if let Err(sentence) = search_view::load(b.ui, b.door, &["txn"], &query) {
+                return room(wire::RoomKind::AppPlace, MONEY)
+                    .title(&words::title(EN))
+                    .band(money_band(&mut b.sel, MONEY))
+                    .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                    .build();
+            }
+            let extra_search_rows = match search_view::unindexed_title_rows(b, &["account"], &query)
+            {
+                Ok(rows) => rows,
+                Err(sentence) => {
+                    return room(wire::RoomKind::AppPlace, MONEY)
+                        .title(&words::title(EN))
+                        .band(money_band(&mut b.sel, MONEY))
+                        .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                        .build();
+                }
+            };
+            let has_extra_search_rows = !extra_search_rows.is_empty();
+            let mut content = search_view::rows(&mut b.sel, b.ui, false);
+            if content.is_empty() && !has_extra_search_rows {
+                content.push(blocks::empty(
+                    glyph("Coin", "app.money"),
+                    &words::empty_search_title(EN),
+                    &fill(&words::empty_search_body(EN), &[("term", &query)]),
+                    None,
+                ));
+            }
+            let mut built = room(wire::RoomKind::AppPlace, MONEY)
+                .title(&words::title(EN))
+                .band(money_band(&mut b.sel, MONEY))
+                .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
+                .ready(content)
+                .build();
+            if let Some(search) = built.search.as_mut() {
+                search_view::decorate(&mut b.sel, search, b.ui);
+                search.containers.extend(extra_search_rows);
+            }
+            return built;
+        }
         let accounts = b
             .run(&reads::ACCOUNTS, &Args::new())
             .map(|a| a.rows)
@@ -676,12 +755,14 @@ impl RoomScreen for ActivityRoom {
                     Handler::Tag(format!("bulk:categorize:{cat_id}")),
                 ));
             }
-            actions.push(blocks::menu_item(
-                &mut b.sel,
-                "selection/tag",
-                &words::menu_tag(EN),
-                Handler::Tag("bulk:tag".to_owned()),
-            ));
+            if !picked.is_empty() {
+                actions.push(blocks::menu_item(
+                    &mut b.sel,
+                    "selection/organize",
+                    &shared::organize(EN),
+                    Handler::Open(super::organize::route(&picked)),
+                ));
+            }
             let mut trash_item = blocks::menu_item(
                 &mut b.sel,
                 "selection/trash",
@@ -775,7 +856,10 @@ impl RoomScreen for ActivityRoom {
         frame.ready(blocks_out).build()
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(out) = super::export::handle(e, tag, input) {
+            return out;
+        }
         if let Some(outcome) = handle_band_nav(tag) {
             return outcome;
         }
@@ -849,6 +933,10 @@ impl RoomScreen for ActivityRoom {
         }
         if tag == "next_page" {
             self.loaded = self.page_size().saturating_add(50);
+        }
+        if tag == "next:search/more" {
+            e.ui.advance_search_page();
+            return Outcome::default();
         }
         Outcome::default()
     }
@@ -1494,6 +1582,12 @@ impl RoomScreen for TxnDetailRoom {
             ));
         }
         menu_items.push(trash_item);
+        menu_items.push(blocks::menu_item(
+            &mut b.sel,
+            "menu/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(std::slice::from_ref(&self.id))),
+        ));
         let page_menu = blocks::menu(
             "txn/menu",
             vec![blocks::menu_section("", menu_items)],
@@ -1742,9 +1836,15 @@ impl RoomScreen for TxnDetailRoom {
                 && let Some(ent) = ans.rows.into_iter().next()
             {
                 linked_rows.push(
-                    blocks::still_row(&mut b.sel, &format!("linked/{}", ent.id), &ent.title)
-                        .meta(&ent.kind)
-                        .build(),
+                    blocks::row(
+                        &mut b.sel,
+                        &format!("linked/{}", ent.id),
+                        &ent.title,
+                        Handler::Tag(format!("open:{}:{}", ent.kind, ent.id)),
+                    )
+                    .meta(&ent.kind)
+                    .menu(super::link_picker::unlink_menu(&mut b.sel, &ent.id))
+                    .build(),
                 );
             }
         }
@@ -1776,7 +1876,7 @@ impl RoomScreen for TxnDetailRoom {
                 &mut b.sel,
                 &words::versions_summary(EN, u64::from(count_u32)),
                 count_u32,
-                Handler::Tag("versions".to_owned()),
+                Handler::Open(format!("money/txn/{}/versions", self.id)),
             ));
         }
 
@@ -1805,9 +1905,40 @@ impl RoomScreen for TxnDetailRoom {
             .build()
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::link_picker::handle_unlink(e, tag, &self.id) {
+            return outcome;
+        }
+        if let Some(outcome) = super::attachments::handle(e, tag, input) {
+            return outcome;
+        }
+        if let Some(outcome) = super::export::handle(e, tag, input) {
+            return outcome;
+        }
+        if let Some(kind) = tag.strip_prefix("attach:") {
+            return super::attachments::ask(kind, &self.id);
+        }
+        if tag == "link:add" {
+            return Outcome::push(&format!("money/txn/{}/link", self.id));
+        }
         if tag == "share" {
-            return Outcome::say(&words::shared(EN));
+            let reader = match e.door.reader() {
+                Ok(reader) => reader,
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let detail = match reader.run(&reads::TXN_BY_ID, &Args::new().text("id", &self.id)) {
+                Ok(answer) => answer.rows.into_iter().next(),
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let Some(txn) = detail else {
+                return Outcome::refuse(&words::txn_not_found(EN));
+            };
+            return super::export::share(
+                &txn.title,
+                "txn",
+                txn.memo.as_deref(),
+                &words::shared(EN),
+            );
         }
         if let Some(title) = tag.strip_prefix("take:title:") {
             return match e.door.act(&Act::new(
@@ -1862,6 +1993,7 @@ struct TxnForm {
     drafted: bool,
     confirm_discard: bool,
     error: Option<String>,
+    date_error: Option<String>,
 }
 
 impl TxnForm {
@@ -1879,6 +2011,7 @@ impl TxnForm {
             drafted: false,
             confirm_discard: false,
             error: None,
+            date_error: None,
         }
     }
 
@@ -2050,7 +2183,7 @@ impl RoomScreen for TxnForm {
             } else {
                 let restored = self.restore_draft(b.door);
                 if !restored {
-                    self.fields.set_str("date", &today_iso(b.door.now_ms()));
+                    self.fields.set_str("date", &b.door.today());
                 }
                 if self.account_id.is_empty() {
                     self.account_id = last_used_account(b.door)
@@ -2150,15 +2283,25 @@ impl RoomScreen for TxnForm {
             "",
             MAX_TEXT,
         );
-        let date_field = form::text(
+        let date_value = self
+            .fields
+            .get_or("date", &b.door.today())
+            .value()
+            .to_owned();
+        let mut date_field = form::moment(
             &mut b.sel,
-            &mut self.fields,
             "date",
             &words::field_date(EN),
-            wire::RoomTextKind::Line,
-            &today_iso(b.door.now_ms()),
-            20,
+            wire::RoomMoment {
+                kind: wire::RoomMomentKind::Day as i32,
+                value: date_value.clone(),
+                display: crate::kit::civil::short_day(EN, &date_value),
+                ..wire::RoomMoment::default()
+            },
         );
+        if let Some(err) = &self.date_error {
+            date_field = date_field.error(err);
+        }
         let memo_field = form::text(
             &mut b.sel,
             &mut self.fields,
@@ -2301,7 +2444,19 @@ impl RoomScreen for TxnForm {
                 }
                 Outcome::default()
             }
-            "title" | "date" | "memo" => {
+            "date" => {
+                let value = match input {
+                    Input::Moment(value) | Input::Text(value) => value.as_str(),
+                    _ => return Outcome::default(),
+                };
+                self.fields.set_str("date", value);
+                self.date_error = (!valid_civil_day(value)).then(|| shared::date_invalid(EN));
+                self.dirty = true;
+                self.error = None;
+                self.persist_draft(e.door);
+                Outcome::default()
+            }
+            "title" | "memo" => {
                 if let Input::Text(text) = input {
                     self.fields.set_str(tag, text);
                     self.dirty = true;
@@ -2366,6 +2521,12 @@ impl RoomScreen for TxnForm {
 
 impl TxnForm {
     fn save(&mut self, e: &mut Event<'_>) -> Outcome {
+        let posted_on = self.fields.get_or("date", "").value().trim();
+        if !valid_civil_day(posted_on) {
+            self.date_error = Some(shared::date_invalid(EN));
+            return Outcome::default();
+        }
+        self.date_error = None;
         if self.amount_minor <= 0 {
             self.error = Some(words::field_amount_required(EN));
             return Outcome::default();
@@ -2501,6 +2662,7 @@ struct CsvImportRoom {
     indicator_col: String,
     memo_col: String,
     date_order: String,
+    date_order_confirmed: bool,
     sign_mode: String,
     file_label: String,
 }
@@ -2519,6 +2681,7 @@ impl Default for CsvImportRoom {
             indicator_col: String::new(),
             memo_col: String::new(),
             date_order: "ymd".to_owned(),
+            date_order_confirmed: false,
             sign_mode: "signed".to_owned(),
             file_label: "statement.csv".to_owned(),
         }
@@ -2574,6 +2737,32 @@ fn parse_signed_minor(raw: &str, exp: u32) -> Option<i64> {
 }
 
 impl CsvImportRoom {
+    fn has_ambiguous_slash_dates(&self) -> bool {
+        let (headers, rows) = self.headers_and_rows();
+        let Some(date_i) = headers.iter().position(|header| header == &self.date_col) else {
+            return false;
+        };
+        rows.iter().any(|row| {
+            let Some(raw) = row.get(date_i) else {
+                return false;
+            };
+            let parts: Vec<_> = raw.trim().split('/').collect();
+            if parts.len() != 3 {
+                return false;
+            }
+            let Ok(first) = parts[0].parse::<u32>() else {
+                return false;
+            };
+            let Ok(second) = parts[1].parse::<u32>() else {
+                return false;
+            };
+            let Ok(year) = parts[2].parse::<u32>() else {
+                return false;
+            };
+            year >= 1900 && (1..=12).contains(&first) && (1..=12).contains(&second)
+        })
+    }
+
     fn headers_and_rows(&self) -> (Vec<String>, Vec<Vec<String>>) {
         let text = self.fields.str_or("csv", "").to_owned();
         let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
@@ -2621,6 +2810,9 @@ impl CsvImportRoom {
     }
 
     fn parse_rows(&self, exp: u32) -> Result<Vec<ParsedCsvRow>, String> {
+        if self.has_ambiguous_slash_dates() && !self.date_order_confirmed {
+            return Err(words::csv_choose_date_order(EN));
+        }
         let (headers, rows) = self.headers_and_rows();
         if headers.is_empty() || rows.is_empty() {
             return Err(words::csv_no_rows(EN));
@@ -2967,6 +3159,7 @@ impl RoomScreen for CsvImportRoom {
             "csv" => {
                 if let Input::Text(text) = input {
                     self.fields.set_str("csv", text);
+                    self.date_order_confirmed = false;
                 }
                 Outcome::default()
             }
@@ -2979,6 +3172,7 @@ impl RoomScreen for CsvImportRoom {
             "csv:date_col" => {
                 if let Input::Option(opt) = input {
                     self.date_col = opt.clone();
+                    self.date_order_confirmed = false;
                 }
                 Outcome::default()
             }
@@ -3021,6 +3215,7 @@ impl RoomScreen for CsvImportRoom {
             "csv:date_order" => {
                 if let Input::Option(opt) = input {
                     self.date_order = opt.clone();
+                    self.date_order_confirmed = true;
                 }
                 Outcome::default()
             }
@@ -3713,6 +3908,7 @@ struct CheckpointForm {
     fields: Fields,
     balance_minor: i64,
     loaded: bool,
+    date_error: Option<String>,
 }
 
 impl CheckpointForm {
@@ -3722,6 +3918,7 @@ impl CheckpointForm {
             fields: Fields::default(),
             balance_minor: 0,
             loaded: false,
+            date_error: None,
         }
     }
 }
@@ -3734,7 +3931,7 @@ impl RoomScreen for CheckpointForm {
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
         if !self.loaded {
             self.loaded = true;
-            self.fields.set_str("day", &today_iso(b.door.now_ms()));
+            self.fields.set_str("day", &b.door.today());
         }
         let currency = b
             .run(&reads::ACCOUNT_BY_ID, &Args::new().text("id", &self.id))
@@ -3753,15 +3950,25 @@ impl RoomScreen for CheckpointForm {
             &fmt_minor(self.balance_minor, &currency),
         )
         .focused();
-        let day = form::text(
+        let day_value = self
+            .fields
+            .get_or("day", &b.door.today())
+            .value()
+            .to_owned();
+        let mut day = form::moment(
             &mut b.sel,
-            &mut self.fields,
             "day",
             &words::field_date(EN),
-            wire::RoomTextKind::Line,
-            &today_iso(b.door.now_ms()),
-            20,
+            wire::RoomMoment {
+                kind: wire::RoomMomentKind::Day as i32,
+                display: crate::kit::civil::short_day(EN, &day_value),
+                value: day_value,
+                ..wire::RoomMoment::default()
+            },
         );
+        if let Some(err) = &self.date_error {
+            day = day.error(err);
+        }
         let save = Save::Explicit(form::explicit(
             &mut b.sel,
             Explicit {
@@ -3793,14 +4000,19 @@ impl RoomScreen for CheckpointForm {
                 Outcome::default()
             }
             "day" => {
-                if let Input::Text(text) = input {
+                if let Input::Moment(text) | Input::Text(text) = input {
                     self.fields.set_str("day", text);
+                    self.date_error = (!valid_civil_day(text)).then(|| shared::date_invalid(EN));
                 }
                 Outcome::default()
             }
             "cancel" => Outcome::pop(),
             "save" => {
                 let day = self.fields.get_or("day", "").value().trim().to_owned();
+                if !valid_civil_day(&day) {
+                    self.date_error = Some(shared::date_invalid(EN));
+                    return Outcome::default();
+                }
                 match e.door.act(&Act::new(
                     "checkpoint.record",
                     json!({

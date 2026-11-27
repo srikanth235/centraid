@@ -5,7 +5,9 @@
 
 use centraid_vault::clock::format_iso_ms;
 use centraid_vault::time::recurrence::parse_instant_ms;
-use centraid_vault::time::zone::{FireZone, WallTime, wall_epoch, wall_iso};
+use centraid_vault::time::zone::{
+    FireZone, WallTime, add_wall_days, parse_wall_iso, wall_epoch, wall_iso,
+};
 
 /// `YYYY-MM-DD`.
 #[must_use]
@@ -29,6 +31,24 @@ pub fn today(zone: &FireZone, now: &str) -> Option<String> {
 #[must_use]
 pub fn now_local(zone: &FireZone, now: &str) -> Option<String> {
     parse_instant_ms(now).map(|millis| civil_minute(zone.zoned_parts(millis)))
+}
+
+#[must_use]
+pub fn shift_day(day: &str, days: i64) -> Option<String> {
+    parse_wall_iso(day).map(|wall| civil_day(add_wall_days(wall, days)))
+}
+
+#[must_use]
+pub fn day_start(zone: &FireZone, day: &str) -> Option<String> {
+    parse_wall_iso(day).map(|wall| start_of_day(zone, wall))
+}
+
+#[must_use]
+pub fn at_time(zone: &FireZone, day: &str, hour: u8, minute: u8) -> Option<String> {
+    let mut wall = parse_wall_iso(day)?;
+    wall.hour = i64::from(hour);
+    wall.minute = i64::from(minute);
+    Some(format_iso_ms(instant_of_wall(zone, wall)))
 }
 
 /// The instant a civil wall clock names in `zone`, under the vault's DST

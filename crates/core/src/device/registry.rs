@@ -133,6 +133,9 @@ pub const DEVICE_KEYS: &[KeyDecl] = &[
     key("install-id", "D8", Shell, Settings, Opaque),
     family("follower-device.", "D8", Shell, Settings, Opaque),
     family("follow.", "D13", Core, Device, Json(1)),
+    // Android-only app-wide SAF ownership index. The shell uses it only to decide when a
+    // persistable URI grant can be revoked; imports always read per-vault `grant.<ref>` keys.
+    key("grant.android.uri-owners.v1", "D9", Shell, Files, Json(1)),
     family("grant.", "D9", Shell, Files, Opaque),
     key("backup.state", "D11", Backup, Files, Opaque),
     key("export", "D12", Core, Files, Json(1)),

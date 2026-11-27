@@ -46,6 +46,26 @@ struct RoomHostView: View {
                 RoomView(shown: shown, store: store)
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if let notice = store.shareInNotice, !notice.isEmpty {
+                    Text(notice)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                }
+                if let sentence = store.followSentence, !sentence.isEmpty {
+                    Text(sentence)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                }
+                if let sentence = store.errorSentence {
+                    Text(sentence)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                }
+            }
+            .background(Surface.card)
+        }
         .task {
             await store.start()
         }
@@ -57,7 +77,6 @@ struct RoomView: View {
     @ObservedObject var store: RoomStore
 
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.appAccent) private var accent
     @State private var restoredAnchor = ""
     @State private var moreMenuPresented = false
 
@@ -83,6 +102,7 @@ struct RoomView: View {
             roomScaffold
         }
         .privacySensitive(room.secure)
+        .appAccent(room.hueKey)
     }
 
     @ViewBuilder
@@ -262,7 +282,7 @@ struct RoomView: View {
             }
             if room.hasHeader {
                 ForEach(room.header.keys, id: \.selectorID) { key in
-                    RoomHeaderKeyView(key: key, accent: accent, onTap: callbacks.tap)
+                    RoomHeaderKeyView(key: key, onTap: callbacks.tap)
                 }
             }
         }
@@ -430,8 +450,9 @@ private struct RoomSubtitleBar: View {
 
 private struct RoomHeaderKeyView: View {
     let key: Centraid_Core_V1_RoomKey
-    let accent: AppAccent
     let onTap: (String) -> Void
+
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
         switch key.role {

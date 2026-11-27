@@ -1106,6 +1106,114 @@ fn a_restore_writes_the_state_back_through_the_same_tables_and_is_itself_undone_
 }
 
 #[test]
+fn restore_many_takes_back_one_bulk_move_atomically() {
+    let w = World::new("restore-many");
+    let blob = w.blob("words");
+    let a = w.container("folder", "A", None);
+    let b = w.container("folder", "B", None);
+    let first = document(&w, "First", Some(&a), &blob);
+    let second = document(&w, "Second", Some(&a), &blob);
+
+    let moved = w.ok(
+        "entity.move",
+        json!({ "ids": [&first, &second], "parent": &b }),
+    );
+    assert_eq!(moved["moved_ids"], json!([first, second]));
+    let first_revisions = w.revisions(&first);
+    let second_revisions = w.revisions(&second);
+    let items = vec![
+        json!({ "id": first, "seq": first_revisions[0].seq, "expected_rev": first_revisions.last().unwrap().seq }),
+        json!({ "id": second, "seq": second_revisions[0].seq, "expected_rev": second_revisions.last().unwrap().seq }),
+    ];
+    let restored = w.ok("history.restore_many", json!({ "items": items }));
+    assert_eq!(restored["items"].as_array().unwrap().len(), 2);
+    assert_eq!(w.home(&first).as_deref(), Some(a.as_str()));
+    assert_eq!(w.home(&second).as_deref(), Some(a.as_str()));
+    assert_eq!(
+        w.revisions(&first).last().unwrap().cause,
+        "history.restore_many"
+    );
+    assert_eq!(
+        w.revisions(&second).last().unwrap().cause,
+        "history.restore_many"
+    );
+}
+
+#[test]
+fn restore_many_refuses_the_whole_batch_before_writing_any_record() {
+    let w = World::new("restore-many-refused");
+    let blob = w.blob("words");
+    let a = w.container("folder", "A", None);
+    let b = w.container("folder", "B", None);
+    let first = document(&w, "First", Some(&a), &blob);
+    let second = document(&w, "Second", Some(&a), &blob);
+    w.ok(
+        "entity.move",
+        json!({ "ids": [&first, &second], "parent": &b }),
+    );
+    let first_latest = w.revisions(&first).last().unwrap().seq;
+    let second_latest = w.revisions(&second).last().unwrap().seq;
+    let before = (
+        w.revision_count(),
+        w.home(&first),
+        w.home(&second),
+        w.one::<i64>("SELECT writes FROM vault"),
+    );
+
+    assert_eq!(
+        w.refused(
+            "history.restore_many",
+            json!({ "items": [
+                { "id": first, "seq": 1, "expected_rev": first_latest },
+                { "id": second, "seq": 99, "expected_rev": second_latest }
+            ] })
+        ),
+        "That version is not in this record's history."
+    );
+    assert_eq!(w.revision_count(), before.0);
+    assert_eq!(w.home(&first), before.1);
+    assert_eq!(w.home(&second), before.2);
+    assert_eq!(w.one::<i64>("SELECT writes FROM vault"), before.3);
+}
+
+#[test]
+fn restore_many_checks_every_expected_revision_inside_its_single_preflight() {
+    let w = World::new("restore-many-stale");
+    let blob = w.blob("words");
+    let a = w.container("folder", "A", None);
+    let b = w.container("folder", "B", None);
+    let first = document(&w, "First", Some(&a), &blob);
+    let second = document(&w, "Second", Some(&a), &blob);
+    w.ok(
+        "entity.move",
+        json!({ "ids": [&first, &second], "parent": &b }),
+    );
+    let first_latest = w.revisions(&first).last().unwrap().seq;
+    let second_latest = w.revisions(&second).last().unwrap().seq;
+    let before = (
+        w.revision_count(),
+        w.home(&first),
+        w.home(&second),
+        w.one::<i64>("SELECT writes FROM vault"),
+    );
+
+    assert_eq!(
+        w.refused(
+            "history.restore_many",
+            json!({ "items": [
+                { "id": first, "seq": 1, "expected_rev": first_latest },
+                { "id": second, "seq": 1, "expected_rev": second_latest + 1 }
+            ] })
+        ),
+        "This can no longer be undone: it has changed since."
+    );
+    assert_eq!(w.revision_count(), before.0);
+    assert_eq!(w.home(&first), before.1);
+    assert_eq!(w.home(&second), before.2);
+    assert_eq!(w.one::<i64>("SELECT writes FROM vault"), before.3);
+}
+
+#[test]
 fn a_restore_leaves_the_home_where_it_is_when_the_old_home_can_no_longer_hold_it() {
     let w = World::new("restore-home");
     let blob = w.blob("words");

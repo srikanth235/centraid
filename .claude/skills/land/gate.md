@@ -48,7 +48,7 @@ All of them are counts or sizes, and all only fall.
 - **Copy ratchet**, `cargo xtask rules copy` (ledger `crates/xtask/copy-budget.toml`). Banned words, `·` joins and word-count caps in the Rust string catalogue (and the assistant's `copy/chat.json` strings), as a per-rule per-file count.
 - It runs inside `cargo xtask rules` (and standalone via `cargo xtask rules copy`). A file over its count fails. A file under its count also fails, so the count must be lowered in the same change. `--print` emits the measured counts as TOML, and `--list` names every offending key.
 - **`contracts/ledgers/library-size.json`**: the prebuilt core's stripped size per ABI. A `null` gates nothing.
-- **`contracts/ledgers/query-plans.json`**: the statements allowed to scan a big table or sort a paged read. `crates/core/tests/query_plans.rs` reads it.
+- **`contracts/ledgers/query-plans.json`**: the statements allowed to scan a big table or sort a paged read. `crates/domain/tests/read_registry.rs` reads it.
 - The `ledgers` step compares each ledger with its copy at the merge base. A risen number is a finding, and so is a removed one. A gate run never writes a ledger.
 - **The backup staging area's byte budget**, in `crates/vault/src/backup/staging.rs`: 512 MiB or a tenth of the free space, whichever is smaller. It is code, and tests assert on its bytes.
 

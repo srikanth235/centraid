@@ -21,6 +21,7 @@ const NOW: i64 = 1_781_517_600_000;
 struct Phone {
     path: PathBuf,
     device: Mutex<BTreeMap<String, String>>,
+    locker_open: Mutex<bool>,
     reminders: bool,
     refused: Vec<&'static str>,
 }
@@ -56,6 +57,20 @@ impl Door for Phone {
 
     fn reminders_source(&self) -> bool {
         self.reminders
+    }
+
+    fn locker_unlocked(&self) -> bool {
+        *self.locker_open.lock().unwrap()
+    }
+
+    fn locker_unlock(&self) -> Result<(u32, Option<String>), Refused> {
+        *self.locker_open.lock().unwrap() = true;
+        Ok((0, None))
+    }
+
+    fn locker_lock(&self) -> Result<(), Refused> {
+        *self.locker_open.lock().unwrap() = false;
+        Ok(())
     }
 
     fn call(&self, request: &wire::Request) -> Result<wire::Response, Refused> {
@@ -107,6 +122,7 @@ fn phone(path: &std::path::Path, reminders: bool, refused: Vec<&'static str>) ->
     Phone {
         path: path.to_path_buf(),
         device: Mutex::default(),
+        locker_open: Mutex::new(false),
         reminders,
         refused,
     }
@@ -349,10 +365,44 @@ fn locker_first_open_is_two_steps_check_then_the_first_item() {
             selector_id: "wall/unlock".to_owned(),
         })),
     };
-    let unlocked = rooms
+    let pending = rooms
         .event(&door, wall.instance, &event)
-        .expect("unlocks")
-        .expect("changed");
+        .expect("owner check request lands")
+        .expect("wall remains during owner check");
+    assert!(pending.room.secure);
+    assert!(!door.locker_unlocked(), "a tap alone cannot unlock Locker");
+    let owner_effect = rooms
+        .take_effects()
+        .into_iter()
+        .find(|effect| {
+            matches!(
+                effect.kind.as_ref(),
+                Some(wire::shell_effect::Kind::OwnerCheck(check)) if !check.cancel
+            )
+        })
+        .expect("unlock asks the phone owner");
+    let unlocked = rooms
+        .event(
+            &door,
+            pending.instance,
+            &wire::RoomEvent {
+                kind: Some(wire::room_event::Kind::EffectResult(
+                    wire::ShellEffectResult {
+                        effect_id: owner_effect.effect_id,
+                        outcome: Some(wire::shell_effect_result::Outcome::Owner(
+                            wire::ShellOwner {
+                                passed: true,
+                                ..Default::default()
+                            },
+                        )),
+                    },
+                )),
+            },
+        )
+        .expect("owner result lands")
+        .expect("Locker redraws after owner success");
+    assert!(door.locker_unlocked(), "only a passed owner result unlocks");
+    assert!(unlocked.room.secure);
     let text = snapshot::render(&unlocked.room);
     assert!(
         text.contains("Step 2 of 2") && text.contains("Add your first item."),

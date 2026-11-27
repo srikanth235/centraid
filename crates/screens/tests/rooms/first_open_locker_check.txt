@@ -6,7 +6,6 @@ room app_place key="locker" secure
     menu #band/more/menu
       section
         item "Expiry alerts" #more/alerts
-        item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash
   ready
     wall "Your passwords and secure notes" body="Locker opens with your face or your passcode, every time."

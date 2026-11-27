@@ -4,6 +4,7 @@ room pushed_page key="person/01900000-0000-7000-8000-000000000010"
     key menu sym="MoreHoriz" "More" #key/more
       menu #menu/more
         section
+          item "Move or tag" #menu/organize
           item "Edit" #menu/edit
           item "Unstar" #menu/star
           item "Share" #menu/share
@@ -22,8 +23,8 @@ room pushed_page key="person/01900000-0000-7000-8000-000000000010"
           item "New note" #here/note
     section #section/contact "Contact"
       facts
-        fact "Mobile" "+1 555 010 2020" kind=phone open=#cp/8f928980-91ce-7f37-8c0d-975d651f8f9a/open copy=#cp/8f928980-91ce-7f37-8c0d-975d651f8f9a/copy
-        fact "Work" "priya@studionorth.example" kind=email open=#cp/f49b838c-3ed7-74bb-8e7f-c0b9db7a6f9c/open copy=#cp/f49b838c-3ed7-74bb-8e7f-c0b9db7a6f9c/copy
+        fact "Mobile" "+1 555 010 2020" kind=phone copy=#cp/8f928980-91ce-7f37-8c0d-975d651f8f9a/copy
+        fact "Work" "priya@studionorth.example" kind=email copy=#cp/f49b838c-3ed7-74bb-8e7f-c0b9db7a6f9c/copy
     section #section/dates "Dates"
       row #date/7defe8e9-66d7-7ccc-85f1-fb6eac58e4bb "Birthday" meta="1990-05-14" trailing="Remind me"
     section #with/events "Events"
@@ -34,6 +35,9 @@ room pushed_page key="person/01900000-0000-7000-8000-000000000010"
       row #with/catch_ups/01900000-0000-7000-8000-000000000080 "Call"
     linked "Linked"
       row #linked/01900000-0000-7000-8000-000000000090 "Reference board" meta="note"
+        menu #linked/01900000-0000-7000-8000-000000000090/menu
+          section
+            item "Remove link" #linked/01900000-0000-7000-8000-000000000090/unlink
       add "Add link" sym="Link" #footer/linked/add
     mentioned_in "Mentioned in"
       row #mentioned/01900000-0000-7000-8000-000000000060 "Kitchen plans"

@@ -65,8 +65,11 @@ internal object AppSession {
 
         suspend fun foreground(on: Boolean) {
             if (on) {
+                rooms.foreground()
                 AppSession.environment(context, screens)
                 AppSession.drainShareInbox(context, rooms)
+            } else {
+                rooms.background()
             }
             screens.lifecycle(foreground = on)
         }
@@ -239,6 +242,8 @@ internal object AppSession {
         val rooms = RoomClient(core, scope)
         rooms.attach()
         val effects = ShellEffects(context, core, screens, scope)
+        rooms.shellEffectPerformer = effects::performShell
+        rooms.followReadPerformer = effects::performFollow
         val open = Open(core, screens, rooms, scope, effects, context.applicationContext)
         effects.start()
         environment(context, screens)

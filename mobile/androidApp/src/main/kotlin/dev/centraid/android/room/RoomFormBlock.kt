@@ -38,7 +38,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.RoomAutosave
 import centraid.core.v1.RoomAutosavePhase
@@ -430,6 +432,7 @@ private fun RoomSecretField(
 ) {
     var seq by remember(field.selector_id) { mutableLongStateOf(0L) }
     var text by remember(field.selector_id, secret.value_) { mutableStateOf(secret.value_) }
+    val writeOnlyMasked = secret.masked && secret.reveal_selector_id.isEmpty()
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
     Column(modifier.fillMaxWidth().testTag(field.selector_id), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (field.label.isNotEmpty()) KitText(field.label, KitType.Meta, Surface.meta)
@@ -443,7 +446,7 @@ private fun RoomSecretField(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (secret.masked) {
+            if (secret.masked && !writeOnlyMasked) {
                 Text(
                     "••••••",
                     style = kitTextStyle(KitType.Row).copy(fontFamily = FontFamily.Monospace),
@@ -459,6 +462,20 @@ private fun RoomSecretField(
                         onChange(RoomChange(selector_id = field.selector_id, seq = seq, text = next))
                     },
                     singleLine = true,
+                    keyboardOptions = if (writeOnlyMasked) {
+                        KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.Password,
+                        )
+                    } else {
+                        KeyboardOptions(keyboardType = KeyboardType.Text)
+                    },
+                    visualTransformation = if (writeOnlyMasked) {
+                        PasswordVisualTransformation()
+                    } else {
+                        androidx.compose.ui.text.input.VisualTransformation.None
+                    },
                     textStyle = kitTextStyle(KitType.Row).copy(
                         fontFamily = FontFamily.Monospace,
                         color = Surface.ink,

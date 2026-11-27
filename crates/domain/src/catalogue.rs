@@ -431,7 +431,9 @@ pub const ACTIONS: &[ActionDecl] = &[
     .set()
     .say_q(
         "edit",
-        &["note", "document", "task", "person", "folder", "notebook"],
+        &[
+            "event", "note", "document", "task", "person", "folder", "notebook",
+        ],
         "move",
     ),
     act(
@@ -608,7 +610,21 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .set()
     .pair("tag.remove")
-    .say("tag", &["document", "locker_item", "note", "photo", "task"])
+    .say(
+        "tag",
+        &[
+            "person",
+            "event",
+            "task",
+            "workout",
+            "note",
+            "document",
+            "photo",
+            "account",
+            "transaction",
+            "locker_item",
+        ],
+    )
     .names(&[("label", &["label"])]),
     act(
         "tag",
@@ -624,7 +640,18 @@ pub const ACTIONS: &[ActionDecl] = &[
     .pair("tag.add")
     .say(
         "untag",
-        &["document", "locker_item", "note", "photo", "task"],
+        &[
+            "person",
+            "event",
+            "task",
+            "workout",
+            "note",
+            "document",
+            "photo",
+            "account",
+            "transaction",
+            "locker_item",
+        ],
     )
     .names(&[("label", &["label"])]),
     act(

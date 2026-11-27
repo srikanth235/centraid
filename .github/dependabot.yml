@@ -31,8 +31,7 @@ updates:
         patterns: ["*"]
 
   # ------------------------------------------------------------ javascript --
-  # Bun workspaces: the root manifest + bun.lock cover every packages/*
-  # workspace, so one entry is enough.
+  # The root manifest and bun.lock cover the docs-site toolchain.
   - package-ecosystem: bun
     directory: /
     schedule:
@@ -48,10 +47,6 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
-      # The coupled exact pins move together, in a PR of their own: a lint
-      # or format engine bump can change what the gate reports.
-      lint-format:
-        patterns: ["ultracite", "oxlint", "oxfmt", "typescript", "vitest"]
       # Toolchain churn (lint/format/test/build) is noisy and low-risk to batch.
       dev-toolchain:
         dependency-type: development

@@ -12,6 +12,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -36,6 +39,7 @@ import dev.centraid.android.kit.HostScreenEffects
 import dev.centraid.android.kit.LocalStatusActed
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.TransferScreen
+import dev.centraid.design.KitWords
 import dev.centraid.android.room.RoomClient
 import dev.centraid.android.room.RoomView
 import dev.centraid.android.screens.backup.BackupHomeScreen
@@ -234,6 +238,16 @@ internal class RustRoot {
     private fun Globals() {
         val open = session ?: return
         HostScreenEffects(open, ::push)
+        val notices by open.rooms.notices.collectAsState()
+        if (notices.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = open.rooms::dismissNotice,
+                text = { Text(notices.joinToString("\n\n")) },
+                confirmButton = {
+                    TextButton(onClick = open.rooms::dismissNotice) { Text(KitWords.DONE) }
+                },
+            )
+        }
         val lifecycleOwner = LocalLifecycleOwner.current
         DisposableEffect(lifecycleOwner, open) {
             val observer = LifecycleEventObserver { _, event ->

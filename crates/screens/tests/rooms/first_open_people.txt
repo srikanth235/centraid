@@ -25,6 +25,7 @@ room app_place key="people"
         menu #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu
           section
             item "Open" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/open
+            item "Move or tag" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/organize
             item "Edit" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/edit
             item "Star" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/star
             item "Share" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/share

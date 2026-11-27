@@ -1,0 +1,56 @@
+Picked up JAVA_TOOL_OPTIONS: -Duser.home=/tmp/centraid-robolectric-home
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :androidApp:preBuild UP-TO-DATE
+> Task :core:androidPreBuild UP-TO-DATE
+> Task :core:preAndroidMainBuild UP-TO-DATE
+> Task :androidApp:preDebugBuild UP-TO-DATE
+> Task :androidApp:generateDebugResources UP-TO-DATE
+> Task :core:generateAndroidMainEmptyResourceFiles UP-TO-DATE
+> Task :androidApp:packageDebugResources UP-TO-DATE
+> Task :core:kmpPartiallyResolvedDependenciesChecker
+> Task :core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:generateCommonMainProtos UP-TO-DATE
+> Task :core:compileAndroidMain UP-TO-DATE
+> Task :core:bundleAndroidMainClassesToCompileJar UP-TO-DATE
+> Task :core:writeAndroidMainAarMetadata UP-TO-DATE
+> Task :core:processAndroidMainManifest UP-TO-DATE
+> Task :core:bundleAndroidMainClassesToRuntimeJar UP-TO-DATE
+> Task :core:processAndroidMainJavaRes UP-TO-DATE
+> Task :androidApp:processDebugNavigationResources UP-TO-DATE
+> Task :androidApp:parseDebugLocalResources UP-TO-DATE
+> Task :androidApp:generateDebugRFile UP-TO-DATE
+> Task :androidApp:compileDebugKotlin UP-TO-DATE
+> Task :androidApp:javaPreCompileDebug UP-TO-DATE
+> Task :androidApp:compileDebugJavaWithJavac NO-SOURCE
+> Task :androidApp:checkDebugAarMetadata UP-TO-DATE
+> Task :androidApp:mapDebugSourceSetPaths UP-TO-DATE
+> Task :androidApp:compileDebugNavigationResources UP-TO-DATE
+> Task :androidApp:mergeDebugResources UP-TO-DATE
+> Task :androidApp:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :androidApp:extractDeepLinksDebug UP-TO-DATE
+> Task :androidApp:processDebugMainManifest UP-TO-DATE
+> Task :androidApp:processDebugManifest UP-TO-DATE
+> Task :androidApp:processDebugManifestForPackage UP-TO-DATE
+> Task :androidApp:processDebugResources UP-TO-DATE
+> Task :androidApp:bundleDebugClassesToRuntimeJar UP-TO-DATE
+> Task :androidApp:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :androidApp:preDebugUnitTestBuild UP-TO-DATE
+> Task :androidApp:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :androidApp:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :androidApp:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :androidApp:generateDebugAssets UP-TO-DATE
+> Task :androidApp:mergeDebugAssets UP-TO-DATE
+> Task :androidApp:packageDebugUnitTestForUnitTest UP-TO-DATE
+> Task :androidApp:mergeDebugUnitTestManifest UP-TO-DATE
+> Task :androidApp:processDebugUnitTestManifest UP-TO-DATE
+> Task :androidApp:generateDebugUnitTestConfig UP-TO-DATE
+> Task :androidApp:processDebugJavaRes UP-TO-DATE
+> Task :androidApp:processDebugUnitTestJavaRes UP-TO-DATE
+
+> Task :androidApp:testDebugUnitTest
+Picked up JAVA_TOOL_OPTIONS: -Duser.home=/tmp/centraid-robolectric-home
+
+BUILD SUCCESSFUL in 46s
+38 actionable tasks: 2 executed, 36 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html

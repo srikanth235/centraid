@@ -104,6 +104,43 @@ pub struct TaskListRow {
     pub icon: Option<String>,
 }
 
+pub const INBOX: Read<TaskSummary> = read(
+    ReadDecl {
+        name: "reminders.inbox",
+        shape: Shape::PagedList,
+        sql: "SELECT t.id, e.title, e.parent_id, t.status, t.priority, t.due, t.due_timing, \
+                t.zone, t.scheduled_on, t.done_at, t.rule, t.series_id, e.starred_at, \
+                coalesce(t.due, t.scheduled_on, '') AS at \
+              FROM entity e INDEXED BY entity_by_title \
+                CROSS JOIN task t ON t.id = e.id \
+              WHERE e.kind = 'task' AND t.status = 'open' \
+                AND e.deleted_at IS NULL AND e.parent_id IS NULL \
+                AND (e.title, e.id) > (:a, :b) \
+              ORDER BY e.title ASC, e.id ASC LIMIT :n",
+        params: &[],
+        reads: &["task", "entity"],
+        across: &[],
+        bound: DEFAULT_PAGE,
+        cursor: &[asc("title", "a"), asc("id", "b")],
+    },
+    TaskSummary::of,
+);
+
+pub const INBOX_COUNT: Read<i64> = read(
+    ReadDecl {
+        name: "reminders.inbox_count",
+        shape: Shape::Aggregate,
+        sql: "SELECT count(*) AS count FROM task t INDEXED BY task_by_due CROSS JOIN entity e ON e.id = t.id \
+              WHERE t.status = 'open' AND e.deleted_at IS NULL AND e.parent_id IS NULL",
+        params: &[],
+        reads: &["task"],
+        across: &["entity"],
+        bound: 1,
+        cursor: &[],
+    },
+    |row| row.get("count"),
+);
+
 impl TaskListRow {
     fn of(row: &Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
@@ -391,6 +428,8 @@ pub const READS: &[ReadDecl] = &[
     TODAY_SCHEDULED.decl,
     OPEN_BY_DUE.decl,
     OPEN_UNDATED.decl,
+    INBOX.decl,
+    INBOX_COUNT.decl,
     COMPLETED.decl,
     STARRED.decl,
     IN_LIST.decl,

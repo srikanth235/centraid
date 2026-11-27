@@ -176,11 +176,13 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             [tag.as_str(), color],
         )?;
     }
-    let mut added = false;
+    let mut added_ids = Vec::new();
     for id in ctx.target_ids() {
-        added |= set_tagged(ctx, &id, &tag, true)?;
+        if set_tagged(ctx, &id, &tag, true)? {
+            added_ids.push(id);
+        }
     }
-    Ok(serde_json::json!({ "tag": tag, "added": added }))
+    Ok(serde_json::json!({ "tag": tag, "added": !added_ids.is_empty(), "changed_ids": added_ids }))
 }
 
 #[derive(serde::Deserialize)]
@@ -191,13 +193,17 @@ struct RemoveTagInput {
 fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: RemoveTagInput = ctx.parse_input()?;
     let Some(tag) = find_concept(ctx.connection(), Kind::Tag, &input.label)? else {
-        return Ok(serde_json::json!({ "tag": null, "removed": false }));
+        return Ok(serde_json::json!({ "tag": null, "removed": false, "changed_ids": [] }));
     };
-    let mut removed = false;
+    let mut removed_ids = Vec::new();
     for id in ctx.target_ids() {
-        removed |= set_tagged(ctx, &id, &tag, false)?;
+        if set_tagged(ctx, &id, &tag, false)? {
+            removed_ids.push(id);
+        }
     }
-    Ok(serde_json::json!({ "tag": tag, "removed": removed }))
+    Ok(
+        serde_json::json!({ "tag": tag, "removed": !removed_ids.is_empty(), "changed_ids": removed_ids }),
+    )
 }
 
 #[derive(serde::Deserialize)]

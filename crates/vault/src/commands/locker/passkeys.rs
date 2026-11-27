@@ -30,6 +30,16 @@ struct SetPasskeyInput {
     key_id: Option<String>,
 }
 
+type ExistingPasskey = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+);
+
 fn sealing_value(input: &SetPasskeyInput) -> bool {
     input
         .private_key
@@ -110,29 +120,53 @@ pub(super) fn set_passkey() -> CommandDefinition {
         |ctx| {
             let input: SetPasskeyInput = ctx.parse_input()?;
             let id = input.passkey_id.clone().unwrap_or_else(|| ctx.next_id());
-            let existing: Option<(Option<String>, Option<String>, String)> = ctx
+            let existing: Option<ExistingPasskey> = ctx
                 .connection()
                 .query_row(
-                    "SELECT private_key, key_id, created_at FROM locker_item_passkey
+                    "SELECT user_handle, display_name, credential_id, algorithm,
+                            private_key, key_id, created_at FROM locker_item_passkey
                       WHERE id = ?1 AND item_id = ?2",
                     [&id, &input.item_id],
-                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    |row| {
+                        Ok((
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                            row.get(5)?,
+                            row.get(6)?,
+                        ))
+                    },
                 )
                 .optional()?;
             // The placeholder, or no key, keeps the key and the generation it was sealed under
             // (a rename sends no `key_id`: a caller that never held the key has none to name).
             let (stored, stored_key_id) = match input.private_key.as_deref() {
-                Some(SEALED_PLACEHOLDER) | None => {
-                    existing.as_ref().map_or((None, None), |(key, key_id, _)| {
+                Some(SEALED_PLACEHOLDER) | None => existing
+                    .as_ref()
+                    .map_or((None, None), |(_, _, _, _, key, key_id, _)| {
                         (key.clone(), key_id.clone())
-                    })
-                }
+                    }),
                 Some("") => (None, None),
                 Some(key) => (Some(key.to_owned()), input.key_id.clone()),
             };
-            let created_at = existing
-                .as_ref()
-                .map_or_else(|| ctx.now.clone(), |(_, _, created)| created.clone());
+            let created_at = existing.as_ref().map_or_else(
+                || ctx.now.clone(),
+                |(_, _, _, _, _, _, created)| created.clone(),
+            );
+            let user_handle = input
+                .user_handle
+                .or_else(|| existing.as_ref().and_then(|row| row.0.clone()));
+            let display_name = input
+                .display_name
+                .or_else(|| existing.as_ref().and_then(|row| row.1.clone()));
+            let credential_id = input
+                .credential_id
+                .or_else(|| existing.as_ref().and_then(|row| row.2.clone()));
+            let algorithm = input
+                .algorithm
+                .or_else(|| existing.as_ref().and_then(|row| row.3.clone()));
             ctx.connection().execute(
                 "INSERT INTO locker_item_passkey
                    (id, item_id, rp_id, user_handle, display_name, credential_id, algorithm,
@@ -151,10 +185,10 @@ pub(super) fn set_passkey() -> CommandDefinition {
                     id,
                     input.item_id,
                     input.rp_id.trim(),
-                    input.user_handle,
-                    input.display_name,
-                    input.credential_id,
-                    input.algorithm,
+                    user_handle,
+                    display_name,
+                    credential_id,
+                    algorithm,
                     stored,
                     stored_key_id,
                     created_at,

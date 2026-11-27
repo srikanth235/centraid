@@ -25,10 +25,11 @@ room app_place key="locker" secure
     tab "Starred" sym="Star" #tab/starred
     menu #band/more/menu
       section
+        item "Lock" #more/lock
         item "Expiry alerts" #more/alerts
-        item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash
   ready
     empty glyph="Lock" "Add your first item." body="A password, a card, a Wi‑Fi network or a code."
       action "Add item" sym="Add" #empty/add
   search placeholder="Search titles and usernames" #search
+  selection

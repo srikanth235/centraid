@@ -10,6 +10,8 @@ catalog! {
     plain view_label = ("View", "View");
     plain filter_needs_reply = ("Needs reply", "Needs reply");
     plain search_placeholder = ("Search Calendar", "Search Calendar");
+    plain empty_search_title = ("Nothing matches", "Nothing matches");
+    plain empty_search_body = ("No event or task matches “{term}”.", "No event or task matches “{term}”.");
     plain add_event = ("New event", "New event");
     plain add_calendar = ("New calendar", "New calendar");
     plain edit_event = ("Edit event", "Edit event");
@@ -17,7 +19,6 @@ catalog! {
     plain more_import_ics = ("Import .ics", "Import .ics");
     plain more_export = ("Export", "Export");
     plain follow_note = ("Calendar follows your phone calendar on the next pass.", "Calendar follows your phone calendar on the next pass.");
-    plain export_note = ("Export writes a portable .ics file after owner check.", "Export writes a portable .ics file after owner check.");
     plain empty_title = ("Nothing scheduled", "Nothing scheduled");
     plain empty_body = ("Add an event or import an .ics file.", "Add an event or import an .ics file.");
     plain empty_calendars_title = ("No calendars yet", "No calendars yet");
@@ -30,6 +31,9 @@ catalog! {
     plain field_starts = ("Starts", "Starts");
     plain field_ends = ("Ends", "Ends");
     plain field_all_day = ("All day", "All day");
+    plain field_timing = ("Timing", "Timing");
+    plain field_zone = ("Time zone", "Time zone");
+    plain field_busy = ("Availability", "Availability");
     plain field_calendar = ("Calendar", "Calendar");
     plain field_location = ("Location", "Location");
     plain field_location_hint = ("Place or address", "Place or address");
@@ -84,6 +88,10 @@ catalog! {
     counted status_ics_imported = ("Imported 1 event", "Imported {n} events");
     plain error_title_required = ("Enter a title.", "Enter a title.");
     plain error_starts_required = ("Enter a start time.", "Enter a start time.");
+    plain discard_title = ("Discard changes?", "Discard changes?");
+    plain discard_body = ("Your unsaved edits to this form will be lost.", "Your unsaved edits to this form will be lost.");
+    plain discard_confirm = ("Discard", "Discard");
+    plain discard_keep = ("Keep editing", "Keep editing");
     plain error_ics_empty = ("No events found in that file.", "No events found in that file.");
     plain error_not_found = ("Event not found.", "Event not found.");
     plain trash_title = ("Calendar trash", "Calendar trash");

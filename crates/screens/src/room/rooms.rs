@@ -47,6 +47,7 @@ impl Shown {
             } as i32,
             room: Some(self.room.clone()),
             tab: self.tab.clone(),
+            secure_epoch: 0,
         }
     }
 }
@@ -85,6 +86,7 @@ const SEARCH_FIELD: &str = "search";
 struct Entry {
     id: u64,
     depth: usize,
+    hue_key: String,
     screen: Box<dyn RoomScreen>,
     ui: Ui,
     handlers: HandlerMap,
@@ -134,18 +136,45 @@ impl Rooms {
         tab: &str,
         root: bool,
     ) -> Result<Shown, Refusal> {
+        self.open_with_question(door, key, tab, root, None)
+    }
+
+    fn open_with_question(
+        &mut self,
+        door: &dyn Door,
+        key: &str,
+        tab: &str,
+        root: bool,
+        question: Option<&str>,
+    ) -> Result<Shown, Refusal> {
+        let key = if key.starts_with("locker/") && !door.locker_unlocked() {
+            super::locker::LOCKER
+        } else {
+            key
+        };
         let screen = self
             .registry
             .make(key)
             .ok_or_else(|| Refusal::NoRoom(key.to_owned()))?;
         let held = self.stacks.get(tab).map_or(0, Vec::len);
         let replace = root || held == 0;
+        let inherited_hue = (!replace)
+            .then(|| self.stacks.get(tab).and_then(|stack| stack.last()))
+            .flatten()
+            .map(|entry| entry.hue_key.as_str())
+            .unwrap_or_default();
+        let hue_key = hue_key_for_room(key, inherited_hue);
         let id = self.next;
+        let mut ui = Ui::default();
+        if let Some(question) = question {
+            ui.set_term(question);
+        }
         let mut entry = Entry {
             id,
             depth: if replace { 1 } else { held + 1 },
+            hue_key,
             screen,
-            ui: Ui::default(),
+            ui,
             handlers: HandlerMap::default(),
             reads: ReadContext::new(),
             watched: std::collections::BTreeSet::new(),
@@ -159,8 +188,40 @@ impl Rooms {
         };
         rebuild(&mut entry, door)?;
         self.next += 1;
+        if !replace
+            && !key.starts_with("locker")
+            && let Some(stack) = self.stacks.get_mut(tab)
+        {
+            for old in stack {
+                let cancel = cancel_locker_prompt(old);
+                old.outbox.extend(cancel);
+            }
+        }
         let stack = self.stacks.entry(tab.to_owned()).or_default();
         let movement = if replace {
+            let locker_checks = stack
+                .iter()
+                .flat_map(|old| old.pending.values())
+                .filter(|tag| tag.as_str() == "locker:unlock")
+                .count();
+            for entry in stack.iter() {
+                for tag in entry.pending.values() {
+                    super::export::cleanup_pending(door, tag);
+                }
+            }
+            for _ in 0..locker_checks {
+                entry.asked += 1;
+                let effect_id = (entry.id << 32) | entry.asked;
+                entry.outbox.push(wire::ShellEffect {
+                    effect_id,
+                    kind: Some(wire::shell_effect::Kind::OwnerCheck(
+                        wire::ShellOwnerCheck {
+                            cancel: true,
+                            ..wire::ShellOwnerCheck::default()
+                        },
+                    )),
+                });
+            }
             stack.clear();
             Move::Replace
         } else {
@@ -232,7 +293,13 @@ impl Rooms {
         instance: u64,
         event: &wire::RoomEvent,
     ) -> Result<Option<Shown>, Refusal> {
-        let (tab, at) = self.locate(instance)?;
+        let (tab, at) = match self.locate(instance) {
+            Ok(located) => located,
+            Err(Refusal::NoInstance(_)) if matches!(&event.kind, Some(E::EffectResult(_))) => {
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
+        };
         let top = self.stacks[&tab].len() - 1;
         if at != top {
             return Ok(None);
@@ -249,16 +316,71 @@ impl Rooms {
                 Ok(Some(self.shown(&tab, Move::Reload)))
             }
             Then::Go(Nav::Stay) => Ok(None),
-            Then::Go(Nav::Push(key)) => self.open(door, &key, &tab, false).map(Some),
-            Then::Go(Nav::Replace(key)) => self.open(door, &key, &tab, true).map(Some),
-            Then::Go(Nav::Pop) => self.pop(door, &tab).map(Some),
+            Then::Go(nav) => self.navigate(door, &tab, at, nav).map(Some),
         }
+    }
+
+    fn navigate(
+        &mut self,
+        door: &dyn Door,
+        tab: &str,
+        from: usize,
+        nav: Nav,
+    ) -> Result<Shown, Refusal> {
+        // A handler can ask for an effect and navigation in the same outcome (Locker Lock clears
+        // its owned clipboard copy while replacing the stack with the wall). Carry those effects
+        // onto the room the shell will actually show; the source entry may be dropped by Replace
+        // or Pop before `take_effects` runs.
+        let effects = self
+            .stacks
+            .get_mut(tab)
+            .and_then(|stack| stack.get_mut(from))
+            .map(|entry| std::mem::take(&mut entry.outbox))
+            .unwrap_or_default();
+        let shown = match nav {
+            Nav::Push(key) => self.open(door, &key, tab, false)?,
+            Nav::Ask(question) => {
+                self.open_with_question(door, super::chat::CHAT, tab, false, Some(&question))?
+            }
+            Nav::Replace(key) => self.open(door, &key, tab, true)?,
+            Nav::Pop => self.pop(door, tab)?,
+            Nav::Stay => self
+                .top(tab)
+                .ok_or_else(|| Refusal::NoRoom("the active tab has no room".to_owned()))?,
+        };
+        if !effects.is_empty()
+            && let Some(entry) = self
+                .stacks
+                .get_mut(tab)
+                .and_then(|stack| stack.iter_mut().find(|entry| entry.id == shown.instance))
+        {
+            entry.outbox.extend(effects);
+        }
+        Ok(shown)
     }
 
     fn pop(&mut self, door: &dyn Door, tab: &str) -> Result<Shown, Refusal> {
         let stack = self.stacks.get_mut(tab).expect("popped tab exists");
         if stack.len() > 1 {
-            let popped_status = stack.pop().and_then(|entry| entry.status);
+            let leaving_locker = stack.last().is_some_and(|entry| {
+                entry.screen.key().starts_with("locker")
+                    && !stack[stack.len() - 2].screen.key().starts_with("locker")
+            });
+            let cancel = if leaving_locker {
+                stack
+                    .last_mut()
+                    .map(cancel_locker_prompt)
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            if let Some(entry) = stack.last() {
+                for tag in entry.pending.values() {
+                    super::export::cleanup_pending(door, tag);
+                }
+            }
+            let popped = stack.pop();
+            let popped_status = popped.as_ref().and_then(|entry| entry.status.clone());
             if let Some(entry) = stack.last_mut() {
                 if popped_status.is_some() {
                     entry.status = popped_status;
@@ -267,6 +389,7 @@ impl Rooms {
                 if let Some(place) = entry.restore.clone() {
                     entry.ui.restore(&place);
                 }
+                entry.outbox.extend(cancel);
                 rebuild(entry, door)?;
             }
             return Ok(self.shown(tab, Move::Pop));
@@ -286,17 +409,126 @@ impl Rooms {
         let tabs: Vec<String> = self.stacks.keys().cloned().collect();
         for tab in tabs {
             let stack = self.stacks.get_mut(&tab).expect("listed");
-            let Some(entry) = stack.last_mut() else {
+            let Some(last) = stack.len().checked_sub(1) else {
                 continue;
             };
-            if (entry.reads.intersects(written.iter().copied())
-                || entry.watched.iter().any(|table| written.contains(table)))
-                && rebuild(entry, door).is_ok()
-            {
-                shown.push(self.shown(&tab, Move::Reload));
+            let mut top_changed = false;
+            for (index, entry) in stack.iter_mut().enumerate() {
+                if entry.reads.intersects(written.iter().copied())
+                    || entry.watched.iter().any(|table| written.contains(table))
+                {
+                    // A covered screen keeps its UI cache. Invalidate it too so returning
+                    // to an open search cannot resurrect a row that another room changed.
+                    entry.ui.refresh_search();
+                    top_changed |= index == last;
+                }
+            }
+            if top_changed {
+                let entry = stack.last_mut().expect("nonempty stack");
+                if rebuild(entry, door).is_ok() {
+                    shown.push(self.shown(&tab, Move::Reload));
+                }
             }
         }
         shown
+    }
+
+    pub fn lock_locker(&mut self, door: &dyn Door) -> Vec<Shown> {
+        let tabs: Vec<String> = self.stacks.keys().cloned().collect();
+        for tab in &tabs {
+            let Some(stack) = self.stacks.get_mut(tab) else {
+                continue;
+            };
+            let Some(first_locker) = stack
+                .iter()
+                .position(|entry| entry.screen.key().starts_with("locker"))
+            else {
+                continue;
+            };
+            let owner_checks: usize = stack[first_locker..]
+                .iter()
+                .flat_map(|entry| entry.pending.iter())
+                .filter(|(_, tag)| tag.as_str() == "locker:unlock")
+                .count();
+            let mut suffix = stack.split_off(first_locker);
+            let Some(mut entry) = suffix.drain(..1).next() else {
+                continue;
+            };
+            let mut preserved = Vec::new();
+            for removed in suffix.drain(..) {
+                if removed.screen.key().starts_with("locker") {
+                    for tag in removed.pending.values() {
+                        super::export::cleanup_pending(door, tag);
+                    }
+                } else {
+                    preserved.push(removed);
+                }
+            }
+            entry.pending.clear();
+            entry.outbox.clear();
+            for _ in 0..owner_checks {
+                entry.asked += 1;
+                let effect_id = (entry.id << 32) | entry.asked;
+                entry.outbox.push(wire::ShellEffect {
+                    effect_id,
+                    kind: Some(wire::shell_effect::Kind::OwnerCheck(
+                        wire::ShellOwnerCheck {
+                            cancel: true,
+                            ..wire::ShellOwnerCheck::default()
+                        },
+                    )),
+                });
+            }
+            let Some(screen) = self.registry.make(super::locker::LOCKER) else {
+                stack.push(entry);
+                stack.extend(preserved);
+                continue;
+            };
+            entry.screen = screen;
+            entry.ui = Ui::default();
+            entry.handlers = HandlerMap::default();
+            entry.reads = ReadContext::new();
+            entry.watched.clear();
+            entry.status = None;
+            entry.last = None;
+            let _ = rebuild(&mut entry, door);
+            stack.push(entry);
+            stack.extend(preserved);
+        }
+        tabs.into_iter()
+            .filter_map(|tab| {
+                self.stacks
+                    .get(&tab)
+                    .is_some_and(|stack| {
+                        stack
+                            .last()
+                            .is_some_and(|entry| entry.screen.key().starts_with("locker"))
+                    })
+                    .then(|| self.shown(&tab, Move::Reload))
+            })
+            .collect()
+    }
+
+    /// Rebuild each tab's authoritative top room after a shell returns to the foreground.
+    pub fn foreground(&mut self, door: &dyn Door) -> Vec<Shown> {
+        let tabs: Vec<String> = self.stacks.keys().cloned().collect();
+        for tab in &tabs {
+            let Some(stack) = self.stacks.get_mut(tab) else {
+                continue;
+            };
+            let Some(entry) = stack.last_mut() else {
+                continue;
+            };
+            let _ = rebuild(entry, door);
+        }
+        tabs.into_iter()
+            .filter_map(|tab| {
+                self.stacks
+                    .get(&tab)
+                    .is_some_and(|stack| !stack.is_empty())
+                    .then(|| self.shown(&tab, Move::Reload))
+            })
+            .collect()
     }
 }
 
@@ -348,6 +580,34 @@ fn handle(entry: &mut Entry, event: &wire::RoomEvent, door: &dyn Door) -> Then {
     }
 }
 
+fn cancel_locker_prompt(entry: &mut Entry) -> Vec<wire::ShellEffect> {
+    let ids: Vec<u64> = entry
+        .pending
+        .iter()
+        .filter_map(|(id, tag)| (tag == "locker:unlock").then_some(*id))
+        .collect();
+    for id in &ids {
+        entry.pending.remove(id);
+    }
+    entry
+        .outbox
+        .retain(|effect| !ids.contains(&effect.effect_id));
+    ids.into_iter()
+        .map(|_| {
+            entry.asked += 1;
+            wire::ShellEffect {
+                effect_id: (entry.id << 32) | entry.asked,
+                kind: Some(wire::shell_effect::Kind::OwnerCheck(
+                    wire::ShellOwnerCheck {
+                        cancel: true,
+                        ..wire::ShellOwnerCheck::default()
+                    },
+                )),
+            }
+        })
+        .collect()
+}
+
 fn dispatch(entry: &mut Entry, selector: &str, input: &Input, door: &dyn Door) -> Then {
     let Some(handler) = entry.handlers.get(selector).cloned() else {
         return Then::Nothing;
@@ -385,6 +645,7 @@ fn dispatch(entry: &mut Entry, selector: &str, input: &Input, door: &dyn Door) -
             Then::Rebuild
         }
         Handler::Open(key) => Then::Go(Nav::Push(key)),
+        Handler::Ask(question) => Then::Go(Nav::Ask(question)),
         Handler::Back => Then::Go(Nav::Pop),
         Handler::Pick(id) => {
             entry.ui.pick(&id);
@@ -460,6 +721,9 @@ fn own(entry: &mut Entry, tag: &str, input: &Input, door: &dyn Door) -> Then {
 fn rebuild(entry: &mut Entry, door: &dyn Door) -> Result<(), Refusal> {
     let mut build = Build::new(&mut entry.ui, door, entry.depth);
     let mut room = entry.screen.build(&mut build);
+    if room.hue_key.is_empty() {
+        room.hue_key.clone_from(&entry.hue_key);
+    }
     let (mut sel, reads, watched) = build.into_parts();
     if let Some(status) = &entry.status {
         room.status_line = Some(wire::RoomStatusLine {
@@ -489,4 +753,63 @@ fn rebuild(entry: &mut Entry, door: &dyn Door) -> Result<(), Refusal> {
     entry.watched = watched;
     entry.last = Some(room);
     Ok(())
+}
+
+/// The app hue is explicit Rust room authority, resolved from registered route families.
+/// Generic child pages have no match and inherit the hue captured from their caller on open.
+fn app_hue_for_room_key(key: &str) -> Option<&'static str> {
+    let route = key.split('/').next()?;
+    match route {
+        "people" | "person" => Some("people"),
+        "money" => Some("money"),
+        "photos" | "photo" => Some("photos"),
+        "locker" => Some("locker"),
+        "docs" => Some("docs"),
+        "calendar" => Some("calendar"),
+        "reminders" => Some("reminders"),
+        "notes" => Some("notes"),
+        "health" => Some("health"),
+        _ => None,
+    }
+}
+
+fn hue_key_for_room(key: &str, inherited: &str) -> String {
+    app_hue_for_room_key(key).unwrap_or(inherited).to_owned()
+}
+
+#[cfg(test)]
+mod hue_tests {
+    use super::hue_key_for_room;
+
+    #[test]
+    fn rust_assigns_each_app_hue_and_generic_pages_inherit_their_parent() {
+        for (route, expected) in [
+            ("person/00000000-0000-7000-8000-000000000001", "people"),
+            ("people/list/00000000-0000-7000-8000-000000000001", "people"),
+            ("money/txn/00000000-0000-7000-8000-000000000001", "money"),
+            (
+                "photos/photo/00000000-0000-7000-8000-000000000001",
+                "photos",
+            ),
+            ("locker/item/00000000-0000-7000-8000-000000000001", "locker"),
+            ("docs/doc/00000000-0000-7000-8000-000000000001", "docs"),
+            (
+                "calendar/event/00000000-0000-7000-8000-000000000001",
+                "calendar",
+            ),
+            (
+                "reminders/task/00000000-0000-7000-8000-000000000001",
+                "reminders",
+            ),
+            ("notes/note/00000000-0000-7000-8000-000000000001", "notes"),
+            (
+                "health/workout/00000000-0000-7000-8000-000000000001",
+                "health",
+            ),
+        ] {
+            assert_eq!(hue_key_for_room(route, ""), expected, "{route}");
+        }
+        assert_eq!(hue_key_for_room("organize/picker", "people"), "people");
+        assert_eq!(hue_key_for_room("home", ""), "");
+    }
 }

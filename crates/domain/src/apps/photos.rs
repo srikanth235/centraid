@@ -74,6 +74,8 @@ pub struct PhotoDetail {
     pub lon: Option<f64>,
     pub place_id: Option<String>,
     pub place_title: Option<String>,
+    pub edited_from: Option<String>,
+    pub edited_from_title: Option<String>,
     pub size: i64,
 }
 
@@ -97,6 +99,8 @@ impl PhotoDetail {
             lon: row.get("lon")?,
             place_id: row.get("place_id")?,
             place_title: row.get("place_title")?,
+            edited_from: row.get("edited_from")?,
+            edited_from_title: row.get("edited_from_title")?,
             size: row.get("size")?,
         })
     }
@@ -165,7 +169,7 @@ impl PlaceItem {
     }
 }
 
-// S12: every Photos read filters `parent_id IS NULL` so homed captures never enter the library.
+// Library reads exclude photos homed inside another item.
 pub const LIBRARY: Read<Tile> = read(
     ReadDecl {
         name: "photos.library",
@@ -267,8 +271,9 @@ pub const BY_ID: Read<PhotoDetail> = read(
         sql: "SELECT entity.id, entity.title, entity.created_at, entity.starred_at IS NOT NULL AS starred, \
                      entity.arrived_via, entity.arrived_label, photo.blob, photo.media_type, photo.form, \
                      photo.taken_at, photo.width, photo.height, photo.duration_s, photo.lat, photo.lon, \
-                     photo.place_id, \
+                     photo.place_id, photo.edited_from, \
                      (SELECT title FROM entity WHERE id = photo.place_id AND deleted_at IS NULL) AS place_title, \
+                     (SELECT title FROM entity WHERE id = photo.edited_from AND deleted_at IS NULL) AS edited_from_title, \
                      blob.size \
               FROM entity JOIN photo ON photo.id = entity.id JOIN blob ON blob.hash = photo.blob \
               WHERE entity.id = :id AND entity.parent_id IS NULL AND entity.deleted_at IS NULL",

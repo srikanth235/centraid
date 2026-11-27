@@ -10,6 +10,7 @@ use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
+use super::search_view;
 use super::selector::{Act, Handler, Sel};
 use crate::strings::{Locale, fill, home as home_words, notes as words, shared};
 
@@ -27,6 +28,15 @@ const FILTER_PINNED: &str = "filter/pinned";
 const FILTER_JOURNAL: &str = "filter/journal";
 const SORT_UPDATED: &str = "sort/updated";
 const SORT_TITLE: &str = "sort/title";
+
+fn picked_name(name: &str) -> String {
+    let leaf = name.rsplit(['/', '\\']).next().unwrap_or_default().trim();
+    if leaf.is_empty() || leaf.chars().any(char::is_control) {
+        "Imported note.md".to_owned()
+    } else {
+        leaf.chars().take(200).collect()
+    }
+}
 
 #[must_use]
 pub fn registry() -> Registry {
@@ -50,6 +60,13 @@ pub fn registry() -> Registry {
                 return Some(Box::new(PurgeConfirm { id: id.to_owned() }));
             }
             if let Some(rest) = key.strip_prefix("notes/note/") {
+                if let Some(id) = rest.strip_suffix("/link") {
+                    return Some(Box::new(super::link_picker::LinkPicker::new(
+                        id.to_owned(),
+                        format!("notes/note/{id}"),
+                        words::title(EN),
+                    )));
+                }
                 if let Some(id) = rest.strip_suffix("/versions") {
                     return Some(Box::new(NoteVersions { id: id.to_owned() }));
                 }
@@ -223,8 +240,18 @@ fn handle_more_or_nav(tag: &str) -> Option<Outcome> {
         "tab:tab/notes" => Some(Outcome::replace(NOTES)),
         "tab:tab/notebooks" => Some(Outcome::replace(NOTEBOOKS)),
         "tab:tab/journal" => Some(Outcome::replace(JOURNAL)),
-        "more:import" => Some(Outcome::say(&words::import_note(EN))),
-        "more:export" => Some(Outcome::say(&words::export_note(EN))),
+        "more:import" => Some(Outcome::effect(
+            "import:notes:result",
+            wire::shell_effect::Kind::PickFile(wire::ShellPickFile {
+                types: vec!["text/markdown".to_owned(), "text/plain".to_owned()],
+                multiple: false,
+            }),
+        )),
+        "more:export" => Some(super::export::ask(
+            "note.export",
+            json!({}),
+            &shared::owner_reason_export(EN),
+        )),
         _ => None,
     }
 }
@@ -257,6 +284,12 @@ fn note_row_menu(sel: &mut Sel, prefix: &str, note: &reads::NoteRow) -> wire::Ro
             &format!("{prefix}/{id}/menu/open"),
             &words::menu_open(EN),
             Handler::Open(format!("notes/note/{id}")),
+        ),
+        blocks::menu_item(
+            sel,
+            &format!("{prefix}/{id}/menu/organize"),
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(std::slice::from_ref(id))),
         ),
         blocks::menu_item(
             sel,
@@ -349,6 +382,12 @@ fn selection_actions(sel: &mut Sel, ids: &[String]) -> Vec<wire::RoomMenuItem> {
     vec![
         blocks::menu_item(
             sel,
+            "selection/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(ids)),
+        ),
+        blocks::menu_item(
+            sel,
             "selection/pin",
             &words::menu_pin(EN),
             Handler::Act(Act::new(
@@ -415,20 +454,36 @@ impl RoomScreen for NotesList {
         };
 
         let mut rows = answer.rows;
-        if !term.is_empty() {
-            let needle = term.to_lowercase();
-            rows.retain(|row| row.title.to_lowercase().contains(&needle));
-        }
         if self.sort == SORT_TITLE {
             rows.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
         }
 
-        let ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
+        if !term.is_empty()
+            && let Err(sentence) = search_view::load(b.ui, b.door, &["note", "notebook"], &term)
+        {
+            return room(wire::RoomKind::AppPlace, NOTES)
+                .title(&words::title(EN))
+                .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                .build();
+        }
+
+        let ids: Vec<String> = if term.is_empty() {
+            rows.iter().map(|r| r.id.clone()).collect()
+        } else {
+            b.ui.search_hits().iter().map(|r| r.id.clone()).collect()
+        };
         b.ui.list(ids);
 
         let selecting = b.ui.selecting();
         let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
-        let count_str = words::notes_count(EN, rows.len() as u64);
+        let count_str = words::notes_count(
+            EN,
+            if term.is_empty() {
+                rows.len()
+            } else {
+                b.ui.search_hits().len()
+            } as u64,
+        );
 
         let mut filter_pinned = blocks::menu_item(
             &mut b.sel,
@@ -476,7 +531,18 @@ impl RoomScreen for NotesList {
         );
 
         let mut content = Vec::new();
-        if rows.is_empty() {
+        if !term.is_empty() {
+            content = search_view::rows(&mut b.sel, b.ui, selecting);
+            if content.is_empty() {
+                let body = fill(&words::empty_search_body(EN), &[("term", &term)]);
+                content.push(blocks::empty(
+                    glyph("Search", "notes"),
+                    &words::empty_search_title(EN),
+                    &body,
+                    None,
+                ));
+            }
+        } else if rows.is_empty() {
             if term.is_empty() {
                 content.push(first::first_open(
                     b,
@@ -544,7 +610,7 @@ impl RoomScreen for NotesList {
         let sel_label = words::selected_count(EN, picked.len() as u64);
         let band = notes_band(&mut b.sel, NOTES);
 
-        room(wire::RoomKind::AppPlace, NOTES)
+        let mut built = room(wire::RoomKind::AppPlace, NOTES)
             .title(&words::title(EN))
             .subtitle(&count_str)
             .filter(&mut b.sel, filter_menu, b.ui)
@@ -560,10 +626,62 @@ impl RoomScreen for NotesList {
             .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
             .selection(&mut b.sel, b.ui, &sel_label, sel_actions)
             .ready(content)
-            .build()
+            .build();
+        if let Some(search) = built.search.as_mut() {
+            search_view::decorate(&mut b.sel, search, b.ui);
+        }
+        built
     }
 
-    fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if tag == "import:notes:result" {
+            return match input {
+                Input::Effect(result) => match result.outcome.as_ref() {
+                    Some(wire::shell_effect_result::Outcome::Failed(failed))
+                        if failed.cancelled =>
+                    {
+                        Outcome::default()
+                    }
+                    Some(wire::shell_effect_result::Outcome::Picked(picked)) => {
+                        let Some(file) = picked.items.first() else {
+                            return Outcome::default();
+                        };
+                        let Some(staged) = file.stage_handle.as_ref() else {
+                            return Outcome::refuse(&words::import_failed(EN));
+                        };
+                        let bytes = match e.door.held_bytes(&staged.content_hash, 1_048_576) {
+                            Ok(bytes) => bytes,
+                            Err(_) => return Outcome::refuse(&words::import_failed(EN)),
+                        };
+                        let text = match String::from_utf8(bytes) {
+                            Ok(text) => text,
+                            Err(_) => return Outcome::refuse(&words::import_failed(EN)),
+                        };
+                        if text.len() > 60_000 {
+                            return Outcome::refuse(&words::import_failed(EN));
+                        }
+                        let name = picked_name(&file.name);
+                        let done = e.door.act(&Act::new(
+                            "note.import",
+                            json!({
+                                "arrived_via": "markdown",
+                                "arrived_label": name,
+                                "files": [{"path": name, "text": text}],
+                            }),
+                        ));
+                        match done {
+                            Ok(done) => Outcome::done(&done.sentence, done.undo),
+                            Err(_) => Outcome::refuse(&words::import_failed(EN)),
+                        }
+                    }
+                    _ => Outcome::refuse(&words::import_failed(EN)),
+                },
+                _ => Outcome::default(),
+            };
+        }
+        if let Some(out) = super::export::handle(e, tag, input) {
+            return out;
+        }
         if let Some(out) = handle_more_or_nav(tag) {
             return out;
         }
@@ -575,12 +693,28 @@ impl RoomScreen for NotesList {
             self.sort = SORT_TITLE;
             return Outcome::default();
         }
+        if tag == "next:search/more" {
+            e.ui.advance_search_page();
+            return Outcome::default();
+        }
         if tag.starts_with("next:") {
             self.loaded = (self.loaded + 50).min(500);
             return Outcome::default();
         }
         if tag.starts_with("share:") {
-            return Outcome::say(&words::shared(EN));
+            let id = tag.trim_start_matches("share:");
+            let reader = match e.door.reader() {
+                Ok(reader) => reader,
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let detail = match reader.run(&reads::BY_ID, &Args::new().text("id", id)) {
+                Ok(answer) => answer.rows.into_iter().next(),
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let Some(note) = detail else {
+                return Outcome::refuse(&words::not_found(EN));
+            };
+            return super::export::share(&note.title, "note", Some(&note.body), &words::shared(EN));
         }
         Outcome::default()
     }
@@ -808,8 +942,6 @@ impl RoomScreen for NotebookDetail {
     fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
         if tag.starts_with("next:") {
             self.loaded = (self.loaded + 50).min(500);
-        } else if tag.starts_with("share:") {
-            return Outcome::say(&words::shared(EN));
         }
         Outcome::default()
     }
@@ -1058,8 +1190,6 @@ impl RoomScreen for JournalList {
         }
         if tag.starts_with("next:") {
             self.loaded = (self.loaded + 50).min(500);
-        } else if tag.starts_with("share:") {
-            return Outcome::say(&words::shared(EN));
         }
         Outcome::default()
     }
@@ -1200,17 +1330,33 @@ impl RoomScreen for NoteEditor {
             }
 
             if let Ok(att) = b.run(&entity_reads::ATTACHMENTS, &Args::new().text("id", &id)) {
-                let items: Vec<_> = att
+                let mut attached: std::collections::BTreeMap<String, (String, String)> = att
                     .rows
-                    .iter()
-                    .map(|item| {
+                    .into_iter()
+                    .map(|item| (item.id, (item.kind, item.title)))
+                    .collect();
+                for kind in ["document", "photo"] {
+                    if let Ok(home) = b.run(
+                        &entity_reads::IN_HOME,
+                        &Args::new().text("home", &id).text("kind", kind),
+                    ) {
+                        for item in home.rows {
+                            attached
+                                .entry(item.id)
+                                .or_insert_with(|| (kind.to_owned(), item.title));
+                        }
+                    }
+                }
+                let items: Vec<_> = attached
+                    .into_iter()
+                    .map(|(item_id, (kind, title))| {
                         blocks::row(
                             &mut b.sel,
-                            &format!("attach/{}", item.id),
-                            &item.title,
-                            Handler::Tag(format!("open:{}:{}", item.kind, item.id)),
+                            &format!("attach/{item_id}"),
+                            &title,
+                            Handler::Tag(format!("open:{kind}:{item_id}")),
                         )
-                        .meta(&kind_noun(&item.kind))
+                        .meta(&kind_noun(&kind))
                         .build()
                     })
                     .collect();
@@ -1264,17 +1410,23 @@ impl RoomScreen for NoteEditor {
                                 Handler::Tag(format!("open:{}:{}", target.kind, target.id)),
                             )
                             .meta(&kind_noun(&target.kind))
+                            .menu(super::link_picker::unlink_menu(&mut b.sel, &target.id))
                             .build(),
                         );
                     }
                 }
-                if !linked_rows.is_empty() {
-                    footer_blocks.push(blocks::linked(
-                        &words::footer_linked(EN),
-                        linked_rows,
-                        None,
-                    ));
-                }
+                let add_link = blocks::action(
+                    &mut b.sel,
+                    "footer/linked/add",
+                    &words::footer_add_link(EN),
+                    "",
+                    Handler::Tag("footer:add_link".to_owned()),
+                );
+                footer_blocks.push(blocks::linked(
+                    &words::footer_linked(EN),
+                    linked_rows,
+                    Some(add_link),
+                ));
             }
 
             if let Ok(backlinks) = b.run(&entity_reads::MENTIONED_IN, &Args::new().text("id", &id))
@@ -1405,6 +1557,12 @@ impl RoomScreen for NoteEditor {
                         ),
                         blocks::menu_item(
                             &mut b.sel,
+                            "header/menu/organize",
+                            &shared::organize(EN),
+                            Handler::Open(super::organize::route(std::slice::from_ref(id))),
+                        ),
+                        blocks::menu_item(
+                            &mut b.sel,
                             "header/menu/versions",
                             &words::menu_versions(EN),
                             Handler::Open(format!("notes/note/{id}/versions")),
@@ -1427,6 +1585,30 @@ impl RoomScreen for NoteEditor {
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(id) = self.id.as_deref()
+            && let Some(outcome) = super::link_picker::handle_unlink(e, tag, id)
+        {
+            return outcome;
+        }
+        if let Some(outcome) = super::attachments::handle(e, tag, input) {
+            return outcome;
+        }
+        if let Some(outcome) = super::export::handle(e, tag, input) {
+            return outcome;
+        }
+        if let Some(kind) = tag.strip_prefix("attach:") {
+            if let Some(id) = self.id.as_deref() {
+                // Note files are note assets, not standalone documents filed
+                // inside the note entity.
+                return super::attachments::ask(&format!("note-{kind}"), id);
+            }
+            return Outcome::refuse(&shared::attachment_unavailable(EN));
+        }
+        if tag == "footer:add_link"
+            && let Some(id) = self.id.as_deref()
+        {
+            return Outcome::push(&format!("notes/note/{id}/link"));
+        }
         if tag == "editor" {
             match input {
                 Input::Canvas(wire::room_canvas_event::Kind::NoteEdit(edit)) => {
@@ -1466,8 +1648,8 @@ impl RoomScreen for NoteEditor {
                 Err(refused) => Outcome::refuse(&refused.0),
             };
         }
-        if tag == "share" {
-            return Outcome::say(&words::shared(EN));
+        if tag == "share" && self.id.is_some() {
+            return super::export::share(&self.title, "note", Some(&self.body), &words::shared(EN));
         }
         Outcome::default()
     }
@@ -1780,8 +1962,6 @@ impl RoomScreen for TagDetail {
     fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
         if tag.starts_with("next:") {
             self.loaded = (self.loaded + 50).min(500);
-        } else if tag.starts_with("share:") {
-            return Outcome::say(&words::shared(EN));
         }
         Outcome::default()
     }

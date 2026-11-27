@@ -4,6 +4,8 @@ import LocalAuthentication
 #if os(iOS)
 import UIKit
 import UniformTypeIdentifiers
+@preconcurrency import PhotosUI
+@preconcurrency import VisionKit
 #endif
 
 // THE PLATFORM WORK THE LOCKER ASKS OF THE SHELL (#1135), as generic effects:
@@ -109,6 +111,117 @@ struct PickLimits {
 @MainActor
 enum FilePerformer {
     private static var holders: [PickerHolder] = []
+    private static var photoHolders: [PhotoPickerHolder] = []
+    private static var scannerHolders: [DocumentScannerHolder] = []
+
+    static func pickerResult(_ items: [Centraid_Core_V1_ShellPickedItem]) -> Result<[Centraid_Core_V1_ShellPickedItem], String> {
+        items.isEmpty ? .failure(EffectReason.cancelled) : .success(items)
+    }
+
+    static func pickPhotos(
+        _ pick: Centraid_Core_V1_ShellPickPhoto,
+        _ done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void
+    ) {
+        var configuration = PHPickerConfiguration()
+        configuration.filter = pick.video ? .videos : .images
+        configuration.selectionLimit = pick.multiple ? 0 : 1
+        let picker = PHPickerViewController(configuration: configuration)
+        let holder = PhotoPickerHolder { results in
+            Task {
+                guard !results.isEmpty else {
+                    await MainActor.run { done(.failure(EffectReason.cancelled)) }
+                    return
+                }
+                do {
+                    var items: [Centraid_Core_V1_ShellPickedItem] = []
+                    for result in results {
+                        guard let item = try await copyPhoto(result.itemProvider) else { throw CocoaError(.fileReadUnknown) }
+                        items.append(item)
+                    }
+                    await MainActor.run { done(pickerResult(items)) }
+                } catch {
+                    await MainActor.run { done(.failure(EffectReason.unreadable)) }
+                }
+            }
+        }
+        picker.delegate = holder
+        photoHolders.append(holder)
+        present(picker, holder)
+    }
+
+    static func scanDocument(_ done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void) {
+        guard VNDocumentCameraViewController.isSupported else { done(.failure(EffectReason.unavailable)); return }
+        let scanner = VNDocumentCameraViewController()
+        let holder = DocumentScannerHolder { result in done(result) }
+        scanner.delegate = holder
+        scannerHolders.append(holder)
+        present(scanner, holder)
+    }
+
+    private static func copyPhoto(_ provider: NSItemProvider) async throws -> Centraid_Core_V1_ShellPickedItem? {
+        guard let type = provider.registeredTypeIdentifiers.first(where: { UTType($0)?.conforms(to: .image) == true || UTType($0)?.conforms(to: .movie) == true }) else { throw CocoaError(.fileReadUnknown) }
+        return try await withCheckedThrowingContinuation { continuation in
+            provider.loadFileRepresentation(forTypeIdentifier: type) { source, error in
+                if let error { continuation.resume(throwing: error); return }
+                guard let source else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)); return }
+                do {
+                    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("room-picks", isDirectory: true)
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    let ext = source.pathExtension.isEmpty ? (UTType(type)?.preferredFilenameExtension ?? "bin") : source.pathExtension
+                    let destination = directory.appendingPathComponent(UUID().uuidString).appendingPathExtension(ext)
+                    try FileManager.default.copyItem(at: source, to: destination)
+                    try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
+                    var item = Centraid_Core_V1_ShellPickedItem()
+                    item.path = destination.path
+                    item.name = source.lastPathComponent
+                    item.mediaType = UTType(type)?.preferredMIMEType ?? "application/octet-stream"
+                    item.size = UInt64((try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+                    continuation.resume(returning: item)
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+
+    static func pickPaths(
+        _ pick: Centraid_Core_V1_ShellPickFile,
+        _ done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void
+    ) {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes(pick.types))
+        picker.allowsMultipleSelection = pick.multiple
+        let holder = PickerHolder { urls in
+            guard !urls.isEmpty else { done(.failure(EffectReason.cancelled)); return }
+            do {
+                var items: [Centraid_Core_V1_ShellPickedItem] = []
+                for source in urls {
+                    let scoped = source.startAccessingSecurityScopedResource()
+                    defer { if scoped { source.stopAccessingSecurityScopedResource() } }
+                    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("room-picks", isDirectory: true)
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    let name = source.lastPathComponent
+                    let suffix = source.pathExtension.isEmpty ? "" : ".\(source.pathExtension)"
+                    let destination = directory.appendingPathComponent(UUID().uuidString + suffix)
+                    try FileManager.default.copyItem(at: source, to: destination)
+                    try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
+                    var picked = Centraid_Core_V1_ShellPickedItem()
+                    picked.path = destination.path
+                    picked.name = name
+                    picked.mediaType = UTType(filenameExtension: source.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                    picked.size = UInt64((try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+                    items.append(picked)
+                }
+                done(.success(items))
+            } catch {
+                done(.failure(EffectReason.unreadable))
+            }
+        }
+        present(picker, holder)
+    }
+
+    static func pickFolders(_ done: @escaping ([URL]) -> Void) {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
+        picker.allowsMultipleSelection = true
+        present(picker, PickerHolder(done))
+    }
 
     static func pick(
         _ pick: Centraid_Core_V1_PickBytes,
@@ -275,16 +388,33 @@ enum FilePerformer {
         present(picker, holder)
     }
 
-    private static func present(_ picker: UIDocumentPickerViewController, _ holder: PickerHolder) {
+    private static func presenter() -> UIViewController? {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
-            var top = scene.windows.first(where: \.isKeyWindow)?.rootViewController
-        else {
-            holder.finish([])
-            return
-        }
+              var top = scene.windows.first(where: \.isKeyWindow)?.rootViewController else { return nil }
         while let next = top.presentedViewController { top = next }
+        return top
+    }
+
+    private static func present(_ picker: UIDocumentPickerViewController, _ holder: PickerHolder) {
+        guard let top = presenter() else { holder.finish([]); return }
         holders.append(holder)
         holder.onFinish = { holders.removeAll { $0 === holder } }
+        picker.delegate = holder
+        top.present(picker, animated: true)
+    }
+
+    private static func present(_ picker: PHPickerViewController, _ holder: PhotoPickerHolder) {
+        guard let top = presenter() else { holder.finish([]); return }
+        photoHolders.append(holder)
+        holder.onFinish = { photoHolders.removeAll { $0 === holder } }
+        picker.delegate = holder
+        top.present(picker, animated: true)
+    }
+
+    private static func present(_ picker: VNDocumentCameraViewController, _ holder: DocumentScannerHolder) {
+        guard let top = presenter() else { holder.finish(.failure(EffectReason.unavailable)); return }
+        scannerHolders.append(holder)
+        holder.onFinish = { scannerHolders.removeAll { $0 === holder } }
         picker.delegate = holder
         top.present(picker, animated: true)
     }
@@ -302,6 +432,77 @@ enum FilePerformer {
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { finish(urls) }
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish([]) }
+    }
+
+    private final class PhotoPickerHolder: NSObject, PHPickerViewControllerDelegate {
+        let done: ([PHPickerResult]) -> Void
+        var onFinish: () -> Void = {}
+        init(done: @escaping ([PHPickerResult]) -> Void) { self.done = done }
+        func finish(_ results: [PHPickerResult]) { done(results); onFinish() }
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true) { self.finish(results) }
+        }
+    }
+
+    private final class DocumentScannerHolder: NSObject, VNDocumentCameraViewControllerDelegate {
+        let done: (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void
+        var onFinish: () -> Void = {}
+        init(done: @escaping (Result<[Centraid_Core_V1_ShellPickedItem], String>) -> Void) { self.done = done }
+        func finish(_ result: Result<[Centraid_Core_V1_ShellPickedItem], String>) { done(result); onFinish() }
+        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
+            controller.dismiss(animated: true) { self.finish(.failure(EffectReason.cancelled)) }
+        }
+        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
+            controller.dismiss(animated: true) { self.finish(.failure(EffectReason.failed)) }
+        }
+        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
+            do {
+                let directory = FileManager.default.temporaryDirectory.appendingPathComponent("room-scans", isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                var items: [Centraid_Core_V1_ShellPickedItem] = []
+                for index in 0..<scan.pageCount {
+                    guard let data = scan.imageOfPage(at: index).jpegData(compressionQuality: 0.9) else { throw CocoaError(.fileWriteUnknown) }
+                    let destination = directory.appendingPathComponent("\(UUID().uuidString).jpg")
+                    try data.write(to: destination, options: .atomic)
+                    try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
+                    var item = Centraid_Core_V1_ShellPickedItem()
+                    item.path = destination.path
+                    item.name = "Scan \(index + 1).jpg"
+                    item.mediaType = "image/jpeg"
+                    item.size = UInt64(data.count)
+                    items.append(item)
+                }
+                controller.dismiss(animated: true) { self.finish(.success(items)) }
+            } catch { controller.dismiss(animated: true) { self.finish(.failure(EffectReason.unwritable)) } }
+        }
+    }
+}
+
+@MainActor
+enum FileGrantStore {
+    struct Grant {
+        let ref: String
+        let label: String
+        let bookmark: Data
+    }
+    private struct Persisted: Codable {
+        let v: Int
+        let label: String
+        let bookmark: String
+    }
+    static func make(url: URL) throws -> Grant {
+        Grant(ref: UUID().uuidString.lowercased(), label: url.lastPathComponent, bookmark: try url.bookmarkData())
+    }
+    static func encode(_ grant: Grant) -> String? {
+        let persisted = Persisted(v: 1, label: grant.label, bookmark: grant.bookmark.base64EncodedString())
+        return (try? JSONEncoder().encode(persisted)).flatMap { String(data: $0, encoding: .utf8) }
+    }
+    static func decode(ref: String, value: String) -> Grant? {
+        guard let data = value.data(using: .utf8),
+              let persisted = try? JSONDecoder().decode(Persisted.self, from: data),
+              persisted.v == 1,
+              let bookmark = Data(base64Encoded: persisted.bookmark) else { return nil }
+        return Grant(ref: ref, label: persisted.label, bookmark: bookmark)
     }
 }
 #endif

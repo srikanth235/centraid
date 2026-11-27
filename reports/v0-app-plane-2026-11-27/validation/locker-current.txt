@@ -1,0 +1,18 @@
+Locker write-only secret editor validation
+==========================================
+
+Source coverage:
+- Sealed and OTP replacement input is emitted as a masked RoomSecret with an empty value and no reveal selector.
+- A plain-to-sealed kind change clears the prior zeroizing field state and uses a fresh shell selector identity.
+- Secret field state is not truncated by the RoomSecret protocol. The editor rejects values exceeding the vault ciphertext budget; plain values retain the vault's byte budget and command-side validation.
+- A 516-byte password preserves leading/trailing spaces and round-trips through save, reveal, and clipboard copy.
+- Backgrounding while a replacement is typed clears the Locker editor and relocks; the unsaved value does not replace the saved secret.
+- Returning to a Locker detail after saving a changed field clears a previously revealed cache when the entity revision head changes.
+
+Checks (all run under `flock /tmp/centraid-cargo.lock`):
+- `cargo test -p centraid-screens --test room_locker_security`: passed, 1/1.
+- `cargo test -p centraid-screens --test room_blocks`: passed, 2/2.
+- `cargo test -p centraid-screens room::field::tests`: passed, 9/9.
+- The final full screens rerun passed 623 tests across 44 targets after this editor revision; see screens.txt.
+
+Durable full test output: screens.txt. Clippy receipt: locker-clippy.txt.

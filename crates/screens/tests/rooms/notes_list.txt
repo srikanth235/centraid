@@ -25,6 +25,7 @@ room app_place key="notes"
         menu #pinned/01900000-0000-7000-8000-000000001020/menu
           section
             item "Open" #pinned/01900000-0000-7000-8000-000000001020/menu/open
+            item "Move or tag" #pinned/01900000-0000-7000-8000-000000001020/menu/organize
             item "Unpin" #pinned/01900000-0000-7000-8000-000000001020/menu/pin
             item "Share" #pinned/01900000-0000-7000-8000-000000001020/menu/share
             item "Select" #pinned/01900000-0000-7000-8000-000000001020/menu/select
@@ -34,6 +35,7 @@ room app_place key="notes"
         menu #note/01900000-0000-7000-8000-000000001040/menu
           section
             item "Open" #note/01900000-0000-7000-8000-000000001040/menu/open
+            item "Move or tag" #note/01900000-0000-7000-8000-000000001040/menu/organize
             item "Pin" #note/01900000-0000-7000-8000-000000001040/menu/pin
             item "Share" #note/01900000-0000-7000-8000-000000001040/menu/share
             item "Select" #note/01900000-0000-7000-8000-000000001040/menu/select
@@ -42,6 +44,7 @@ room app_place key="notes"
         menu #note/01900000-0000-7000-8000-000000001030/menu
           section
             item "Open" #note/01900000-0000-7000-8000-000000001030/menu/open
+            item "Move or tag" #note/01900000-0000-7000-8000-000000001030/menu/organize
             item "Pin" #note/01900000-0000-7000-8000-000000001030/menu/pin
             item "Share" #note/01900000-0000-7000-8000-000000001030/menu/share
             item "Select" #note/01900000-0000-7000-8000-000000001030/menu/select

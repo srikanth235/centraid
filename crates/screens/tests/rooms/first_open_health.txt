@@ -22,3 +22,5 @@ room app_place key="health"
     chart #chart/summary summary="Steps over the last 14 days" empty="No Steps figures yet."
     empty glyph="Heart" body="Steps, sleep and workouts, read from Apple Health."
       action "Connect Apple Health" #first/health/action
+    section #section/typical "Typical range"
+      row #typical/range "Steps · previous 28 completed days" meta="A typical range appears after 7 days with recorded values."

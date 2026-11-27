@@ -1,0 +1,27 @@
+  ok      sql-confinement — 493 file(s) scanned, clean (305 in the allowed crates, 38 in the rule runner)
+  ok      abi-five-symbols — 10 file(s) scanned, clean
+  ok      no-listening-socket — 797 file(s) scanned, clean (38 in the rule runner, 1 named in the listener allowlist)
+  ok      commonmain-no-platform-import — 6 file(s) scanned, clean
+  ok      gateway-harness-out-of-release — 24 file(s) scanned, clean
+  ok      vault-connections-do-not-checkpoint — 4 file(s) scanned, clean
+  ok      no-kmp-shared — 348 file(s) scanned, clean
+  ok      sqlite-page-flag — 175 file(s) scanned, clean
+  ok      no-command-request — 31 file(s) scanned, clean
+  ok      native-accessibility — 281 file(s) scanned, clean
+  ok      no-tasks-namespace — 195 file(s) scanned, clean
+  ok      native-spells-no-screen-id — 192 file(s) scanned, clean (9 registered screen id(s))
+  ok      native-names-no-command — 203 file(s) scanned, clean (147 registered command(s))
+  ok      walker-platform-law — 192 file(s) scanned, clean
+  ok      native-effect-reasons — 190 file(s) scanned, clean
+  ok      native-shell-parity — 216 file(s) scanned, clean (813 item(s) in 14 proto file(s), 50 in the register)
+  ok      no-host-clock-in-ddl — 5 file(s) scanned, clean
+  ok      every-database-has-an-id-and-a-ladder — 4 file(s) scanned, clean
+  ok      no-key-value-state-table — 5 file(s) scanned, clean
+  ok      phone-authority-needs-verify — 12 file(s) scanned, clean
+  ok      generated-lists-are-fresh — 1 file(s) scanned, clean
+  ok      page-state — 144 file(s) scanned, clean
+  FAIL    data-pin — 1 finding(s) in 1 file(s) scanned
+        data v0.3 is marked stale (coverage), but the contract moved again since it was marked: the tool catalogue (the tools the model is shown): tools_hash is 66c140a52cd47febd0048451fd4e691b6a9475615d23d314a5cceec716d60e4c in the runtime, c4a759dfe93337fc3f925ed7a7768030cf3658076a4224639b0860bccbd6fc4b in the pin; the static prompt (identity, system turn, rules): prompt_hash is 2d2a8ff8d9a9ef1481a8f644a4525f802d31bb19c4c86e7f5010d906a56a9ba3 in the runtime, ca0109ece366ccec53e3147dc96e443a7056c751b8c58775624a028162cbb96a in the pin; the data catalogue (the kinds, verbs and fields the generator covers): catalog_hash is f994ccaa2f9f839d2c03184c2d888c463201399e6a2573bcc379fdaa8333fe58 in the runtime, 487261c0f8548972e20267601cb0b672a6fd7d29c8f77e5fd01133a0fdce81dd in the pin. A stale mark covers only the contract it was made at (crates/assist/data.json `stale.at`). Run `datagen drift --in <version dir>`, then update `stale` in crates/assist/data.json with the level it reports, `since`, and `"at": {"tools_hash": "66c140a52cd47febd0048451fd4e691b6a9475615d23d314a5cceec716d60e4c", "prompt_hash": "2d2a8ff8d9a9ef1481a8f644a4525f802d31bb19c4c86e7f5010d906a56a9ba3", "catalog_hash": "f994ccaa2f9f839d2c03184c2d888c463201399e6a2573bcc379fdaa8333fe58"}`. Do not edit the pin's own `tools_hash`, `prompt_hash` or `catalog_hash`: they say what the data was built for.
+  ok      copy-budget — 26 file(s) scanned, clean
+  ok      journey-ledger — 22 file(s) scanned, clean
+  ok      skills — 8 file(s) scanned, clean

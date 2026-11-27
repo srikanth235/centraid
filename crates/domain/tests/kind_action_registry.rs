@@ -17,7 +17,7 @@ use centraid_domain::chat;
 use centraid_domain::kind::{Export, Footer, KindDecl, Share, Shown, Trash, Versions};
 use centraid_domain::read::Shape;
 use centraid_domain::{ACTIONS, KINDS, READS};
-use centraid_vault::model::KIND_SPECS;
+use centraid_vault::model::{KIND_SPECS, Kind};
 use common::World;
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
@@ -426,7 +426,7 @@ fn the_action_verbs_and_the_system_verbs_are_the_vaults_verbs() {
     let actions: BTreeSet<&str> = ACTION_VERBS.into_iter().collect();
     let system: BTreeSet<&str> = SYSTEM_VERBS.into_iter().collect();
     assert_eq!(actions.len(), 76);
-    assert_eq!(system.len(), 21);
+    assert_eq!(system.len(), 22);
     assert!(
         actions.is_disjoint(&system),
         "a verb is an action's or a system's, never both"
@@ -839,6 +839,36 @@ fn pairs_take_each_other_back() {
     assert_eq!(currency.confirm, Confirm::Outlined);
     assert_eq!(currency.inverse, Inverse::Pair("account.edit/currency"));
     assert!(currency.chat_is_a_card());
+}
+
+#[test]
+fn tag_catalogue_matches_the_kinds_allowed_by_the_tagged_wildcard() {
+    let mut expected: Vec<&str> = centraid_domain::chat::KINDS
+        .iter()
+        .filter(|kind| kind.writable && Kind::parse(kind.entity).is_some_and(Kind::is_link_end))
+        .map(|kind| kind.id)
+        .collect();
+    expected.sort_unstable();
+    for name in ["tag.add", "tag.remove"] {
+        let action = ACTIONS
+            .iter()
+            .find(|action| action.name() == name)
+            .expect("tag action");
+        let mut actual: Vec<&str> = action
+            .says()
+            .expect("tag action is in the catalogue")
+            .kinds
+            .to_vec();
+        actual.sort_unstable();
+        assert_eq!(actual, expected, "{name} follows Kind::is_link_end");
+    }
+    let move_kinds = ACTIONS
+        .iter()
+        .find(|action| action.name() == "entity.move")
+        .and_then(|action| action.says())
+        .expect("move action")
+        .kinds;
+    assert!(move_kinds.contains(&"event"));
 }
 
 trait Card {

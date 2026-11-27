@@ -31,13 +31,11 @@ A stall that happens with the queue full of change events is **reported late**, 
 
 ## The `VaultApi` verbs
 
-`api.rs` holds eight verbs and the honest state of each. A stub is a **typed refusal**, never an empty answer: an empty page reads as "no data" and the truth is "this build cannot answer yet".
-
-`page` `invoke` `describe` `parked` are live. `search`, `resolve` and `content` are typed `NotYetAvailable` refusals in this module (content addresses are minted by `content_urls` instead). There is no `reveal` verb: a Locker reveal runs in the vault's Locker commands, after `locker.mark_used` has stamped the item as used.
+`api.rs` implements the typed page, invoke, describe and parked operations, plus `content_urls` for store and library locations. There is no `reveal` verb: Locker reveals run through the vault's Locker commands after `locker.mark_used` stamps the item as used.
 
 ## App queries
 
-`Request::AppQuery` runs a registered query in the core and answers a typed message. The request and the answer are oneofs in `app_query.proto`, one arm per query at the **same number in both**. Today only the shell's own arms exist: `chat_threads`, `chat_thread` and `chat_card` at 70–72 (`app_query/chat.rs`), and the answers `shell_backup_status` and `holdings`. Every per-app range left with the old app plane and its numbers are not reused; the new app plane's reads arrive as arms declared in `crates/domain` **(target)**.
+`Request::AppQuery` runs a registered query in the core and answers a typed message. The request and the answer are oneofs in `app_query.proto`, one arm per query at the **same number in both**. Its shell-specific arms are `chat_threads`, `chat_thread` and `chat_card` at 70–72 (`app_query/chat.rs`), with `shell_backup_status` and `holdings` answers. Every per-app range left with the old app plane and its numbers are not reused. App-plane SQL reads are declared in `crates/domain` and run by its Rust read registry; they are not separate `app_query.proto` arms.
 
 `app_query.rs` holds the door (`VaultDoor`, over `Vault::keyset_page`, with the grammar from `crates/domain`) and the dispatch. A denial is an arm of the answer; a vault failure the door saw is answered as itself and never as a denial; a read that reaches its own stated ceiling is `CoreError::ReadBoundReached` (`ERROR_CODE_READ_BOUND_REACHED`).
 

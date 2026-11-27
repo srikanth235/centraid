@@ -28,3 +28,5 @@ room app_place key="health"
       row #total/steps "Steps" trailing="9000 steps"
     says phone "Phone says" take="Use phone value"
       field "Steps" stated="8100 steps" mine="9000 steps" #says/clear/steps
+    section #section/typical "Typical range"
+      row #typical/range "Steps · previous 28 completed days" meta="A typical range appears after 7 days with recorded values."

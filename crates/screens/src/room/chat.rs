@@ -7,6 +7,7 @@ use super::blocks::{self, Confirm, glyph};
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
+use super::search_view;
 use super::selector::{Act, Handler, Sel};
 use crate::strings::{Locale, chat as words, fill, home as home_words, shared};
 
@@ -16,7 +17,6 @@ pub const CLEAR: &str = "chat/clear";
 pub const CONCEPTS: &str = "chat/concepts";
 
 const EN: Locale = Locale::En;
-const MAX_COMPOSER: usize = 8_000;
 
 #[must_use]
 pub fn registry() -> Registry {
@@ -108,6 +108,13 @@ impl RoomScreen for ChatRootRoom {
         };
 
         let mut blocks_out = Vec::new();
+        let question = b.ui.search_term().trim();
+        if !question.is_empty() {
+            blocks_out.push(blocks::prose(&fill(
+                &words::question_context(EN),
+                &[("question", question)],
+            )));
+        }
         if threads.is_empty() {
             blocks_out.push(blocks::empty(
                 glyph("Chat", ""),
@@ -116,6 +123,12 @@ impl RoomScreen for ChatRootRoom {
                 None,
             ));
         } else {
+            blocks_out.push(blocks::empty(
+                glyph("Chat", ""),
+                &words::assistant_unavailable(EN),
+                &words::empty_body(EN),
+                None,
+            ));
             let rows: Vec<wire::RoomBlock> = threads
                 .iter()
                 .take(5)
@@ -151,35 +164,6 @@ impl RoomScreen for ChatRootRoom {
             );
         }
 
-        let composer_field = form::text(
-            &mut b.sel,
-            &mut b.ui.fields,
-            "composer",
-            &words::composer_label(EN),
-            wire::RoomTextKind::Line,
-            "",
-            MAX_COMPOSER,
-        )
-        .build();
-        let dirty = !b.ui.fields.value("composer").unwrap_or_default().is_empty();
-        let save = form::explicit(
-            &mut b.sel,
-            Explicit {
-                save_label: &words::composer_send(EN),
-                save: Handler::Tag("chat:send".to_owned()),
-                cancel_label: &shared::kit_cancel(EN),
-                cancel: Handler::Tag("chat:clear_input".to_owned()),
-                save_enabled: true,
-                dirty,
-                drafted: false,
-            },
-        );
-        blocks_out.push(form::form(
-            vec![composer_field],
-            Vec::new(),
-            Save::Explicit(save),
-        ));
-
         room(wire::RoomKind::AppPlace, CHAT)
             .title(&words::title(EN))
             .key(
@@ -195,32 +179,12 @@ impl RoomScreen for ChatRootRoom {
             .build()
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+    fn on(&mut self, _e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
         if let Some(outcome) = handle_shell_band(tag) {
             return outcome;
         }
         match tag {
-            "chat:send" => {
-                let text =
-                    e.ui.fields
-                        .value("composer")
-                        .unwrap_or_default()
-                        .trim()
-                        .to_owned();
-                if text.is_empty() {
-                    return Outcome::refuse(&words::composer_empty(EN));
-                }
-                if let Some(f) = e.ui.fields.get_mut("composer") {
-                    f.set("");
-                }
-                Outcome::say(&words::composer_queued(EN))
-            }
-            "chat:clear_input" => {
-                if let Some(f) = e.ui.fields.get_mut("composer") {
-                    f.set("");
-                }
-                Outcome::default()
-            }
+            "chat:send" => Outcome::refuse(&words::assistant_unavailable(EN)),
             _ => Outcome::default(),
         }
     }
@@ -243,6 +207,35 @@ impl RoomScreen for ThreadsListRoom {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let query = b.ui.search_term().trim().to_owned();
+        if !query.is_empty() {
+            if let Err(sentence) = search_view::load(b.ui, b.door, &["thread"], &query) {
+                return room(wire::RoomKind::PushedPage, THREADS)
+                    .title(&words::threads_title(EN))
+                    .back(&mut b.sel, &words::title(EN))
+                    .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                    .build();
+            }
+            let mut content = search_view::rows(&mut b.sel, b.ui, false);
+            if content.is_empty() {
+                content.push(blocks::empty(
+                    glyph("Chat", ""),
+                    &words::threads_empty_title(EN),
+                    &fill(&words::threads_empty_body(EN), &[("term", &query)]),
+                    None,
+                ));
+            }
+            let mut built = room(wire::RoomKind::PushedPage, THREADS)
+                .title(&words::threads_title(EN))
+                .back(&mut b.sel, &words::title(EN))
+                .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
+                .ready(content)
+                .build();
+            if let Some(search) = built.search.as_mut() {
+                search_view::decorate(&mut b.sel, search, b.ui);
+            }
+            return built;
+        }
         let page = match b.reload(&reads::THREADS, &Args::new(), self.page_size()) {
             Ok(ans) => ans,
             Err(refused) => {
@@ -319,7 +312,11 @@ impl RoomScreen for ThreadsListRoom {
             .build()
     }
 
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        if tag == "next:search/more" {
+            e.ui.advance_search_page();
+            return Outcome::default();
+        }
         if tag == "next_page" {
             self.loaded = self.page_size().saturating_add(50);
         }
@@ -501,6 +498,12 @@ impl RoomScreen for ThreadDetailRoom {
         }
 
         let mut blocks_out = Vec::new();
+        blocks_out.push(blocks::empty(
+            glyph("Chat", ""),
+            &words::assistant_unavailable(EN),
+            &words::empty_body(EN),
+            None,
+        ));
         if !msg_blocks.is_empty() {
             blocks_out.push(
                 blocks::section(&mut b.sel, "section/messages", &words::messages_heading(EN))
@@ -508,35 +511,6 @@ impl RoomScreen for ThreadDetailRoom {
                     .into_block(),
             );
         }
-
-        let composer_field = form::text(
-            &mut b.sel,
-            &mut b.ui.fields,
-            "composer",
-            &words::composer_label(EN),
-            wire::RoomTextKind::Line,
-            "",
-            MAX_COMPOSER,
-        )
-        .build();
-        let dirty = !b.ui.fields.value("composer").unwrap_or_default().is_empty();
-        let save = form::explicit(
-            &mut b.sel,
-            Explicit {
-                save_label: &words::composer_send(EN),
-                save: Handler::Tag("chat:send".to_owned()),
-                cancel_label: &shared::kit_cancel(EN),
-                cancel: Handler::Tag("chat:clear_input".to_owned()),
-                save_enabled: true,
-                dirty,
-                drafted: false,
-            },
-        );
-        blocks_out.push(form::form(
-            vec![composer_field],
-            Vec::new(),
-            Save::Explicit(save),
-        ));
 
         let mut trash_item = blocks::menu_item(
             &mut b.sel,
@@ -561,29 +535,9 @@ impl RoomScreen for ThreadDetailRoom {
         frame.ready(blocks_out).build()
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+    fn on(&mut self, _e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
         match tag {
-            "chat:send" => {
-                let text =
-                    e.ui.fields
-                        .value("composer")
-                        .unwrap_or_default()
-                        .trim()
-                        .to_owned();
-                if text.is_empty() {
-                    return Outcome::refuse(&words::composer_empty(EN));
-                }
-                if let Some(f) = e.ui.fields.get_mut("composer") {
-                    f.set("");
-                }
-                Outcome::say(&words::composer_queued(EN))
-            }
-            "chat:clear_input" => {
-                if let Some(f) = e.ui.fields.get_mut("composer") {
-                    f.set("");
-                }
-                Outcome::default()
-            }
+            "chat:send" => Outcome::refuse(&words::assistant_unavailable(EN)),
             _ => Outcome::default(),
         }
     }

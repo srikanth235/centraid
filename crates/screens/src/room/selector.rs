@@ -1,6 +1,4 @@
-//! SELECTORS AND THEIR HANDLERS (app-plane §5): every interactive element of a room carries a
-//! `selector_id`, the only address an event names. A selector is claimed once per room; a repeat
-//! is refused when the room is finished, never silently shadowed.
+//! Room selector registry. Each interactive element has one event address, and duplicate claims are refused.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -75,6 +73,8 @@ pub enum Handler {
     Act(Act),
     /// Push the room named `key`.
     Open(String),
+    /// Open a new chat with this question retained as its draft context.
+    Ask(String),
     /// Pop to the parent.
     Back,
     /// The room's own business: the screen is told the tag.

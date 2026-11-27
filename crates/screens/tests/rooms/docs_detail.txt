@@ -6,6 +6,7 @@ room pushed_page key="docs/doc/01900000-0000-7000-8000-000000002030"
         section
           item "Edit" #header/menu/edit
           item "Star" #header/menu/star
+          item "Move or tag" #header/menu/organize
           item "Download original" #header/menu/download
           item "Earlier versions" #header/menu/versions
           item "Share" #header/menu/share
@@ -19,3 +20,5 @@ room pushed_page key="docs/doc/01900000-0000-7000-8000-000000002030"
         fact "Added" "2026-11-26" kind=date
     prose "Monthly rent due on the first. Renewal in May."
     earlier_versions "1 earlier version" count=1 #earlier
+    linked "Linked"
+      add "Add link" #footer/linked/add

@@ -30,6 +30,48 @@ impl DayTotalRow {
     }
 }
 
+/// The middle half of a person's observed daily values over the prior 28 completed local days.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TypicalRange {
+    pub lower: f64,
+    pub upper: f64,
+    pub observed_days: usize,
+}
+
+/// Calculate a local-day typical range. `today` and the observation days must already be in the
+/// person's local `YYYY-MM-DD` calendar. No-data days are absent and do not count toward the
+/// seven-day minimum. The current day and observations outside the prior 28-day window are ignored.
+#[must_use]
+pub fn typical_range(today: &str, observations: &[(String, f64)]) -> Option<TypicalRange> {
+    let first_day = crate::civil::shift_day(today, -28)?;
+    let mut by_day = std::collections::BTreeMap::new();
+    for (day, value) in observations
+        .iter()
+        .filter(|(day, _value)| day.as_str() >= first_day.as_str() && day.as_str() < today)
+        .filter(|(_, value)| value.is_finite())
+    {
+        by_day.entry(day.as_str()).or_insert(*value);
+    }
+    let mut values: Vec<f64> = by_day.into_values().collect();
+    if values.len() < 7 {
+        return None;
+    }
+    values.sort_by(f64::total_cmp);
+    Some(TypicalRange {
+        lower: percentile(&values, 0.25),
+        upper: percentile(&values, 0.75),
+        observed_days: values.len(),
+    })
+}
+
+fn percentile(sorted: &[f64], fraction: f64) -> f64 {
+    let index = (sorted.len() - 1) as f64 * fraction;
+    let lower = index.floor() as usize;
+    let upper = index.ceil() as usize;
+    let weight = index - lower as f64;
+    sorted[lower] * (1.0 - weight) + sorted[upper] * weight
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkoutSummary {
     pub id: String,
@@ -393,3 +435,65 @@ pub const KINDS: &[KindDecl] = &[
     )
     .sits_in(&["workout_kind"]),
 ];
+
+#[cfg(test)]
+mod typical_range_tests {
+    use super::*;
+
+    #[test]
+    fn typical_range_uses_prior_completed_local_days_and_ignores_an_outlier() {
+        let mut rows: Vec<(String, f64)> = (1..=8)
+            .map(|day| (format!("2026-03-{day:02}"), 100.0))
+            .collect();
+        rows.push(("2026-03-09".to_owned(), 10_000.0));
+        rows.push(("2026-03-10".to_owned(), 999.0)); // today, excluded
+        rows.push(("2026-02-09".to_owned(), -500.0)); // outside 28 days
+        let range = typical_range("2026-03-10", &rows).expect("nine prior observed days");
+        assert_eq!(range.observed_days, 9);
+        assert_eq!(range.lower, 100.0);
+        assert_eq!(range.upper, 100.0);
+    }
+
+    #[test]
+    fn typical_range_requires_seven_observed_whole_days() {
+        let six: Vec<_> = (1..=6)
+            .map(|day| (format!("2026-06-{day:02}"), f64::from(day)))
+            .collect();
+        assert_eq!(typical_range("2026-06-07", &six), None);
+        let seven: Vec<_> = (1..=7)
+            .map(|day| (format!("2026-06-{day:02}"), f64::from(day)))
+            .collect();
+        assert_eq!(
+            typical_range("2026-06-08", &seven).unwrap().observed_days,
+            7
+        );
+        let mut repeated = six.clone();
+        repeated.extend((0..3).map(|_| ("2026-06-01".to_owned(), 99.0)));
+        assert_eq!(typical_range("2026-06-07", &repeated), None);
+    }
+
+    #[test]
+    fn typical_range_keeps_local_calendar_dates_across_month_boundaries() {
+        let rows: Vec<_> = (1..=7)
+            .map(|day| (format!("2026-10-{day:02}"), 42.0))
+            .collect();
+        let range = typical_range("2026-10-08", &rows).unwrap();
+        assert_eq!(range.lower, 42.0);
+        assert_eq!(range.upper, 42.0);
+    }
+
+    #[test]
+    fn typical_range_uses_the_member_local_day_not_the_utc_date() {
+        let zone =
+            centraid_vault::time::zone::FireZone::named("America/Los_Angeles").expect("IANA zone");
+        let today = crate::civil::today(&zone, "2026-08-01T02:00:00.000Z").unwrap();
+        assert_eq!(today, "2026-07-31");
+        let observations: Vec<_> = (24..=30)
+            .map(|day| (format!("2026-07-{day:02}"), 3.0))
+            .collect();
+        let range = typical_range(&today, &observations).unwrap();
+        assert_eq!(range.observed_days, 7);
+        assert_eq!(range.lower, 3.0);
+        assert_eq!(range.upper, 3.0);
+    }
+}

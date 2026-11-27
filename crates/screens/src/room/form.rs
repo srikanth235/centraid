@@ -1,4 +1,4 @@
-//! FORMS (app-plane §5.3): fields, repeatable rows, and the one save rule. Prose autosaves; a
+//! Forms, repeatable rows, and save behavior. Prose autosaves; a
 //! structured form has Cancel and Save and one "Discard changes?" confirm when dismissed dirty.
 //! Text is the shared text field: its value and `rev` live in [`super::field::Fields`].
 
@@ -11,9 +11,22 @@ use super::selector::{Handler, Sel};
 
 pub struct Field(wire::RoomField);
 
+pub struct TextEntry<'a> {
+    pub name: &'a str,
+    pub selector: &'a str,
+    pub label: &'a str,
+    pub kind: wire::RoomTextKind,
+    pub initial: &'a str,
+    pub max_chars: usize,
+}
+
 fn field(sel: &mut Sel, name: &str, label: &str, input: I) -> Field {
+    field_with_selector(sel, name, &format!("field/{name}"), label, input)
+}
+
+fn field_with_selector(sel: &mut Sel, name: &str, selector: &str, label: &str, input: I) -> Field {
     Field(wire::RoomField {
-        selector_id: sel.on(format!("field/{name}"), Handler::Field(name.to_owned())),
+        selector_id: sel.on(selector, Handler::Field(name.to_owned())),
         label: label.to_owned(),
         input: Some(input),
         ..wire::RoomField::default()
@@ -30,17 +43,34 @@ pub fn text(
     initial: &str,
     max_chars: usize,
 ) -> Field {
-    fields.limit(name, max_chars);
-    let state = fields.get_or(name, initial);
-    field(
+    text_with_selector(
         sel,
-        name,
-        label,
+        fields,
+        TextEntry {
+            name,
+            selector: &format!("field/{name}"),
+            label,
+            kind,
+            initial,
+            max_chars,
+        },
+    )
+}
+
+/// A text field with a caller-chosen shell identity and the usual named zeroizing state.
+pub fn text_with_selector(sel: &mut Sel, fields: &mut Fields, entry: TextEntry<'_>) -> Field {
+    fields.limit(entry.name, entry.max_chars);
+    let state = fields.get_or(entry.name, entry.initial);
+    field_with_selector(
+        sel,
+        entry.name,
+        entry.selector,
+        entry.label,
         I::Text(wire::RoomText {
-            kind: kind as i32,
+            kind: entry.kind as i32,
             value: state.value().to_owned(),
             rev: state.rev(),
-            max_chars: u32::try_from(max_chars).unwrap_or(u32::MAX),
+            max_chars: u32::try_from(entry.max_chars).unwrap_or(u32::MAX),
             chips: Vec::new(),
         }),
     )
@@ -148,6 +178,32 @@ pub fn secret(sel: &mut Sel, name: &str, label: &str, masked: bool, value: &str)
     )
 }
 
+/// A write-only secret entry. The value lives in the room's zeroizing form state, while the
+/// protocol block stays masked and empty so shells never receive or echo the typed secret.
+pub fn secret_entry(
+    sel: &mut Sel,
+    fields: &mut Fields,
+    name: &str,
+    selector: &str,
+    label: &str,
+) -> Field {
+    // RoomSecret has no length/revision fields for the shell to adopt a corrected value from.
+    // Keep committed keystrokes intact and let the owning form validate its save limit.
+    fields.limit(name, 0);
+    fields.get_or(name, "");
+    field_with_selector(
+        sel,
+        name,
+        selector,
+        label,
+        I::Secret(wire::RoomSecret {
+            masked: true,
+            value: String::new(),
+            reveal_selector_id: String::new(),
+        }),
+    )
+}
+
 impl Field {
     #[must_use]
     pub fn hint(mut self, hint: &str) -> Self {
@@ -167,7 +223,7 @@ impl Field {
         self
     }
 
-    /// Takes focus when the room appears (capture in two seconds, N18).
+    /// Takes focus when the room appears.
     #[must_use]
     pub fn focused(mut self) -> Self {
         self.0.focused = true;

@@ -21,6 +21,7 @@ centraid-core = { path = "../core" }
 # the docs crate's one `folder_path` (#1135).
 # The chat's scopes are the assistant's apps (`App::ALL`) and a scope's name is the app's own.
 centraid-assist = { path = "../assist" }
+centraid-search = { path = "../search" }
 prost.workspace = true
 serde_json.workspace = true
 base64.workspace = true

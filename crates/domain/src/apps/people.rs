@@ -1,11 +1,7 @@
-//! People: the people a member knows, the catch-ups with them, and the page that gathers
-//! everything about one: "With <name>" (app-plane §3).
+//! People, catch-ups, and each person's "With" page.
 //!
-//! A person's page holds one section per source. Each is a `PagedList` on an index that already
-//! exists, and the preview shows the first page's first few rows with the section's own "Show
-//! all". No section shows a count: a count is an unbounded aggregate. `:person` is the person's
-//! id; the keyset parameters are the first-page sentinel or the last row's key. Ids are UUIDv7, so
-//! ordering by id is ordering by when the item was made.
+//! Each "With" section is paged on an existing index. `:person` names the person, and cursor
+//! values follow the section's declared order.
 
 use rusqlite::Row;
 

@@ -1,0 +1,47 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+mobile: the Android target is OFF. Pass -Pcentraid.android=true with ANDROID_HOME set to build :androidApp (mobile/README.md).
+
+> Task :core:abiFixture
+CENTRAID_VAULT=/workspace/centraid/mobile/core/build/abi-fixture/spike-vault.db
+CENTRAID_REQUEST=/workspace/centraid/mobile/core/build/abi-fixture/request.bin
+
+> Task :core:kmpPartiallyResolvedDependenciesChecker
+> Task :core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:generateCommonMainProtos
+> Task :core:jvmProcessResources NO-SOURCE
+> Task :core:processJvmMainResources SKIPPED
+> Task :core:jvmTestProcessResources NO-SOURCE
+> Task :core:processJvmTestResources SKIPPED
+> Task :core:compileKotlinJvm
+w: file:///workspace/centraid/mobile/core/build/generated/source/wire/centraid/core/v1/RestoreRequest.kt:280:60 Unnecessary non-null assertion (!!) on a non-null receiver of type 'MutableList<Int>'.
+w: file:///workspace/centraid/mobile/core/build/generated/source/wire/centraid/core/v1/ScreenUpdate.kt:191:59 Unnecessary non-null assertion (!!) on a non-null receiver of type 'MutableList<Long>'.
+
+> Task :core:compileJvmMainJava NO-SOURCE
+> Task :core:jvmMainClasses
+> Task :core:jvmJar UP-TO-DATE
+
+> Task :core:compileTestKotlinJvm
+w: file:///workspace/centraid/mobile/core/src/jvmTest/kotlin/dev/centraid/core/ScreensRoundTripSpec.kt:53:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Room'.
+w: file:///workspace/centraid/mobile/core/src/jvmTest/kotlin/dev/centraid/core/ScreensRoundTripSpec.kt:54:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Room'.
+w: file:///workspace/centraid/mobile/core/src/jvmTest/kotlin/dev/centraid/core/ShellEffectAnswersSpec.kt:21:28 Unnecessary non-null assertion (!!) on a non-null receiver of type 'ShellEffectResult'.
+
+> Task :core:compileJvmTestJava NO-SOURCE
+> Task :core:jvmTestClasses
+
+> Task :core:jvmTest
+
+AbiRoundTripSpec[jvm] > open, call, next_event, free and close, against the real library[jvm] STANDARD_OUT
+    {"marker":"abi-command","status":"ACT_STATUS_EXECUTED"}
+
+AbiRoundTripSpec[jvm] > the five calls' latencies, reported for the two screens' reads[jvm] STANDARD_OUT
+    {"marker":"mobile-jvm-abi","reads":{"photos.grid":{"p50Us":411,"p95Us":930}},"samplesPerRead":200}
+
+AbiRoundTripSpec[jvm] > the other four symbols, timed[jvm] STANDARD_OUT
+    {"marker":"mobile-jvm-symbols","openUs":29380,"nextEventTimeoutUs":130,"closeUs":2444,"freeUs":"inside call, by contract"}
+
+[Incubating] Problems report is available at: file:///workspace/centraid/mobile/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 1m 58s
+7 actionable tasks: 6 executed, 1 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html

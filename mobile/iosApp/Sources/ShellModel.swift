@@ -434,6 +434,7 @@ final class ShellModel: ObservableObject {
     /// the pass service decides what coming back is worth, the follow coordinator
     /// follows every phone store the member connected).
     func lifecycle(foreground: Bool) {
+        rooms?.lifecycle(foreground: foreground)
         guard let screens else { return }
         if foreground {
             screens.reportEnvironment()

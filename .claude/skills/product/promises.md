@@ -2,7 +2,7 @@
 
 What every app owes a member. Eleven promises: P1–P8 look after the member's data, P9–P11 are daily speed and connection. A promise kept in some apps and broken in others is broken: the same behaviour and words in every app, on both platforms. An exception is named and held to that.
 
-**Enforced** says where a promise can no longer be skipped. The kind registry, the registry tests, the census, the room contract, the units formatter, the draft service and the notification scheduler are built: `crates/domain` declares every kind's promises, `crates/domain/tests/kind_action_registry.rs`, `read_registry.rs` and `census.rs` hold them to the vault's own tables (the `registry` step of every gate profile), and they took the place of the substring scans of `crates/xtask/src/promises.rs`.
+**Enforced** says where a promise can no longer be skipped. The kind registry, the registry tests, the census, the room contract, the units formatter, the draft service and the notification scheduler are built: `crates/domain` declares every kind's promises, `crates/domain/tests/kind_action_registry.rs`, `read_registry.rs` and `census.rs` hold them to the vault's own tables (the `registry` step of every gate profile), and enforce those promises directly through typed registries and tests.
 
 | # | Promise | The rule every app follows | Enforced |
 | --- | --- | --- | --- |

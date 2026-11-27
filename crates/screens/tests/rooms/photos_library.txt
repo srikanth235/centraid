@@ -1,6 +1,7 @@
 room app_place key="photos"
   header title="Library" subtitle="2 photos"
     key add sym="Plus" "Add photo" #header/add
+    key tool sym="Check" "Select" #header/select
     filter clear=#filter/clear
       menu #photos-filter-menu
         section "Show"
@@ -14,7 +15,6 @@ room app_place key="photos"
     menu #band/more/menu
       section
         item "Follow Camera roll" #more/follow-camera-roll
-        item "Free up space" #more/free-space
         item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash
   ready

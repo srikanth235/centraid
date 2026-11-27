@@ -32,6 +32,7 @@ centraid-assist = { path = "../assist" }
 # THE FTS DOOR, for the chat threads' search. It owns every `MATCH` in the workspace and
 # takes a connection; the core hands it `Vault::read`'s, and writes no SQL.
 centraid-search = { path = "../search" }
+rand.workspace = true
 # THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a
 # core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
 # door and this is the crate that has both halves in scope.
@@ -85,6 +86,7 @@ prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+zeroize = "1"
 tracing.workspace = true
 
 [dev-dependencies]

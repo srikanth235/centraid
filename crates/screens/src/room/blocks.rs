@@ -1,6 +1,4 @@
-//! THE BLOCK BUILDERS (app-plane §5.3): one constructor per block of `room.proto`. A builder
-//! claims the selectors its elements carry and registers what each does; it states meaning, never
-//! layout.
+//! Constructors for room protocol blocks. Builders register selector meaning; shells own layout.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::room_block::Kind as B;

@@ -28,7 +28,7 @@ When a change targets performance, use this loop:
 reproduce -> measure at realistic volume -> read the plan -> fix -> measure again -> report the numbers
 ```
 
-1. Reproduce at year-three volume. A query that is fast over hundreds of rows can scan tens of thousands. Centraid's year-3 corpus (`crates/core/tests/year3_corpus`) has about 46,000 entities, and app year-three rigs are marked `#[ignore]`.
+1. Reproduce at year-three volume. A query that is fast over hundreds of rows can scan tens of thousands. The year-three corpus and app-level year-three rigs are targets; inspect the read's declared bounds and plan tests instead.
 2. Measure a warm optimized build (`--release`) with multiple samples and report the p95, not one run. This is a diagnostic you run by hand; no gate step asserts on a duration (owner ruling 2026-11-04).
 3. Read `EXPLAIN QUERY PLAN` before and after. `SCAN t` on a growing table is a finding; `SEARCH t USING INDEX` or `USING COVERING INDEX` is usually the goal. `USE TEMP B-TREE FOR ORDER BY` means the index does not serve the sort.
 4. Make the smallest useful change, then measure again. Report before and after with the plan change where applicable.
@@ -38,8 +38,8 @@ reproduce -> measure at realistic volume -> read the plan -> fix -> measure agai
 | Query slow | `EXPLAIN QUERY PLAN <sql>` (SQLite shell or `Vault::explain_query_plan`); run `ANALYZE` first if plans vary with database size. |
 | App page may scan a growing table | The read registry's plan gate (`crates/domain/tests/read_registry.rs`) plans every registered read and refuses a scan of a growing table. |
 | Writes slow | Batch related statements in one `BEGIN IMMEDIATE`; check `synchronous` and avoid a checkpoint after every commit. |
-| Search slow | Read `EXPLAIN QUERY PLAN` for the search statement; the FTS door's bounds are in `crates/search`; time it by hand with a `--release` year-3 corpus (`crates/core/tests/year3_corpus`). |
-| Whole app read path | `cargo test --release -p centraid-apps-<app> --test year3 -- --ignored --nocapture`; see each app's `tests/journeys.json` ceilings. |
+| Search slow | Read `EXPLAIN QUERY PLAN` for the search statement; the FTS door's bounds are in `crates/search`; time it by hand with a `--release` year-3 corpus (year-three read stress corpus (target)). |
+| Whole app read path | Year-three app rigs are a target; use the registered-read plan tests in `crates/domain/tests/read_registry.rs`. |
 
 A database file is data: do not attach a user's vault to a bug report. Delete profiler output (`perf` data, flamegraph SVGs, traces) after reading, because it can contain environment details and inherited tokens.
 

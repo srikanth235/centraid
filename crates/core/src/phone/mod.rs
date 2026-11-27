@@ -73,14 +73,24 @@ use crate::error::{CoreError, Result};
 /// Built at `centraid_open` from the seed the shell handed in
 /// (`CONTRACT.md` §4b), and dropped when the handle is.
 pub struct Keyring {
-    /// The vault's own keys, at its derivation index — including Locker's
-    /// `K` (`seed / vault'(i) / locker'`, #1047 Q-1047-11), which a Locker
-    /// unlock copies into its session and a relock zeroes there, and the
-    /// identity key a claim is signed with.
-    pub vault: centraid_identity::VaultKeys,
+    /// The vault's long-lived non-Locker keys.
+    pub vault: PhoneVaultKeys,
     /// `K_backup` and `K_name`: every part is sealed under the first and
     /// named under the second (#1080, "Identity, keys and names").
     pub backup: BackupKeys,
+    pub(crate) locker_seed: Option<centraid_identity::Seed>,
+}
+
+/// The keys the phone keeps available outside a Locker unlock session.
+pub struct PhoneVaultKeys {
+    /// The vault's derivation index.
+    pub index: u32,
+    /// The vault identity used to sign requests.
+    pub identity: centraid_identity::VaultIdentityKey,
+    /// The box key used for contact encryption.
+    pub box_key: centraid_identity::BoxKey,
+    /// The root key used for backup sealing.
+    pub root: centraid_identity::VaultRootKey,
 }
 
 impl Keyring {
@@ -96,14 +106,34 @@ impl Keyring {
                     detail: format!("the vault seed will not derive: {error}"),
                 }
             })?;
-        Ok(Self::of(vault))
+        let mut keyring = Self::of(vault);
+        keyring.locker_seed = Some(seed.clone());
+        Ok(keyring)
     }
 
     /// The keyring over keys already derived.
     #[must_use]
     pub fn of(vault: centraid_identity::VaultKeys) -> Self {
+        let centraid_identity::VaultKeys {
+            index,
+            identity,
+            box_key,
+            root,
+            locker,
+        } = vault;
+        drop(locker);
+        let vault = PhoneVaultKeys {
+            index,
+            identity,
+            box_key,
+            root,
+        };
         let backup = keys_from_root(vault.root.as_bytes());
-        Self { vault, backup }
+        Self {
+            vault,
+            backup,
+            locker_seed: None,
+        }
     }
 
     /// The vault's id: its identity public key.

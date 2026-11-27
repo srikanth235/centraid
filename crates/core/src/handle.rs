@@ -1,33 +1,4 @@
-//! The handle: `open`, `call`, `next_event`, `close`.
-//!
-//! Four functions and one type, because that is what the C ABI is allowed to
-//! be. Everything else in this crate exists to be reachable from one of them.
-//!
-//! ## Why one mutex over the vault, in wave 2 (D-1020-D2-9)
-//!
-//! [`centraid_vault::Vault`] holds its commit-guard depth in a `Cell`, so it is
-//! `!Sync` by construction — deliberately, because the guard's depth is a fact
-//! about one connection. The issue's "reads run concurrently under SQLite's own
-//! rules" therefore needs a *pool of read connections*, and a connection pool
-//! means `PRAGMA` statements, which means SQL, which the `sql-confinement` rule
-//! confines to `crates/{ontology,vault,seat,search}` and `crates/apps/kit`.
-//!
-//! Three options were considered:
-//!
-//! 1. **A reader pool in `crates/core`.** Refused: it puts SQL in a crate the
-//!    rule does not name, and weakening the rule to go green is exactly what
-//!    the repo forbids.
-//! 2. **A reader pool in `crates/vault`.** The right answer, and it is lane
-//!    D1's file. Filed as an owner hand-off rather than reached across a lane
-//!    boundary in wave 2.
-//! 3. **One mutex, every call serialised.** Adopted for wave 2.
-//!
-//! What option 3 costs is bounded: a bounded read is one page, which
-//! serialisation does not change, and a phone's shell makes one call per screen. What it does not cost
-//! is correctness — a serialised read is a correct read. The FFI's "two
-//! concurrent calls never block on the FFI itself" clause is still honestly
-//! met, because the FFI takes no lock of its own; the lock is the vault's, and
-//! `crates/core-ffi/CONTRACT.md` says so in those words.
+//! Core request handling for one vault.
 
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -43,6 +14,12 @@ use crate::config::CoreConfig;
 use crate::error::{CoreError, Result};
 
 static NEXT_VAULT_EXPORT_ID: AtomicU64 = AtomicU64::new(0);
+pub(crate) static NEXT_LOCKER_COMMAND_ID: AtomicU64 = AtomicU64::new(0);
+static NEXT_LOCKER_EPOCH: AtomicU64 = AtomicU64::new(1);
+
+pub(crate) fn next_locker_epoch() -> u64 {
+    NEXT_LOCKER_EPOCH.fetch_add(1, Ordering::SeqCst)
+}
 use crate::events::{EventQueue, Next};
 
 /// The capabilities this build requires of a peer.
@@ -273,7 +250,7 @@ pub struct HandleState {
     /// An `Arc` because a chat's native session outlives any one call and
     /// reaches the vault through [`crate::assist::door::CoreDoor`], which holds
     /// a clone of this very lock: one lock, one open file, whoever asks.
-    vault: Arc<Mutex<Option<Vault>>>,
+    pub(crate) vault: Arc<Mutex<Option<Vault>>>,
     registry: Arc<Registry>,
     ui_thread_name: Option<String>,
     events: Arc<EventQueue>,
@@ -361,7 +338,10 @@ pub struct HandleState {
     /// `None` is a core that reads and writes its vault and cannot back up,
     /// which is an honest state (see [`crate::phone`]'s header for why this
     /// library writes no key down).
-    keys: Option<crate::phone::Keyring>,
+    pub(crate) keys: Option<crate::phone::Keyring>,
+    pub(crate) locker_session: Mutex<Option<LockerSession>>,
+    pub(crate) locker_epoch: AtomicU64,
+    pub(crate) locker_command_nonce: u64,
     /// THE BACKUP PLANE'S FILES BESIDE THE VAULT (#1080), with the spool
     /// opened once for the life of the core (see [`crate::phone::Plane`]).
     plane: crate::phone::Plane,
@@ -399,6 +379,12 @@ pub struct HandleState {
     files_tidied: AtomicBool,
     /// Whether a thread is writing the search rows a commit left owed.
     index_draining: AtomicBool,
+}
+
+pub(crate) struct LockerSession {
+    pub(crate) key: centraid_identity::LockerKey,
+    pub(crate) key_id: String,
+    pub(crate) epoch: u64,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -506,6 +492,9 @@ impl Core {
             plane,
             path,
             keys,
+            locker_session: Mutex::new(None),
+            locker_epoch: AtomicU64::new(next_locker_epoch()),
+            locker_command_nonce: rand::random(),
             vault: Arc::new(Mutex::new(vault)),
             registry,
             ui_thread_name,
@@ -995,6 +984,7 @@ impl HandleState {
             active_export_directories().clear_stale(&staging);
             if no_export_running {
                 let _ = std::fs::remove_file(staging.join("export.zip"));
+                crate::screens::clear_stale_room_exports(&staging);
             }
         }
         if let Ok(mut held) = self.bytes.lock() {
@@ -1806,8 +1796,19 @@ impl HandleState {
                 let host = self.rooms.get().ok_or_else(|| CoreError::Unsupported {
                     type_url: "centraid.core.v1.RoomRequest".to_owned(),
                 })?;
+                let mut request = request.clone();
+                if let Some(wire::room_request::Kind::Open(open)) = request.kind.as_mut()
+                    && !open.deep_link.is_empty()
+                {
+                    open.key = crate::device::open_url::parse(&open.deep_link)
+                        .and_then(|open| open.route_key())
+                        .map_err(|error| CoreError::InvalidRequest {
+                            detail: error.to_string(),
+                        })?;
+                    open.deep_link.clear();
+                }
                 Ok(response(wire::response::Kind::Room(
-                    host.call(self, request)?,
+                    host.call(self, &request)?,
                 )))
             }
             K::Device(request) => Ok(response(wire::response::Kind::Device(
@@ -3970,12 +3971,7 @@ mod tests {
         }
     }
 
-    /// OPEN TOUCHES NOTHING BUT THE FILE (#1029 §6).
-    ///
-    /// The proof used to be that `start_endpoint` was a separate call that
-    /// answered `NotYetAvailable`. There is no endpoint to start any more — the
-    /// phone has no inbound surface at all — so the proof is that a core opens,
-    /// founds and answers from the file it was given and nothing else.
+    /// Opening and founding use only the supplied file; the phone has no inbound endpoint.
     #[test]
     fn open_returns_with_a_vault_and_no_second_surface() {
         let scratch = Scratch::founded();

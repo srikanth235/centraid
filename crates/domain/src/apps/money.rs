@@ -18,6 +18,205 @@ pub struct AccountSummary {
     pub starred_at: Option<String>,
 }
 
+/// A possible match between a hand-entered line and a followed statement line.
+/// This is only a suggestion; confirming it remains an explicit transaction action.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchProposalRow {
+    pub hand_id: String,
+    pub hand_title: String,
+    pub hand_day: String,
+    pub amount_minor: i64,
+    pub currency: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchCandidate {
+    pub statement_id: String,
+    pub statement_title: String,
+    pub statement_day: String,
+}
+
+impl MatchProposalRow {
+    fn of(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            hand_id: row.get("hand_id")?,
+            hand_title: row.get("hand_title")?,
+            hand_day: row.get("hand_day")?,
+            amount_minor: row.get("amount_minor")?,
+            currency: row.get("currency")?,
+        })
+    }
+}
+
+impl MatchCandidate {
+    fn of(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            statement_id: row.get("statement_id")?,
+            statement_title: row.get("statement_title")?,
+            statement_day: row.get("statement_day")?,
+        })
+    }
+}
+
+/// A derived recurring-payment candidate. It is never persisted as a fact.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecurringCandidate {
+    pub normalized_payee: String,
+    pub display_payee: String,
+    pub currency: String,
+    pub amount_minor: i64,
+    pub occurrences: usize,
+    pub first_day: String,
+    pub last_day: String,
+    pub cadence: RecurringCadence,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecurringCadence {
+    Weekly,
+    Monthly,
+}
+
+/// One statement line used as input to the derived recurrence detector.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecurringObservation {
+    pub payee: String,
+    pub currency: String,
+    pub amount_minor: i64,
+    pub day: String,
+}
+
+impl RecurringObservation {
+    fn of(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            payee: row.get("payee")?,
+            currency: row.get("currency")?,
+            amount_minor: row.get("amount_minor")?,
+            day: row.get("day")?,
+        })
+    }
+}
+
+/// Incremental state for deriving candidates while consuming every page of the bounded 90-day
+/// observation read. It retains one summary per normalized payee/currency/amount group.
+#[derive(Debug, Default)]
+pub struct RecurringAccumulator {
+    groups: std::collections::BTreeMap<(String, String, i64), RecurringGroup>,
+}
+
+#[derive(Debug, Default)]
+struct RecurringGroup {
+    display_payee: Option<String>,
+    occurrences: usize,
+    first_day: Option<String>,
+    last_day: Option<String>,
+    previous_day: Option<String>,
+    cadence: Option<RecurringCadence>,
+    regular: bool,
+}
+
+impl RecurringAccumulator {
+    /// Add one page in the read's descending day order. Calling this once per page preserves
+    /// intervals across page boundaries without retaining the statement rows.
+    pub fn push_page(&mut self, rows: &[RecurringObservation]) {
+        for row in rows {
+            if row.amount_minor >= 0 {
+                continue;
+            }
+            let normalized_payee = row
+                .payee
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .to_lowercase();
+            if normalized_payee.is_empty() {
+                continue;
+            }
+            let group = self
+                .groups
+                .entry((normalized_payee, row.currency.clone(), row.amount_minor))
+                .or_default();
+            if group.display_payee.is_none() {
+                group.display_payee = Some(row.payee.trim().to_owned());
+            }
+            if group.previous_day.as_deref() == Some(&row.day) {
+                continue;
+            }
+            if let Some(newer_day) = group.previous_day.as_deref() {
+                let Some(gap) = day_distance(&row.day, newer_day) else {
+                    group.regular = false;
+                    group.previous_day = Some(row.day.clone());
+                    group.occurrences += 1;
+                    group.last_day = Some(row.day.clone());
+                    continue;
+                };
+                let cadence = if (5..=9).contains(&gap) {
+                    RecurringCadence::Weekly
+                } else if (20..=40).contains(&gap) {
+                    RecurringCadence::Monthly
+                } else {
+                    group.regular = false;
+                    group.previous_day = Some(row.day.clone());
+                    group.occurrences += 1;
+                    group.last_day = Some(row.day.clone());
+                    continue;
+                };
+                if let Some(previous) = group.cadence {
+                    if previous != cadence {
+                        group.regular = false;
+                    }
+                } else {
+                    group.cadence = Some(cadence);
+                }
+                group.occurrences += 1;
+                group.last_day = Some(row.day.clone());
+                group.previous_day = Some(row.day.clone());
+            } else {
+                group.occurrences = 1;
+                group.first_day = Some(row.day.clone());
+                group.last_day = Some(row.day.clone());
+                group.previous_day = Some(row.day.clone());
+                group.regular = true;
+            }
+        }
+    }
+
+    /// Return candidates after every page has been consumed.
+    #[must_use]
+    pub fn candidates(&self) -> Vec<RecurringCandidate> {
+        self.groups
+            .iter()
+            .filter_map(|((normalized_payee, currency, amount_minor), group)| {
+                let first_day = group.first_day.as_ref()?;
+                let last_day = group.last_day.as_ref()?;
+                let display_payee = group.display_payee.as_ref()?;
+                let cadence = group.cadence?;
+                (group.occurrences >= 3
+                    && group.regular
+                    && day_distance(last_day, first_day).is_some_and(|span| span <= 90))
+                .then(|| RecurringCandidate {
+                    normalized_payee: normalized_payee.clone(),
+                    display_payee: display_payee.clone(),
+                    currency: currency.clone(),
+                    amount_minor: *amount_minor,
+                    occurrences: group.occurrences,
+                    first_day: last_day.clone(),
+                    last_day: first_day.clone(),
+                    cadence,
+                })
+            })
+            .collect()
+    }
+}
+
+fn day_distance(first: &str, last: &str) -> Option<i64> {
+    let first = centraid_vault::time::zone::parse_wall_iso(first)?;
+    let last = centraid_vault::time::zone::parse_wall_iso(last)?;
+    let seconds = centraid_vault::time::zone::wall_epoch(last)
+        - centraid_vault::time::zone::wall_epoch(first);
+    (seconds >= 0 && seconds % 86_400_000 == 0).then_some(seconds / 86_400_000)
+}
+
 impl AccountSummary {
     fn of(row: &Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
@@ -425,6 +624,75 @@ const WINDOW_PARAMS: &[Param] = &[
     param("from_day", ParamTy::Text),
     param("to_day", ParamTy::Text),
 ];
+const MATCH_PROPOSAL_PARAMS: &[Param] =
+    &[param("account", ParamTy::Id), param("days", ParamTy::Int)];
+const MATCH_CANDIDATE_PARAMS: &[Param] = &[param("hand", ParamTy::Id), param("days", ParamTy::Int)];
+const RECURRING_PARAMS: &[Param] = &[
+    param("account", ParamTy::Id),
+    param("from_day", ParamTy::Day),
+    param("to_day", ParamTy::Day),
+];
+
+/// Statement rows from the caller's 90-day window; candidates are derived by
+/// [`RecurringAccumulator`] and are not stored as member-confirmed facts.
+pub const RECURRING_OBSERVATIONS: Read<RecurringObservation> = read(
+    ReadDecl {
+        name: "money.recurring_observations",
+        shape: Shape::PagedList,
+        sql: "SELECT t.id AS id, e.title AS payee, a.currency AS currency, \
+                     t.amount_minor AS amount_minor, t.posted_on AS day \
+              FROM txn t INDEXED BY txn_by_account_day \
+              JOIN entity e ON e.id = t.id \
+              JOIN account a ON a.id = t.account_id \
+              WHERE t.account_id = :account AND t.entered = 'statement' \
+                AND t.status = 'posted' AND e.deleted_at IS NULL \
+                AND t.amount_minor < 0 \
+                AND NOT EXISTS (SELECT 1 FROM transfer tr WHERE tr.a = t.id) \
+                AND NOT EXISTS (SELECT 1 FROM transfer tr WHERE tr.b = t.id) \
+                AND t.posted_on >= :from_day AND t.posted_on <= :to_day \
+                AND (:after_day IS NULL OR (t.posted_on, t.id) < (:after_day, :after_id)) \
+              ORDER BY t.posted_on DESC, t.id DESC LIMIT :n",
+        params: RECURRING_PARAMS,
+        reads: &["txn", "transfer"],
+        across: &["entity", "account"],
+        bound: DEFAULT_PAGE,
+        cursor: &[desc("day", "after_day"), desc("id", "after_id")],
+    },
+    RecurringObservation::of,
+);
+
+/// Hand-entered and statement rows the vault's matcher considers possible pairs.
+pub const MATCH_PROPOSALS: Read<MatchProposalRow> = read(
+    ReadDecl {
+        name: "money.match_proposals",
+        shape: Shape::PagedList,
+        sql: centraid_vault::commands::txn::PROPOSAL_HANDS,
+        params: MATCH_PROPOSAL_PARAMS,
+        reads: &["txn", "txn_match_dismissal"],
+        across: &["entity", "account"],
+        bound: DEFAULT_PAGE,
+        cursor: &[asc("hand_day", "after_day"), asc("hand_id", "after_id")],
+    },
+    MatchProposalRow::of,
+);
+
+/// Candidate statement lines for one selected hand line, loaded as pages on demand.
+pub const MATCH_CANDIDATES: Read<MatchCandidate> = read(
+    ReadDecl {
+        name: "money.match_candidates",
+        shape: Shape::PagedList,
+        sql: centraid_vault::commands::txn::PROPOSAL_CANDIDATES,
+        params: MATCH_CANDIDATE_PARAMS,
+        reads: &["txn"],
+        across: &["entity", "txn_match_dismissal"],
+        bound: DEFAULT_PAGE,
+        cursor: &[
+            asc("statement_day", "after_day"),
+            asc("statement_id", "after_id"),
+        ],
+    },
+    MatchCandidate::of,
+);
 
 pub const ACCOUNT_LINES: Read<Held> = read(
     ReadDecl {
@@ -994,6 +1262,8 @@ pub const READS: &[ReadDecl] = &[
     RULES_BY_CATEGORY.decl,
     CHECKPOINTS.decl,
     TRANSFERS.decl,
+    MATCH_PROPOSALS.decl,
+    RECURRING_OBSERVATIONS.decl,
     MATCH_DISMISSALS.decl,
     LINKED.decl,
     MENTIONED_IN.decl,
@@ -1045,3 +1315,101 @@ pub const KINDS: &[KindDecl] = &[
     )
     .sits_in(&["category"]),
 ];
+
+#[cfg(test)]
+mod recurrence_tests {
+    use super::*;
+
+    fn observation(
+        payee: &str,
+        currency: &str,
+        amount_minor: i64,
+        day: &str,
+    ) -> RecurringObservation {
+        RecurringObservation {
+            payee: payee.to_owned(),
+            currency: currency.to_owned(),
+            amount_minor,
+            day: day.to_owned(),
+        }
+    }
+
+    #[test]
+    fn recurrence_candidates_are_derived_from_three_weekly_or_monthly_occurrences() {
+        let rows = [
+            observation("  ACME   Cloud ", "USD", -1200, "2026-01-01"),
+            observation("Acme Cloud", "USD", -1200, "2026-01-08"),
+            observation("acme cloud", "USD", -1200, "2026-01-15"),
+            observation("Transit", "EUR", -890, "2026-01-01"),
+            observation("Transit", "EUR", -890, "2026-01-31"),
+            observation("Transit", "EUR", -890, "2026-03-02"),
+            observation("Salary", "USD", 250_000, "2026-01-01"),
+            observation("Salary", "USD", 250_000, "2026-01-08"),
+            observation("Salary", "USD", 250_000, "2026-01-15"),
+            observation("Zero transfer", "USD", 0, "2026-01-01"),
+            observation("Zero transfer", "USD", 0, "2026-01-08"),
+            observation("Zero transfer", "USD", 0, "2026-01-15"),
+        ];
+        let mut rows = rows.to_vec();
+        rows.sort_by(|a, b| b.day.cmp(&a.day));
+        let mut accumulator = RecurringAccumulator::default();
+        accumulator.push_page(&rows);
+        let candidates = accumulator.candidates();
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].normalized_payee, "acme cloud");
+        assert_eq!(candidates[0].display_payee, "acme cloud");
+        assert_eq!(candidates[0].occurrences, 3);
+        assert_eq!(candidates[0].cadence, RecurringCadence::Weekly);
+        assert_eq!(candidates[1].normalized_payee, "transit");
+        assert_eq!(candidates[1].display_payee, "Transit");
+        assert_eq!(candidates[1].cadence, RecurringCadence::Monthly);
+    }
+
+    #[test]
+    fn recurrence_requires_three_observations_and_a_regular_cadence_within_90_days() {
+        let rows = [
+            observation("Gym", "USD", -5000, "2026-01-01"),
+            observation("Gym", "USD", -5000, "2026-01-08"),
+            observation("Gym", "USD", -6000, "2026-01-15"),
+            observation("News", "USD", -1000, "2026-01-01"),
+            observation("News", "USD", -1000, "2026-01-08"),
+            observation("News", "USD", -1000, "2026-01-30"),
+            observation("Cloud", "USD", -900, "2026-01-01"),
+            observation("Cloud", "USD", -900, "2026-01-08"),
+            observation("Yearly", "USD", -300, "2026-01-01"),
+            observation("Yearly", "USD", -300, "2026-02-01"),
+            observation("Yearly", "USD", -300, "2026-03-03"),
+            observation("Yearly", "USD", -300, "2026-04-02"),
+            observation("Yearly", "USD", -300, "2026-05-02"),
+        ];
+        let mut rows = rows.to_vec();
+        rows.sort_by(|a, b| b.day.cmp(&a.day));
+        let mut accumulator = RecurringAccumulator::default();
+        accumulator.push_page(&rows);
+        assert!(accumulator.candidates().is_empty());
+    }
+
+    #[test]
+    fn recurrence_accumulator_keeps_a_candidate_across_read_page_boundary() {
+        let mut rows: Vec<_> = (0..199)
+            .map(|index| observation(&format!("One-off {index}"), "USD", -100, "2026-01-14"))
+            .collect();
+        rows.extend([
+            observation("Weekly", "USD", -700, "2026-01-15"),
+            observation("Weekly", "USD", -700, "2026-01-08"),
+            observation("Weekly", "USD", -700, "2026-01-01"),
+        ]);
+        rows.sort_by(|a, b| b.day.cmp(&a.day));
+        assert_eq!(rows.len(), 202);
+        let mut accumulator = RecurringAccumulator::default();
+        accumulator.push_page(&rows[..200]);
+        accumulator.push_page(&rows[200..]);
+        let candidates = accumulator.candidates();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].normalized_payee, "weekly");
+        assert_eq!(candidates[0].display_payee, "Weekly");
+        assert_eq!(candidates[0].occurrences, 3);
+        assert_eq!(candidates[0].first_day, "2026-01-01");
+        assert_eq!(candidates[0].last_day, "2026-01-15");
+    }
+}

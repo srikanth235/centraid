@@ -18,4 +18,6 @@ room app_place key="reminders"
     empty glyph="Check" body="Add the first thing you must not forget. Tap + to write one."
     section #section/my-lists "My Lists"
       trailing "New list" sym="Plus" #lists/add
+      row #list/inbox "Inbox" meta="0 open" mark=glyph:Tray
   search placeholder="Search Reminders" #search
+  selection

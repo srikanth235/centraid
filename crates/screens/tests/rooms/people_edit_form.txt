@@ -34,7 +34,7 @@ room editor key="person/01900000-0000-7000-8000-000000000010/edit"
             option "Birthday" selected
             option "Anniversary"
             option "Date"
-          text #field/dt_3_val "Date" "1990-05-14" rev=0
+          moment #field/dt_3_val "Date" "Mon 14 May"
           text #field/dt_3_label "Label"  rev=0
         add "Add date" sym="plus" #repeat/dates/add
       explicit save="Save"#form/save cancel="Cancel"#form/cancel

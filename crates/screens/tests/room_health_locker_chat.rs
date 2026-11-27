@@ -21,6 +21,8 @@ struct TestDoor {
     clock: Arc<FixedClock>,
     device: Mutex<BTreeMap<String, String>>,
     drains: Mutex<usize>,
+    locker_open: Mutex<bool>,
+    health_enrolled: Mutex<bool>,
 }
 
 impl TestDoor {
@@ -44,6 +46,8 @@ impl TestDoor {
             clock,
             device: Mutex::new(BTreeMap::new()),
             drains: Mutex::new(0),
+            locker_open: Mutex::new(false),
+            health_enrolled: Mutex::new(false),
         }
     }
 
@@ -101,6 +105,19 @@ impl Door for TestDoor {
 
     fn call(&self, request: &wire::Request) -> Result<wire::Response, Refused> {
         match &request.kind {
+            Some(wire::request::Kind::Follow(follow))
+                if follow.verb == wire::FollowVerb::Status as i32 && follow.system == "health" =>
+            {
+                Ok(wire::Response {
+                    kind: Some(wire::response::Kind::Follow(wire::FollowResponse {
+                        status: Some(wire::FollowStatus {
+                            enrolled: *self.health_enrolled.lock().unwrap(),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })),
+                })
+            }
             Some(wire::request::Kind::Drain(_)) => {
                 *self.drains.lock().unwrap() += 1;
                 Ok(wire::Response::default())
@@ -148,6 +165,73 @@ impl Door for TestDoor {
     fn vault_id(&self) -> String {
         "v1".to_owned()
     }
+
+    fn locker_unlocked(&self) -> bool {
+        *self.locker_open.lock().unwrap()
+    }
+
+    fn locker_unlock(&self) -> Result<(u32, Option<String>), Refused> {
+        self.ok("locker.mark_unlocked", json!({}));
+        *self.locker_open.lock().unwrap() = true;
+        Ok((0, None))
+    }
+
+    fn locker_unlock_failed(&self) -> Result<u32, Refused> {
+        let result = self.ok("locker.mark_unlock_failed", json!({}));
+        Ok(result["failed_unlocks"].as_u64().unwrap_or(0) as u32)
+    }
+
+    fn locker_failed_unlocks(&self) -> Result<(u32, Option<String>), Refused> {
+        self.vault
+            .locker_failed_unlocks()
+            .map_err(|error| Refused(error.to_string()))
+    }
+
+    fn locker_lock(&self) -> Result<(), Refused> {
+        *self.locker_open.lock().unwrap() = false;
+        Ok(())
+    }
+}
+
+#[test]
+fn health_today_distinguishes_no_entry_and_shows_typical_range_after_seven_days() {
+    let door = TestDoor::new("health-today-metrics");
+    *door.health_enrolled.lock().unwrap() = true;
+    door.ok(
+        "measurement.record",
+        json!({
+            "origin": { "system": "health", "ref": "apple-health", "device_id": "iphone-1", "cursor": "c1" },
+            "days": [
+                { "day": "2026-11-19", "metric": "steps", "value": 1000 },
+                { "day": "2026-11-20", "metric": "steps", "value": 2000 },
+                { "day": "2026-11-21", "metric": "steps", "value": 3000 },
+                { "day": "2026-11-22", "metric": "steps", "value": 4000 },
+                { "day": "2026-11-23", "metric": "steps", "value": 5000 },
+                { "day": "2026-11-24", "metric": "steps", "value": 6000 },
+                { "day": "2026-11-25", "metric": "steps", "value": 7000 }
+            ]
+        }),
+    );
+
+    let mut rooms = Rooms::new(shell::registry());
+    let summary = rooms.open(&door, "health", "home", true).unwrap();
+    let rendered = snapshot::render(&summary.room);
+    assert!(
+        rendered.contains("Nothing yet today"),
+        "missing unknown-today state: {rendered}"
+    );
+    assert!(
+        rendered.contains("Typical range"),
+        "missing derived range: {rendered}"
+    );
+    assert!(
+        rendered.contains("7 days with recorded steps"),
+        "missing distinct-day basis: {rendered}"
+    );
+    assert!(
+        !rendered.contains("trailing=\"0 steps\""),
+        "no reading must not become zero: {rendered}"
+    );
 }
 
 fn tap(id: &str) -> wire::RoomEvent {
@@ -287,7 +371,30 @@ fn health_summary_phone_says_workouts_vitals_and_kinds_merge() {
         .unwrap();
     assert!(snapshot::render(&detail.room).contains("Morning loop"));
 
-    // New workout form writes a D1 draft on edit and clears it on cancel.
+    door.ok(
+        "workout.edit",
+        json!({ "id": workout_id, "title": "Evening loop" }),
+    );
+    let versions = rooms
+        .open(
+            &door,
+            &format!("health/workout/{workout_id}/versions"),
+            "home",
+            false,
+        )
+        .unwrap();
+    assert!(snapshot::render(&versions.room).contains("Restore"));
+    rooms
+        .event(&door, versions.instance, &tap("version/1"))
+        .unwrap();
+    let restored = rooms
+        .open(&door, &format!("health/workout/{workout_id}"), "home", true)
+        .unwrap();
+    let restored_text = snapshot::render(&restored.room);
+    assert!(restored_text.contains("Morning loop"));
+    assert!(!restored_text.contains("Evening loop"));
+
+    // New workout form writes a D1 draft on edit and asks before discarding it.
     let new_w = rooms
         .open(&door, "health/workouts/new", "home", true)
         .unwrap();
@@ -299,8 +406,14 @@ fn health_summary_phone_says_workouts_vitals_and_kinds_merge() {
         )
         .unwrap();
     assert!(door.device_get("draft.v1.workout").is_some());
-    rooms
+    let discard = rooms
         .event(&door, new_w.instance, &tap("form/cancel"))
+        .unwrap()
+        .unwrap();
+    assert!(snapshot::render(&discard.room).contains("confirm outlined"));
+    assert!(door.device_get("draft.v1.workout").is_some());
+    rooms
+        .event(&door, new_w.instance, &tap("confirm/yes"))
         .unwrap();
     assert!(door.device_get("draft.v1.workout").is_none());
 
@@ -377,9 +490,41 @@ fn locker_secure_wall_masked_facts_type_change_alerts_and_no_drafts() {
     assert!(locked.room.search.is_none(), "No search while locked");
     snapshot::assert_room("locker_locked", &locked.room);
 
+    let deep_link = rooms
+        .open(&door, &format!("locker/item/{item_id}"), "deep-link", true)
+        .expect("locked deep link is gated");
+    assert_eq!(deep_link.room.key, "locker");
+    assert!(deep_link.room.secure);
+    assert!(deep_link.room.search.is_none());
+
     // Unlock via wall/unlock.
-    let unlocked = rooms
+    let unlock_request = rooms
         .event(&door, locked.instance, &tap("wall/unlock"))
+        .unwrap()
+        .unwrap();
+    let effect = rooms
+        .take_effects()
+        .into_iter()
+        .find(|effect| matches!(effect.kind, Some(wire::shell_effect::Kind::OwnerCheck(_))))
+        .expect("unlock requires owner check");
+    let unlocked = rooms
+        .event(
+            &door,
+            unlock_request.instance,
+            &wire::RoomEvent {
+                kind: Some(wire::room_event::Kind::EffectResult(
+                    wire::ShellEffectResult {
+                        effect_id: effect.effect_id,
+                        outcome: Some(wire::shell_effect_result::Outcome::Owner(
+                            wire::ShellOwner {
+                                passed: true,
+                                ..Default::default()
+                            },
+                        )),
+                    },
+                )),
+            },
+        )
         .unwrap()
         .unwrap();
     assert!(unlocked.room.secure);
@@ -452,10 +597,11 @@ fn locker_secure_wall_masked_facts_type_change_alerts_and_no_drafts() {
         "M9: Locker must never write drafts to disk"
     );
 
-    // Export confirm is owner-check class and secure.
-    let export = rooms.open(&door, "locker/export", "home", true).unwrap();
-    assert!(export.room.secure);
-    assert!(snapshot::render(&export.room).contains("owner"));
+    // Unsupported export is not a Locker route or claim.
+    assert!(matches!(
+        rooms.open(&door, "locker/export", "home", true),
+        Err(centraid_screens::room::Refusal::NoRoom(_))
+    ));
 }
 
 #[test]
@@ -539,7 +685,9 @@ fn chat_live_cards_attachments_tombstones_clear_and_concepts() {
         .event(&door, clear.instance, &tap("confirm/yes"))
         .unwrap();
     let root_after = rooms.open(&door, "chat", "chat", true).unwrap();
-    assert!(snapshot::render(&root_after.room).contains("Ask your vault"));
+    let root_after_text = snapshot::render(&root_after.room);
+    assert!(root_after_text.contains("The assistant isn’t available yet"));
+    assert!(!root_after_text.contains("Who am I meeting?"));
 }
 
 #[test]

@@ -10,6 +10,7 @@ use crate::rules::RuleState;
 use crate::testing::fixture_dir;
 
 const PROTO: &str = "crates/api-proto/proto/centraid/core/v1/card_screens.proto";
+const ROOM_PROTO: &str = "crates/api-proto/proto/centraid/core/v1/room.proto";
 const KOTLIN: &str = "mobile/androidApp/src/main/kotlin/dev/centraid/android/Card.kt";
 const SWIFT: &str = "mobile/iosApp/Sources/Card.swift";
 
@@ -55,6 +56,7 @@ message Card {
     );
     write(&root, KOTLIN, kotlin);
     write(&root, SWIFT, swift);
+    write(&root, ROOM_PROTO, "message Room {}\n");
     root
 }
 
@@ -419,6 +421,7 @@ fn a_bare_member_reads_a_oneof_arm_and_nothing_else() {
     let proto = "message Card {\n  bool hidden = 1;\n  oneof kind { Hide hide = 2; }\n}\n";
     let root = fixture_dir("parity-implicit");
     write(&root, PROTO, proto);
+    write(&root, ROOM_PROTO, "message Room {}\n");
     write(&root, KOTLIN, "fun f() = c.hidden + c.hide\n");
     write(
         &root,
@@ -576,6 +579,79 @@ fn only_the_screens_protos_are_the_census() {
     assert!(text.contains("Top.seen: neither shell reads it"), "{text}");
 }
 
+#[test]
+fn room_effect_and_block_arms_must_be_handled_by_both_shells() {
+    let proto = r#"
+        message ShellEffect { oneof kind { ShellPickFile pick_file = 1; } }
+        message RoomBlock { oneof kind { RoomHero hero = 1; RoomRow row = 2; } }
+    "#;
+    let block_android = "fun RoomBlockView(block: RoomBlock, onCanvas: () -> Unit = {}) { when { block.hero != null -> Unit; block.row != null -> Unit } }";
+    let effect_android = "suspend fun perform(effect: ShellEffect): ShellEffectResult = when { effect.pick_file != null -> Unit }";
+    let swift_block =
+        "var body: some View { switch block.kind { case .hero(let hero)?; case .row(let row)?; } }";
+    let swift_effect = "private func perform(effect: ShellEffect) { switch effect.kind { case .pickFile(let pick)?; } }";
+    assert!(
+        missing_room_arms(
+            proto,
+            block_android,
+            swift_block,
+            effect_android,
+            swift_effect
+        )
+        .is_empty()
+    );
+
+    let missing_android = missing_room_arms(
+        proto,
+        "fun RoomBlockView(block: RoomBlock, onCanvas: () -> Unit = {}) { when { block.hero != null -> Unit } }",
+        swift_block,
+        effect_android,
+        swift_effect,
+    );
+    assert!(missing_android.contains(&"RoomBlock.row: Android has no dispatch branch".to_owned()));
+
+    let missing_ios = missing_room_arms(
+        proto,
+        block_android,
+        "var body: some View { switch block.kind { case .hero(let hero)?; } }",
+        effect_android,
+        "private func perform(effect: ShellEffect) { switch effect.kind { case .pickFile(let pick)?; } }",
+    );
+    assert!(missing_ios.contains(&"RoomBlock.row: iOS has no dispatch branch".to_owned()));
+
+    let read_without_branch = missing_room_arms(
+        proto,
+        "fun RoomBlockView(block: RoomBlock, onCanvas: () -> Unit = {}) { when { block.row; } }",
+        "var body: some View { switch block.kind { case .hero(let hero)?; case .row(let row)?; } }",
+        effect_android,
+        swift_effect,
+    );
+    assert!(
+        read_without_branch.contains(&"RoomBlock.row: Android has no dispatch branch".to_owned())
+    );
+
+    let mention_only = missing_room_arms(
+        proto,
+        "when { block.hero != null -> Unit; block.row != null -> Unit }",
+        "let name = .pickFile; var body: some View { switch block.kind { case .hero(let hero)?; case .row(let row)?; } }",
+        effect_android,
+        "let name = .pickFile; private func perform(effect: ShellEffect) { switch effect.kind { case .other(let other)?; } }",
+    );
+    assert!(mention_only.contains(&"ShellEffect.pick_file: iOS has no dispatch branch".to_owned()));
+
+    let android_mention_only = missing_room_arms(
+        proto,
+        block_android,
+        swift_block,
+        "val selected = effect.pick_file\nsuspend fun perform(effect: ShellEffect): ShellEffectResult = error(\"no performer\")",
+        swift_effect,
+    );
+    assert!(
+        android_mention_only
+            .contains(&"ShellEffect.pick_file: Android has no dispatch branch".to_owned())
+    );
+}
+
 // ---- the rule refuses to pass over nothing ----
 
 #[test]
@@ -593,6 +669,7 @@ fn a_census_over_too_little_fails_and_a_missing_subject_is_pending() {
         RuleState::Pending(_)
     ));
     write(&bare, PROTO, "message A { string b = 1; }\n");
+    write(&bare, ROOM_PROTO, "message Room {}\n");
     assert!(matches!(
         check(&bare, &[], FLOORS).state,
         RuleState::Pending(_)

@@ -10,6 +10,7 @@ use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
+use super::search_view;
 use super::selector::{Act, Handler, Sel};
 use crate::strings::{Locale, docs as words, fill, home as home_words, shared};
 
@@ -64,6 +65,13 @@ pub fn registry() -> Registry {
                 }));
             }
             if let Some(rest) = key.strip_prefix("docs/doc/") {
+                if let Some(id) = rest.strip_suffix("/link") {
+                    return Some(Box::new(super::link_picker::LinkPicker::new(
+                        id.to_owned(),
+                        format!("docs/doc/{id}"),
+                        words::title(EN),
+                    )));
+                }
                 if let Some(id) = rest.strip_suffix("/edit") {
                     return Some(Box::new(TextDocForm::edit_doc(id.to_owned())));
                 }
@@ -195,7 +203,11 @@ fn handle_more_or_nav(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
         "nav:home" => Some(Outcome::replace(super::shell::HOME)),
         "tab:tab/docs" => Some(Outcome::replace(DOCS)),
         "tab:tab/folders" => Some(Outcome::replace(FOLDERS)),
-        "more:export" => Some(Outcome::say(&words::export_note(EN))),
+        "more:export" => Some(super::export::ask(
+            "document.export_zip",
+            json!({}),
+            &shared::owner_reason_export(EN),
+        )),
         _ => None,
     }
 }
@@ -231,6 +243,12 @@ fn doc_row_menu(sel: &mut Sel, prefix: &str, doc: &reads::DocRow) -> wire::RoomM
             &format!("{prefix}/{id}/menu/open"),
             &words::menu_open(EN),
             Handler::Open(format!("docs/doc/{id}")),
+        ),
+        blocks::menu_item(
+            sel,
+            &format!("{prefix}/{id}/menu/organize"),
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(std::slice::from_ref(id))),
         ),
         blocks::menu_item(
             sel,
@@ -309,6 +327,12 @@ fn selection_actions(sel: &mut Sel, ids: &[String]) -> Vec<wire::RoomMenuItem> {
     vec![
         blocks::menu_item(
             sel,
+            "selection/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(ids)),
+        ),
+        blocks::menu_item(
+            sel,
             "selection/star",
             &words::menu_star(EN),
             Handler::Act(Act::new(
@@ -359,20 +383,36 @@ impl RoomScreen for DocsList {
         };
 
         let mut rows = answer.rows;
-        if !term.is_empty() {
-            let needle = term.to_lowercase();
-            rows.retain(|row| row.title.to_lowercase().contains(&needle));
-        }
         if self.sort == SORT_TITLE {
             rows.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
         }
 
-        let ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
+        if !term.is_empty()
+            && let Err(sentence) = search_view::load(b.ui, b.door, &["document", "folder"], &term)
+        {
+            return room(wire::RoomKind::AppPlace, DOCS)
+                .title(&words::title(EN))
+                .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                .build();
+        }
+
+        let ids: Vec<String> = if term.is_empty() {
+            rows.iter().map(|r| r.id.clone()).collect()
+        } else {
+            b.ui.search_hits().iter().map(|r| r.id.clone()).collect()
+        };
         b.ui.list(ids);
 
         let selecting = b.ui.selecting();
         let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
-        let count_str = words::docs_count(EN, rows.len() as u64);
+        let count_str = words::docs_count(
+            EN,
+            if term.is_empty() {
+                rows.len()
+            } else {
+                b.ui.search_hits().len()
+            } as u64,
+        );
 
         let mut filter_starred = blocks::menu_item(
             &mut b.sel,
@@ -409,7 +449,18 @@ impl RoomScreen for DocsList {
         );
 
         let mut content = Vec::new();
-        if rows.is_empty() {
+        if !term.is_empty() {
+            content = search_view::rows(&mut b.sel, b.ui, selecting);
+            if content.is_empty() {
+                let body = fill(&words::empty_search_body(EN), &[("term", &term)]);
+                content.push(blocks::empty(
+                    glyph("Search", "docs"),
+                    &words::empty_search_title(EN),
+                    &body,
+                    None,
+                ));
+            }
+        } else if rows.is_empty() {
             if term.is_empty() {
                 let add = blocks::action(
                     &mut b.sel,
@@ -466,7 +517,7 @@ impl RoomScreen for DocsList {
         let sel_label = words::selected_count(EN, picked.len() as u64);
         let band = docs_band(b, DOCS);
 
-        room(wire::RoomKind::AppPlace, DOCS)
+        let mut built = room(wire::RoomKind::AppPlace, DOCS)
             .title(&words::title(EN))
             .subtitle(&count_str)
             .filter(&mut b.sel, filter_menu, b.ui)
@@ -482,10 +533,17 @@ impl RoomScreen for DocsList {
             .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
             .selection(&mut b.sel, b.ui, &sel_label, sel_actions)
             .ready(content)
-            .build()
+            .build();
+        if let Some(search) = built.search.as_mut() {
+            search_view::decorate(&mut b.sel, search, b.ui);
+        }
+        built
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(out) = super::export::handle(e, tag, input) {
+            return out;
+        }
         if let Some(out) = handle_more_or_nav(e, tag) {
             return out;
         }
@@ -497,12 +555,33 @@ impl RoomScreen for DocsList {
             self.sort = SORT_TITLE;
             return Outcome::default();
         }
+        if tag == "next:search/more" {
+            e.ui.advance_search_page();
+            return Outcome::default();
+        }
         if tag.starts_with("next:") {
             self.loaded = (self.loaded + 50).min(500);
             return Outcome::default();
         }
         if tag.starts_with("share:") {
-            return Outcome::say(&words::shared(EN));
+            let id = tag.trim_start_matches("share:");
+            let reader = match e.door.reader() {
+                Ok(reader) => reader,
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let detail = match reader.run(&reads::BY_ID, &Args::new().text("id", id)) {
+                Ok(answer) => answer.rows.into_iter().next(),
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let Some(doc) = detail else {
+                return Outcome::refuse(&words::not_found(EN));
+            };
+            return super::export::share(
+                &doc.title,
+                "document",
+                doc.body_text.as_deref(),
+                &words::shared(EN),
+            );
         }
         Outcome::default()
     }
@@ -568,10 +647,13 @@ impl RoomScreen for AddDocSheet {
             .build()
     }
 
-    fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::attachments::handle(e, tag, input) {
+            return outcome;
+        }
         match tag {
-            "scan" => Outcome::say(&words::scan_note(EN)),
-            "file" => Outcome::say(&words::choose_file_note(EN)),
+            "scan" => super::attachments::ask("scan", self.folder_id.as_deref().unwrap_or("")),
+            "file" => super::attachments::ask("file", self.folder_id.as_deref().unwrap_or("")),
             _ => Outcome::default(),
         }
     }
@@ -824,8 +906,6 @@ impl RoomScreen for FolderDetail {
     fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
         if tag.starts_with("next:") {
             self.loaded = (self.loaded + 50).min(500);
-        } else if tag.starts_with("share:") {
-            return Outcome::say(&words::shared(EN));
         }
         Outcome::default()
     }
@@ -835,6 +915,9 @@ struct NewFolderForm {
     parent_id: Option<String>,
     loaded_draft: bool,
     error: Option<String>,
+    dirty: bool,
+    drafted: bool,
+    confirm_discard: bool,
 }
 
 impl NewFolderForm {
@@ -843,6 +926,9 @@ impl NewFolderForm {
             parent_id,
             loaded_draft: false,
             error: None,
+            dirty: false,
+            drafted: false,
+            confirm_discard: false,
         }
     }
 }
@@ -856,6 +942,25 @@ impl RoomScreen for NewFolderForm {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        if self.confirm_discard {
+            let confirm = blocks::confirm(
+                &mut b.sel,
+                Confirm {
+                    class: wire::RoomConfirmClass::Outlined,
+                    title: &words::discard_title(EN),
+                    body: &words::discard_body(EN),
+                    warning: "",
+                    confirm_label: &words::discard_confirm(EN),
+                    confirm: Handler::Tag("discard:yes".to_owned()),
+                    cancel_label: &words::discard_keep(EN),
+                    cancel: Handler::Tag("discard:no".to_owned()),
+                },
+            );
+            return room(wire::RoomKind::Sheet, &self.key())
+                .title(&words::discard_title(EN))
+                .ready(vec![confirm])
+                .build();
+        }
         if !self.loaded_draft {
             self.loaded_draft = true;
             if let Some(key) = draft_key(b.door, "folder")
@@ -866,6 +971,7 @@ impl RoomScreen for NewFolderForm {
                     .and_then(|f| f.get("name"))
                     .and_then(|v| v.as_str())
             {
+                self.drafted = true;
                 b.ui.fields.get_or("name", name);
             }
         }
@@ -892,8 +998,8 @@ impl RoomScreen for NewFolderForm {
                 save_label: &save_label,
                 cancel_label: &cancel_label,
                 save_enabled: !name_val.trim().is_empty(),
-                dirty: !name_val.is_empty(),
-                drafted: false,
+                dirty: self.dirty,
+                drafted: self.drafted,
                 save: Handler::Tag("save".to_owned()),
                 cancel: Handler::Tag("cancel".to_owned()),
             },
@@ -905,12 +1011,30 @@ impl RoomScreen for NewFolderForm {
             .build()
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
         if tag == "cancel" {
+            if self.dirty || self.drafted {
+                self.confirm_discard = true;
+                return Outcome::default();
+            }
             if let Some(key) = draft_key(e.door, "folder") {
                 let _ = e.door.device_delete(&key);
             }
             return Outcome::pop();
+        }
+        if tag == "discard:yes" {
+            if let Some(key) = draft_key(e.door, "folder") {
+                let _ = e.door.device_delete(&key);
+            }
+            return Outcome::pop();
+        }
+        if tag == "discard:no" {
+            self.confirm_discard = false;
+            return Outcome::default();
+        }
+        if tag == "name" && matches!(input, Input::Text(_)) {
+            self.dirty = true;
+            return Outcome::default();
         }
         if tag == "save" {
             let name = e.ui.fields.value("name").unwrap_or("").trim().to_owned();
@@ -1010,6 +1134,9 @@ struct TextDocForm {
     folder_id: Option<String>,
     initialized: bool,
     error: Option<String>,
+    dirty: bool,
+    drafted: bool,
+    confirm_discard: bool,
 }
 
 impl TextDocForm {
@@ -1019,6 +1146,9 @@ impl TextDocForm {
             folder_id,
             initialized: false,
             error: None,
+            dirty: false,
+            drafted: false,
+            confirm_discard: false,
         }
     }
 
@@ -1028,6 +1158,9 @@ impl TextDocForm {
             folder_id: None,
             initialized: false,
             error: None,
+            dirty: false,
+            drafted: false,
+            confirm_discard: false,
         }
     }
 }
@@ -1042,6 +1175,25 @@ impl RoomScreen for TextDocForm {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        if self.confirm_discard {
+            let confirm = blocks::confirm(
+                &mut b.sel,
+                Confirm {
+                    class: wire::RoomConfirmClass::Outlined,
+                    title: &words::discard_title(EN),
+                    body: &words::discard_body(EN),
+                    warning: "",
+                    confirm_label: &words::discard_confirm(EN),
+                    confirm: Handler::Tag("discard:yes".to_owned()),
+                    cancel_label: &words::discard_keep(EN),
+                    cancel: Handler::Tag("discard:no".to_owned()),
+                },
+            );
+            return room(wire::RoomKind::Sheet, &self.key())
+                .title(&words::discard_title(EN))
+                .ready(vec![confirm])
+                .build();
+        }
         if !self.initialized {
             self.initialized = true;
             if let Some(id) = &self.id {
@@ -1057,6 +1209,7 @@ impl RoomScreen for TextDocForm {
                 && let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw)
                 && let Some(fields) = val.get("fields")
             {
+                self.drafted = true;
                 if let Some(name) = fields.get("name").and_then(|v| v.as_str()) {
                     b.ui.fields.get_or("name", name);
                 }
@@ -1091,15 +1244,14 @@ impl RoomScreen for TextDocForm {
         let save_label = shared::kit_save(EN);
         let cancel_label = shared::kit_cancel(EN);
         let name_val = b.ui.fields.value("name").unwrap_or("");
-        let body_val = b.ui.fields.value("body").unwrap_or("");
         let save = form::explicit(
             &mut b.sel,
             Explicit {
                 save_label: &save_label,
                 cancel_label: &cancel_label,
                 save_enabled: !name_val.trim().is_empty(),
-                dirty: !name_val.is_empty() || !body_val.is_empty(),
-                drafted: false,
+                dirty: self.dirty,
+                drafted: self.drafted,
                 save: Handler::Tag("save".to_owned()),
                 cancel: Handler::Tag("cancel".to_owned()),
             },
@@ -1123,12 +1275,32 @@ impl RoomScreen for TextDocForm {
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
         if tag == "cancel" {
+            if self.dirty || self.drafted {
+                self.confirm_discard = true;
+                return Outcome::default();
+            }
             if self.id.is_none()
                 && let Some(key) = draft_key(e.door, "document")
             {
                 let _ = e.door.device_delete(&key);
             }
             return Outcome::pop();
+        }
+        if tag == "discard:yes" {
+            if self.id.is_none()
+                && let Some(key) = draft_key(e.door, "document")
+            {
+                let _ = e.door.device_delete(&key);
+            }
+            return Outcome::pop();
+        }
+        if tag == "discard:no" {
+            self.confirm_discard = false;
+            return Outcome::default();
+        }
+        if tag == "name" || tag == "body" {
+            self.dirty = true;
+            return Outcome::default();
         }
         if tag == "save" {
             let name = e.ui.fields.value("name").unwrap_or("").trim().to_owned();
@@ -1274,13 +1446,23 @@ impl RoomScreen for DocDetail {
                             &target.title,
                             Handler::Tag(format!("open:{}:{}", target.kind, target.id)),
                         )
+                        .menu(super::link_picker::unlink_menu(&mut b.sel, &target.id))
                         .build(),
                     );
                 }
             }
-            if !linked_rows.is_empty() {
-                content.push(blocks::linked(&words::footer_linked(EN), linked_rows, None));
-            }
+            let add_link = blocks::action(
+                &mut b.sel,
+                "footer/linked/add",
+                &words::footer_add_link(EN),
+                "",
+                Handler::Tag("link:add".to_owned()),
+            );
+            content.push(blocks::linked(
+                &words::footer_linked(EN),
+                linked_rows,
+                Some(add_link),
+            ));
         }
 
         if let Ok(backlinks) = b.run(
@@ -1342,6 +1524,12 @@ impl RoomScreen for DocDetail {
         ));
         menu_items.push(blocks::menu_item(
             &mut b.sel,
+            "header/menu/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(std::slice::from_ref(&self.id))),
+        ));
+        menu_items.push(blocks::menu_item(
+            &mut b.sel,
             "header/menu/download",
             &words::menu_download(EN),
             Handler::Tag("download".to_owned()),
@@ -1381,10 +1569,50 @@ impl RoomScreen for DocDetail {
             .build()
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::link_picker::handle_unlink(e, tag, &self.id) {
+            return outcome;
+        }
+        if tag == "link:add" {
+            return Outcome::push(&format!("docs/doc/{}/link", self.id));
+        }
+        if let Some(out) = super::export::handle(e, tag, input) {
+            return out;
+        }
         match tag {
-            "download" => Outcome::say(&words::download_note(EN)),
-            "share" => Outcome::say(&words::shared(EN)),
+            "download" => {
+                let reader = match e.door.reader() {
+                    Ok(reader) => reader,
+                    Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+                };
+                let doc = match reader.run(&reads::BY_ID, &Args::new().text("id", &self.id)) {
+                    Ok(answer) => answer.rows.into_iter().next(),
+                    Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+                };
+                let Some(doc) = doc else {
+                    return Outcome::refuse(&words::not_found(EN));
+                };
+                super::export::download_original(e, &doc.blob)
+            }
+            "share" => {
+                let reader = match e.door.reader() {
+                    Ok(reader) => reader,
+                    Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+                };
+                let detail = match reader.run(&reads::BY_ID, &Args::new().text("id", &self.id)) {
+                    Ok(answer) => answer.rows.into_iter().next(),
+                    Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+                };
+                let Some(doc) = detail else {
+                    return Outcome::refuse(&words::not_found(EN));
+                };
+                super::export::share(
+                    &doc.title,
+                    "document",
+                    doc.body_text.as_deref(),
+                    &words::shared(EN),
+                )
+            }
             "trash" => {
                 let act = Act::new("entity.trash", json!({ "ids": [&self.id] }));
                 match e.door.act(&act) {

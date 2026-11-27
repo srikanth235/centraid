@@ -1,4 +1,4 @@
-//! WHAT A NOTIFICATION SAYS (app-plane §9): the catalogue's words for the core scheduler.
+//! Localized words used by the core notification scheduler.
 
 use centraid_core::notify::Words;
 use centraid_vault::alerts::Notice;

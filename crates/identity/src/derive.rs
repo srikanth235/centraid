@@ -51,6 +51,7 @@
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha512;
+use zeroize::Zeroize as _;
 
 /// SLIP-0010's domain tag for the Ed25519 master node. Changing this string
 /// re-derives every key in the product.
@@ -139,12 +140,20 @@ impl Node {
         ))
     }
 
-    fn split(mac: [u8; 64]) -> Self {
+    fn split(mut mac: [u8; 64]) -> Self {
         let mut key = [0u8; KEY_BYTES];
         let mut chain_code = [0u8; KEY_BYTES];
         key.copy_from_slice(&mac[..KEY_BYTES]);
         chain_code.copy_from_slice(&mac[KEY_BYTES..]);
+        mac.zeroize();
         Self { key, chain_code }
+    }
+}
+
+impl Drop for Node {
+    fn drop(&mut self) {
+        self.key.zeroize();
+        self.chain_code.zeroize();
     }
 }
 
@@ -153,9 +162,10 @@ fn hmac_sha512(key: &[u8], parts: &[&[u8]]) -> [u8; 64] {
     for part in parts {
         mac.update(part);
     }
-    let out = mac.finalize().into_bytes();
+    let mut out = mac.finalize().into_bytes();
     let mut bytes = [0u8; 64];
     bytes.copy_from_slice(&out);
+    out.as_mut_slice().zeroize();
     bytes
 }
 
@@ -179,6 +189,12 @@ pub struct VaultRootKey([u8; KEY_BYTES]);
 /// core that derived it, never written down (#1047, Q-1047-11).
 #[derive(Clone)]
 pub struct LockerKey([u8; KEY_BYTES]);
+
+impl Drop for LockerKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
 
 macro_rules! redacted_debug {
     ($ty:ty, $name:literal) => {
@@ -340,6 +356,16 @@ pub fn restore_vault_keys(
     mint.mint(seed, index)
 }
 
+/// Re-derive only the Locker leaf. Other vault key material is wiped as each
+/// derivation node leaves scope.
+pub fn derive_locker_key(seed: &crate::phrase::Seed, index: u32) -> Result<LockerKey, DeriveError> {
+    if index >= ACCOUNT_INDEX {
+        return Err(DeriveError::VaultIndexReserved { requested: index });
+    }
+    let node = Node::master(seed).child(index).child(LOCKER_INDEX);
+    Ok(LockerKey(node.key))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,6 +377,20 @@ mod tests {
 
     fn seed() -> crate::phrase::Seed {
         RecoveryPhrase::parse(PHRASE).expect("parses").seed()
+    }
+
+    #[test]
+    fn deriving_only_the_locker_leaf_matches_full_vault_derivation() {
+        let seed = seed();
+        for index in [0, 7, 42] {
+            let expected = restore_vault_keys(&seed, index).expect("vault keys").locker;
+            let actual = derive_locker_key(&seed, index).expect("Locker key");
+            assert_eq!(actual.as_bytes(), expected.as_bytes());
+        }
+        assert!(matches!(
+            derive_locker_key(&seed, ACCOUNT_INDEX),
+            Err(DeriveError::VaultIndexReserved { .. })
+        ));
     }
 
     /// SLIP-0010's OWN ed25519 vectors, test vector 1

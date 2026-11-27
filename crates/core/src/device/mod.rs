@@ -39,10 +39,26 @@ impl crate::handle::HandleState {
                 if put.key == DETAILS_KEY {
                     self.notify_push();
                 }
+                if put.key == "settings.appearance" {
+                    self.events().push(wire::Event {
+                        kind: Some(wire::event::Kind::Change(wire::ChangeEvent {
+                            table: "appearance".to_owned(),
+                            pk_set: Vec::new(),
+                        })),
+                    });
+                }
                 Ok(wire::DeviceResponse::default())
             }
             Some(K::Delete(delete)) => {
                 store.delete(&delete.key).map_err(refused)?;
+                if delete.key == "settings.appearance" {
+                    self.events().push(wire::Event {
+                        kind: Some(wire::event::Kind::Change(wire::ChangeEvent {
+                            table: "appearance".to_owned(),
+                            pk_set: Vec::new(),
+                        })),
+                    });
+                }
                 Ok(wire::DeviceResponse::default())
             }
             None => Err(refused(
@@ -88,7 +104,17 @@ impl crate::handle::HandleState {
                             .to_owned(),
                         ),
                         Fate::Already => (wire::ShareInFate::Already, String::new()),
-                        Fate::Kept(why) => (wire::ShareInFate::Kept, why),
+                        Fate::Kept(why) => (
+                            wire::ShareInFate::Kept,
+                            if why
+                                == "a spreadsheet of money or Locker items needs its column mapping"
+                            {
+                                why
+                            } else {
+                                "This item stayed in Share-in because Centraid could not file it."
+                                    .to_owned()
+                            },
+                        ),
                     };
                     wire::ShareInItem {
                         uuid,

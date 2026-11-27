@@ -286,6 +286,23 @@ fn rooms() -> (Harness, Arc<Recorder>) {
     )
 }
 
+#[test]
+fn a_generic_child_room_inherits_the_rust_assigned_app_hue() {
+    let door = Recorder::default();
+    let mut rooms = Rooms::new(registry());
+    let notes = rooms
+        .open(&door, "notes", "home", true)
+        .expect("Notes opens");
+    assert_eq!(notes.room.hue_key, "notes");
+
+    let child = rooms
+        .event(&door, notes.instance, &tap("row/n1"))
+        .expect("the row opens")
+        .expect("the child is shown");
+    assert_eq!(child.room.key, "note/n1");
+    assert_eq!(child.room.hue_key, "notes");
+}
+
 fn tap(id: &str) -> wire::RoomEvent {
     wire::RoomEvent {
         kind: Some(wire::room_event::Kind::Tap(wire::RoomTap {

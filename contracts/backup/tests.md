@@ -107,8 +107,8 @@ Layout used below: `gateway/tests/` is `crates/gateway/tests/`, `gateway/conform
 ### D8: a rotted blob is never healed on re-add; sweeps scan the whole library
 
 - `re_adding_a_rotted_blob_replaces_the_bad_file` (vault, `vault/tests/trash_and_bytes.rs`). Flip a byte in a stored blob file on disk, add the same content again. Observe: the file's hash is right again and `store` reports it replaced (counted: one file written). V20.
-- `a_sweep_lists_the_directory_once` (blobs, `crates/blobs/tests/sweep_lists_once.rs`). A store of N blobs; count `read_dir` calls (a counting wrapper over the store's directory port). Observe: one listing per sweep, not N; a thumbnail write triggers none. V20.
-- `a_sweep_collects_only_the_replaced_hash` (blobs, `crates/blobs/tests/sweep_lists_once.rs`). Observe: the old file of the replaced hash is removed, every other file is untouched. V20.
+- A bounded sweep listing test for the current media store is not built (target); the former `crates/blobs` test suite was removed during the crate consolidation.
+- The replaced-hash sweep regression is not currently covered by a dedicated test (target).
 
 ## Other tests the decisions imply
 

@@ -830,10 +830,9 @@ fn a_flag_is_an_instant_on_the_row_and_setting_it_is_not_an_edit() {
     assert!(before > 0, "the retitle wrote a version");
     let writes = w.one::<i64>("SELECT writes FROM vault", &[]);
 
-    assert_eq!(
-        w.ok("flag.set", json!({"id": &project, "flag": "archived"}))["changed"],
-        true
-    );
+    let archived = w.ok("flag.set", json!({"id": &project, "flag": "archived"}));
+    assert_eq!(archived["changed"], true);
+    assert_eq!(archived["changed_ids"], json!([&project]));
     let first_star = {
         w.ok("flag.set", json!({"id": &project, "flag": "starred"}));
         w.one::<String>("SELECT starred_at FROM entity WHERE id = ?1", &[&project])
@@ -847,10 +846,9 @@ fn a_flag_is_an_instant_on_the_row_and_setting_it_is_not_an_edit() {
     assert_eq!(w.stamp(&project), stamp, "a flag stamps no updated_at");
     assert_eq!(revisions(&project), before, "a flag writes no revision");
     // Setting it again keeps its first instant.
-    assert_eq!(
-        w.ok("flag.set", json!({"id": &project, "flag": "starred"}))["changed"],
-        false
-    );
+    let unchanged = w.ok("flag.set", json!({"id": &project, "flag": "starred"}));
+    assert_eq!(unchanged["changed"], false);
+    assert_eq!(unchanged["changed_ids"], json!([]));
     assert_eq!(
         w.one::<String>("SELECT starred_at FROM entity WHERE id = ?1", &[&project]),
         first_star
@@ -1119,12 +1117,14 @@ fn a_tag_is_minted_by_its_folded_label_and_a_tagging_changes_nothing_on_the_enti
         "a member's tag has a minted id: {tag}"
     );
     assert_eq!(first["added"], true);
+    assert_eq!(first["changed_ids"], json!([&note]));
     assert_eq!(
         w.one::<String>("SELECT key FROM concept WHERE id = ?1", &[&tag]),
         "road trip"
     );
     let again = w.ok("tag.add", json!({"id": &note, "label": "road trip"}));
     assert_eq!(again["added"], false, "the same word is the same tag");
+    assert_eq!(again["changed_ids"], json!([]));
     assert_eq!(again["tag"], tag.as_str());
     assert_eq!(
         w.one::<i64>("SELECT COUNT(*) FROM concept WHERE kind = 'tag'", &[]),

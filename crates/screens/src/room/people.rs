@@ -1,4 +1,5 @@
 use centraid_api_proto::core_v1 as wire;
+use centraid_domain::apps::entity as entity_reads;
 use centraid_domain::apps::people as reads;
 use centraid_domain::read::Args;
 use rand::RngCore as _;
@@ -10,6 +11,7 @@ use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
+use super::search_view;
 use super::selector::{Act, Handler, Sel};
 use crate::strings::{Locale, fill, home as home_words, people as words, shared};
 
@@ -52,6 +54,15 @@ const FILTER_STARRED: &str = "filter/starred";
 const SORT_NAME: &str = "sort/name";
 const SORT_RECENT: &str = "sort/recent";
 
+fn import_file_name(name: &str) -> String {
+    let leaf = name.rsplit(['/', '\\']).next().unwrap_or_default().trim();
+    if leaf.is_empty() || leaf.chars().any(char::is_control) {
+        "Contacts.vcf".to_owned()
+    } else {
+        leaf.chars().take(200).collect()
+    }
+}
+
 #[must_use]
 pub fn registry() -> Registry {
     Registry::new()
@@ -75,6 +86,20 @@ pub fn registry() -> Registry {
                 }));
             }
             if let Some(rest) = key.strip_prefix("person/") {
+                if let Some(id) = rest.strip_suffix("/link") {
+                    return Some(Box::new(super::link_picker::LinkPicker::new(
+                        id.to_owned(),
+                        format!("person/{id}"),
+                        words::title(EN),
+                    )));
+                }
+                if let Some(id) = rest.strip_suffix("/versions") {
+                    return Some(super::versions::page(
+                        &format!("person/{id}/versions"),
+                        id,
+                        &words::title(EN),
+                    ));
+                }
                 if let Some(id) = rest.strip_suffix("/edit") {
                     return Some(Box::new(PersonForm::edit_person(id.to_owned())));
                 }
@@ -213,8 +238,22 @@ fn handle_more_or_nav(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
         "nav:home" => Some(Outcome::replace(super::shell::HOME)),
         "tab:tab/people" => Some(Outcome::replace(PEOPLE)),
         "tab:tab/lists" => Some(Outcome::replace(LISTS)),
-        "more:import" => Some(Outcome::say(&words::import_note(EN))),
-        "more:export" => Some(Outcome::say(&words::export_note(EN))),
+        "more:import" => Some(Outcome::effect(
+            "import:people:result",
+            wire::shell_effect::Kind::PickFile(wire::ShellPickFile {
+                types: vec![
+                    "text/vcard".to_owned(),
+                    "text/x-vcard".to_owned(),
+                    "text/csv".to_owned(),
+                ],
+                multiple: false,
+            }),
+        )),
+        "more:export" => Some(super::export::ask(
+            "person.export_vcf",
+            json!({}),
+            &shared::owner_reason_export(EN),
+        )),
         _ => None,
     }
 }
@@ -268,6 +307,12 @@ fn person_row_menu(sel: &mut Sel, person: &reads::PersonSummary) -> wire::RoomMe
         ),
         blocks::menu_item(
             sel,
+            &format!("row/{id}/menu/organize"),
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(std::slice::from_ref(id))),
+        ),
+        blocks::menu_item(
+            sel,
             &format!("row/{id}/menu/edit"),
             &words::menu_edit(EN),
             Handler::Open(format!("person/{id}/edit")),
@@ -311,11 +356,21 @@ fn person_row_menu(sel: &mut Sel, person: &reads::PersonSummary) -> wire::RoomMe
 
 struct PeopleList {
     loaded: usize,
+    pending_import: Option<PendingPeopleImport>,
+}
+
+struct PendingPeopleImport {
+    command: &'static str,
+    input: serde_json::Value,
+    preview: String,
 }
 
 impl Default for PeopleList {
     fn default() -> Self {
-        Self { loaded: 50 }
+        Self {
+            loaded: 50,
+            pending_import: None,
+        }
     }
 }
 
@@ -403,36 +458,55 @@ impl RoomScreen for PeopleList {
             }
         };
 
-        let term = b.ui.search_term().trim().to_ascii_lowercase();
-        let visible: Vec<reads::PersonSummary> = answer
-            .rows
-            .into_iter()
-            .filter(|p| {
-                if term.is_empty() {
-                    return true;
+        let term = b.ui.search_term().trim().to_owned();
+        if !term.is_empty()
+            && let Err(sentence) = search_view::load(b.ui, b.door, &["person"], &term)
+        {
+            return frame
+                .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                .build();
+        }
+        let extra_search_rows = if term.is_empty() {
+            Vec::new()
+        } else {
+            match search_view::unindexed_title_rows(b, &["list"], &term) {
+                Ok(rows) => rows,
+                Err(sentence) => {
+                    return frame
+                        .failed(&mut b.sel, &sentence, &shared::kit_retry(EN))
+                        .build();
                 }
-                p.title.to_ascii_lowercase().contains(&term)
-                    || p.role
-                        .as_deref()
-                        .is_some_and(|r| r.to_ascii_lowercase().contains(&term))
-                    || p.org
-                        .as_deref()
-                        .is_some_and(|o| o.to_ascii_lowercase().contains(&term))
-            })
-            .collect();
+            }
+        };
+        let visible: Vec<reads::PersonSummary> = if term.is_empty() {
+            answer.rows
+        } else {
+            Vec::new()
+        };
 
         if !visible.is_empty() {
             let count = u64::try_from(visible.len()).unwrap_or(u64::MAX);
             frame = frame.subtitle(&words::people_count(EN, count));
         }
 
-        b.ui.list(visible.iter().map(|p| p.id.clone()));
+        let ids: Vec<String> = if term.is_empty() {
+            visible.iter().map(|p| p.id.clone()).collect()
+        } else {
+            b.ui.search_hits().iter().map(|p| p.id.clone()).collect()
+        };
+        b.ui.list(ids);
 
         if b.ui.selecting() {
             let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
             let count = u64::try_from(picked.len()).unwrap_or(u64::MAX);
             let mut bulk_actions = Vec::new();
             if !picked.is_empty() {
+                bulk_actions.push(blocks::menu_item(
+                    &mut b.sel,
+                    "selection/organize",
+                    &shared::organize(EN),
+                    Handler::Open(super::organize::route(&picked)),
+                ));
                 bulk_actions.push(blocks::menu_item(
                     &mut b.sel,
                     "selection/star",
@@ -456,8 +530,9 @@ impl RoomScreen for PeopleList {
             );
         }
 
-        let blocks_out = if visible.is_empty() {
-            if !term.is_empty() {
+        let blocks_out = if !term.is_empty() {
+            let results = search_view::rows(&mut b.sel, b.ui, b.ui.selecting());
+            if results.is_empty() && extra_search_rows.is_empty() {
                 vec![blocks::empty(
                     glyph("Users", ""),
                     &words::empty_search_title(EN),
@@ -465,8 +540,10 @@ impl RoomScreen for PeopleList {
                     None,
                 )]
             } else {
-                vec![people_first_card(b)]
+                results
             }
+        } else if visible.is_empty() {
+            vec![people_first_card(b)]
         } else {
             let selecting = b.ui.selecting();
             let mut rows = Vec::with_capacity(visible.len());
@@ -514,23 +591,157 @@ impl RoomScreen for PeopleList {
         };
 
         let mut blocks_out = blocks_out;
+        if let Some(pending) = &self.pending_import {
+            blocks_out.insert(
+                0,
+                blocks::confirm(
+                    &mut b.sel,
+                    Confirm {
+                        class: wire::RoomConfirmClass::Outlined,
+                        title: &words::import_review_title(EN),
+                        body: &pending.preview,
+                        warning: "",
+                        confirm_label: &words::import_review_confirm(EN),
+                        confirm: Handler::Tag("import:confirm".to_owned()),
+                        cancel_label: &shared::kit_cancel(EN),
+                        cancel: Handler::Tag("import:cancel".to_owned()),
+                    },
+                ),
+            );
+        }
         if !visible.is_empty() && term.is_empty() && !first::holds(b, "person") {
             let card = people_first_card(b);
             blocks_out.insert(0, card);
         }
-        frame.ready(blocks_out).build()
+        let mut built = frame.ready(blocks_out).build();
+        if let Some(search) = built.search.as_mut() {
+            search_view::decorate(&mut b.sel, search, b.ui);
+            search.containers.extend(extra_search_rows);
+        }
+        built
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if tag == "import:people:result" {
+            let Input::Effect(result) = input else {
+                return Outcome::default();
+            };
+            match result.outcome.as_ref() {
+                Some(wire::shell_effect_result::Outcome::Failed(failed)) if failed.cancelled => {
+                    return Outcome::default();
+                }
+                Some(wire::shell_effect_result::Outcome::Picked(picked)) => {
+                    let Some(file) = picked.items.first() else {
+                        return Outcome::default();
+                    };
+                    let Some(staged) = file.stage_handle.as_ref() else {
+                        return Outcome::refuse(&words::import_failed(EN));
+                    };
+                    let bytes = match e.door.held_bytes(&staged.content_hash, 1_048_576) {
+                        Ok(bytes) => bytes,
+                        Err(_) => return Outcome::refuse(&words::import_failed(EN)),
+                    };
+                    let text = match String::from_utf8(bytes) {
+                        Ok(text) if !text.trim().is_empty() => text,
+                        _ => return Outcome::refuse(&words::import_failed(EN)),
+                    };
+                    let name = import_file_name(&file.name);
+                    let is_csv = file.media_type.eq_ignore_ascii_case("text/csv")
+                        || name.to_ascii_lowercase().ends_with(".csv");
+                    let (command, arrived_via, payload_key) = if is_csv {
+                        ("person.import_csv", "csv", "csv")
+                    } else {
+                        ("person.import_vcf", "vcard", "cards")
+                    };
+                    let mut input = json!({
+                        "arrived_label": name,
+                        "arrived_via": arrived_via,
+                        "dry_run": true,
+                        "merge": true,
+                    });
+                    input[payload_key] = json!(text);
+                    return match e.door.command_result(command, &input) {
+                        Ok(preview) => {
+                            let count = |key: &str| {
+                                preview
+                                    .get(key)
+                                    .and_then(serde_json::Value::as_u64)
+                                    .unwrap_or(0)
+                                    .to_string()
+                            };
+                            let added = count("added");
+                            let merged = count("merged");
+                            let unchanged = count("unchanged");
+                            let declined = count("declined");
+                            let preview = fill(
+                                &words::import_review_body(EN),
+                                &[
+                                    ("added", &added),
+                                    ("merged", &merged),
+                                    ("unchanged", &unchanged),
+                                    ("declined", &declined),
+                                ],
+                            );
+                            self.pending_import = Some(PendingPeopleImport {
+                                command,
+                                input,
+                                preview: preview.clone(),
+                            });
+                            Outcome::say(&preview)
+                        }
+                        Err(_) => Outcome::refuse(&words::import_failed(EN)),
+                    };
+                }
+                _ => return Outcome::refuse(&words::import_failed(EN)),
+            }
+        }
+        if tag == "import:cancel" {
+            self.pending_import = None;
+            return Outcome::default();
+        }
+        if tag == "import:confirm" {
+            let Some(mut pending) = self.pending_import.take() else {
+                return Outcome::refuse(&words::import_failed(EN));
+            };
+            pending.input["dry_run"] = json!(false);
+            return match e
+                .door
+                .act(&Act::new(pending.command, pending.input.clone()))
+            {
+                Ok(done) => Outcome::done(&done.sentence, done.undo),
+                Err(_) => {
+                    self.pending_import = Some(pending);
+                    Outcome::refuse(&words::import_failed(EN))
+                }
+            };
+        }
+        if let Some(outcome) = super::export::handle(e, tag, input) {
+            return outcome;
+        }
         if let Some(outcome) = handle_more_or_nav(e, tag) {
             return outcome;
+        }
+        if tag == "next:search/more" {
+            e.ui.advance_search_page();
+            return Outcome::default();
         }
         if tag == "next:section/people" {
             self.loaded = self.loaded.saturating_add(50);
             return Outcome::default();
         }
-        if tag.starts_with("share:") {
-            return Outcome::say(&words::shared(EN));
+        if let Some(id) = tag.strip_prefix("share:") {
+            let reader = match e.door.reader() {
+                Ok(reader) => reader,
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let detail = match reader.run(&reads::BY_ID, &Args::new().text("id", id)) {
+                Ok(answer) => answer.rows.into_iter().next(),
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let Some(person) = detail else {
+                return Outcome::refuse(&words::not_found(EN));
+            };
+            return super::export::share(&person.title, "person", None, &words::shared(EN));
         }
         if tag == "bulk:star" || tag == "bulk:trash" {
             let ids: Vec<String> = e.ui.picked().map(str::to_owned).collect();
@@ -551,6 +762,19 @@ impl RoomScreen for PeopleList {
             };
         }
         Outcome::default()
+    }
+}
+
+#[cfg(test)]
+mod person_date_tests {
+    use super::valid_person_date;
+
+    #[test]
+    fn full_and_yearless_dates_are_validated_without_guessing_a_year() {
+        assert!(valid_person_date("2024-02-29"));
+        assert!(!valid_person_date("2025-02-29"));
+        assert!(valid_person_date("--02-29"));
+        assert!(!valid_person_date("--02-30"));
     }
 }
 
@@ -686,6 +910,12 @@ impl RoomScreen for PersonDetail {
                 vec![
                     blocks::menu_item(
                         &mut b.sel,
+                        "menu/organize",
+                        &shared::organize(EN),
+                        Handler::Open(super::organize::route(std::slice::from_ref(&self.id))),
+                    ),
+                    blocks::menu_item(
+                        &mut b.sel,
                         "menu/edit",
                         &words::menu_edit(EN),
                         Handler::Open(format!("person/{}/edit", self.id)),
@@ -804,7 +1034,7 @@ impl RoomScreen for PersonDetail {
                         &mut b.sel,
                         base,
                         &format!("cp/{}", point.id),
-                        Some(Handler::Tag(format!("open:cp:{}", point.id))),
+                        None,
                         Some(Handler::Tag(format!("copy:cp:{}", point.id))),
                     )
                 })
@@ -1020,7 +1250,18 @@ impl RoomScreen for PersonDetail {
                     || (shared::trash_untitled(EN), String::new()),
                     |r| (r.title, r.kind),
                 );
-            let mut row = blocks::still_row(&mut b.sel, &format!("linked/{}", other.0), &title);
+            let mut row = if kind.is_empty() {
+                blocks::still_row(&mut b.sel, &format!("linked/{}", other.0), &title)
+            } else {
+                blocks::row(
+                    &mut b.sel,
+                    &format!("linked/{}", other.0),
+                    &title,
+                    Handler::Tag(format!("open:{kind}:{}", other.0)),
+                )
+                .meta(&kind)
+                .menu(super::link_picker::unlink_menu(&mut b.sel, &other.0))
+            };
             if !kind.is_empty() {
                 row = row.meta(&kind);
             }
@@ -1056,12 +1297,33 @@ impl RoomScreen for PersonDetail {
             .run(&reads::ATTACHMENTS, &person_arg)
             .map(|a| a.rows)
             .unwrap_or_default();
-        let attach_items: Vec<wire::RoomRow> = attach_rows
-            .iter()
-            .map(|r| {
-                blocks::still_row(&mut b.sel, &format!("attach/{}", r.id), &r.title)
-                    .meta(&r.kind)
-                    .build()
+        let mut attach_by_id: std::collections::BTreeMap<String, (String, String)> = attach_rows
+            .into_iter()
+            .map(|r| (r.id, (r.kind, r.title)))
+            .collect();
+        for kind in ["document", "photo"] {
+            if let Ok(home) = b.run(
+                &centraid_domain::apps::entity::IN_HOME,
+                &Args::new().text("home", &self.id).text("kind", kind),
+            ) {
+                for item in home.rows {
+                    attach_by_id
+                        .entry(item.id)
+                        .or_insert_with(|| (kind.to_owned(), item.title));
+                }
+            }
+        }
+        let attach_items: Vec<wire::RoomRow> = attach_by_id
+            .into_iter()
+            .map(|(id, (kind, title))| {
+                blocks::row(
+                    &mut b.sel,
+                    &format!("attach/{id}"),
+                    &title,
+                    Handler::Tag(format!("open:{kind}:{id}")),
+                )
+                .meta(&kind)
+                .build()
             })
             .collect();
         let attach_menu = blocks::menu(
@@ -1106,7 +1368,7 @@ impl RoomScreen for PersonDetail {
                 &mut b.sel,
                 &words::versions_summary(EN, n),
                 n32,
-                Handler::Tag("versions".to_owned()),
+                Handler::Open(format!("person/{}/versions", self.id)),
             ));
         }
 
@@ -1116,6 +1378,120 @@ impl RoomScreen for PersonDetail {
                 &fill(&shared::origin_line(EN), &[("label", label)]),
                 None,
             ));
+        }
+
+        if let Ok(differences) = b.run(
+            &entity_reads::PHONE_DIFFERENCES,
+            &Args::new().text("id", &person.id),
+        ) {
+            let point_values = b
+                .run(&reads::CONTACT_POINTS, &person_arg)
+                .ok()
+                .filter(|answer| answer.rows.len() < 50)
+                .map(|answer| {
+                    Value::Array(
+                        answer
+                            .rows
+                            .into_iter()
+                            .map(|point| {
+                                let mut value = json!({ "kind": point.kind, "value": point.value });
+                                if let Some(label) = point.label.filter(|label| !label.is_empty()) {
+                                    value["label"] = Value::String(label);
+                                }
+                                value
+                            })
+                            .collect(),
+                    )
+                });
+            let date_values = b
+                .run(&reads::DATES, &person_arg)
+                .ok()
+                .filter(|answer| answer.rows.len() < 50)
+                .map(|answer| {
+                    Value::Array(
+                        answer
+                            .rows
+                            .into_iter()
+                            .map(|date| {
+                                let mut value = json!({ "kind": date.kind, "date": date.date });
+                                if let Some(label) = date.label.filter(|label| !label.is_empty()) {
+                                    value["label"] = Value::String(label);
+                                }
+                                value
+                            })
+                            .collect(),
+                    )
+                });
+            for source in differences
+                .rows
+                .iter()
+                .filter(|source| source.system == "contacts")
+            {
+                let mut current = vec![
+                    (
+                        "title",
+                        words::field_name(EN),
+                        Value::String(person.title.clone()),
+                    ),
+                    (
+                        "given",
+                        words::field_given(EN),
+                        person
+                            .given
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                    (
+                        "family",
+                        words::field_family(EN),
+                        person
+                            .family
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                    (
+                        "form",
+                        words::field_form(EN),
+                        Value::String(person.form.clone()),
+                    ),
+                    (
+                        "nickname",
+                        words::field_nickname(EN),
+                        person
+                            .nickname
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                    (
+                        "role",
+                        words::field_role(EN),
+                        person
+                            .role
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                    (
+                        "org",
+                        words::field_org(EN),
+                        person.org.clone().map(Value::String).unwrap_or(Value::Null),
+                    ),
+                ];
+                if let Some(points) = &point_values {
+                    current.push(("points", words::section_contact(EN), points.clone()));
+                }
+                if let Some(dates) = &date_values {
+                    current.push(("dates", words::section_dates(EN), dates.clone()));
+                }
+                if let Some(says) =
+                    super::follow::phone_says(&mut b.sel, b.door, &person.id, source, &current)
+                {
+                    blocks_out.push(says);
+                }
+            }
         }
 
         // Also watch touches_held so a trash check stays fresh.
@@ -1129,7 +1505,22 @@ impl RoomScreen for PersonDetail {
             .build()
     }
 
-    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::link_picker::handle_unlink(e, tag, &self.id) {
+            return outcome;
+        }
+        if let Some(outcome) = super::attachments::handle(e, tag, input) {
+            return outcome;
+        }
+        if let Some(outcome) = super::export::handle(e, tag, input) {
+            return outcome;
+        }
+        if let Some(kind) = tag.strip_prefix("attach:") {
+            return super::attachments::ask(kind, &self.id);
+        }
+        if tag == "footer:add_link" {
+            return Outcome::push(&format!("person/{}/link", self.id));
+        }
         if tag == "catch_up" {
             let act = Act::new(
                 "touch.log",
@@ -1157,13 +1548,35 @@ impl RoomScreen for PersonDetail {
             };
         }
         if tag == "share" {
-            return Outcome::say(&words::shared(EN));
+            let reader = match e.door.reader() {
+                Ok(reader) => reader,
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let detail = match reader.run(&reads::BY_ID, &Args::new().text("id", &self.id)) {
+                Ok(answer) => answer.rows.into_iter().next(),
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let Some(person) = detail else {
+                return Outcome::refuse(&words::not_found(EN));
+            };
+            return super::export::share(&person.title, "person", None, &words::shared(EN));
         }
-        if tag.starts_with("copy:cp:") {
-            return Outcome::say(&words::copied(EN));
-        }
-        if tag.starts_with("open:cp:") {
-            return Outcome::say(&words::opened(EN));
+        if let Some(point_id) = tag.strip_prefix("copy:cp:") {
+            let reader = match e.door.reader() {
+                Ok(reader) => reader,
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let points = match reader.run(
+                &reads::CONTACT_POINTS,
+                &Args::new().text("person", &self.id),
+            ) {
+                Ok(answer) => answer.rows,
+                Err(_) => return Outcome::refuse(&shared::read_failed(EN)),
+            };
+            let Some(point) = points.iter().find(|point| point.id == point_id) else {
+                return Outcome::refuse(&words::not_found(EN));
+            };
+            return super::export::copy(&point.value, &words::copied(EN));
         }
         if let Some(date_id) = tag.strip_prefix("rem:on:") {
             let act = Act::new(
@@ -1350,6 +1763,15 @@ struct DateDraft {
     label: String,
 }
 
+fn valid_person_date(value: &str) -> bool {
+    if let Some(month_day) = value.strip_prefix("--") {
+        let candidate = format!("2000-{month_day}");
+        crate::kit::civil::epoch_day_of(&candidate).is_some()
+    } else {
+        crate::kit::civil::epoch_day_of(value).is_some()
+    }
+}
+
 struct PersonForm {
     editing: Option<String>,
     initialized: bool,
@@ -1357,6 +1779,7 @@ struct PersonForm {
     drafted: bool,
     confirm_discard: bool,
     name_error: String,
+    date_errors: std::collections::BTreeMap<usize, String>,
     contacts: Vec<ContactDraft>,
     dates: Vec<DateDraft>,
     next_slot: usize,
@@ -1371,6 +1794,7 @@ impl PersonForm {
             drafted: false,
             confirm_discard: false,
             name_error: String::new(),
+            date_errors: std::collections::BTreeMap::new(),
             contacts: Vec::new(),
             dates: Vec::new(),
             next_slot: 1,
@@ -1385,6 +1809,7 @@ impl PersonForm {
             drafted: false,
             confirm_discard: false,
             name_error: String::new(),
+            date_errors: std::collections::BTreeMap::new(),
             contacts: Vec::new(),
             dates: Vec::new(),
             next_slot: 1,
@@ -1666,15 +2091,38 @@ impl RoomScreen for PersonForm {
                 kind_opts,
             )
             .build();
-            let val_field = form::text(
-                &mut b.sel,
-                &mut b.ui.fields,
-                &format!("dt_{slot}_val"),
-                &words::field_date_value(EN),
-                wire::RoomTextKind::Line,
-                &dt.date,
-                32,
-            )
+            let val_field = if dt.date.starts_with("--") {
+                form::text(
+                    &mut b.sel,
+                    &mut b.ui.fields,
+                    &format!("dt_{slot}_val"),
+                    &words::field_date_value(EN),
+                    wire::RoomTextKind::Line,
+                    &dt.date,
+                    32,
+                )
+            } else {
+                form::moment(
+                    &mut b.sel,
+                    &format!("dt_{slot}_val"),
+                    &words::field_date_value(EN),
+                    wire::RoomMoment {
+                        kind: wire::RoomMomentKind::Day as i32,
+                        value: dt.date.clone(),
+                        display: if dt.date.is_empty() {
+                            String::new()
+                        } else {
+                            crate::kit::civil::short_day(EN, &dt.date)
+                        },
+                        ..wire::RoomMoment::default()
+                    },
+                )
+            };
+            let val_field = if let Some(err) = self.date_errors.get(&slot) {
+                val_field.error(err)
+            } else {
+                val_field
+            }
             .build();
             let label_field = form::text(
                 &mut b.sel,
@@ -1880,6 +2328,11 @@ impl RoomScreen for PersonForm {
                     if val.is_empty() {
                         continue;
                     }
+                    if !valid_person_date(&val) {
+                        self.date_errors.insert(dt.slot, shared::date_invalid(EN));
+                        return Outcome::default();
+                    }
+                    self.date_errors.remove(&dt.slot);
                     let label =
                         e.ui.fields
                             .get(&format!("dt_{}_label", dt.slot))
@@ -1974,11 +2427,27 @@ impl RoomScreen for PersonForm {
             return Outcome::default();
         }
 
-        if matches!(input, Input::Text(_)) {
+        if let Some(value) = match input {
+            Input::Text(value) | Input::Moment(value) => Some(value.as_str()),
+            _ => None,
+        } {
+            if let Some(rest) = tag.strip_prefix("dt_")
+                && let Some(slot_str) = rest.strip_suffix("_val")
+                && let Ok(slot) = slot_str.parse::<usize>()
+            {
+                if value.is_empty() || valid_person_date(value) {
+                    self.date_errors.remove(&slot);
+                } else {
+                    self.date_errors.insert(slot, shared::date_invalid(EN));
+                }
+            }
             if tag == "name" {
                 self.name_error.clear();
             }
             self.dirty = true;
+            if let Some(field) = e.ui.fields.get_mut(tag) {
+                field.set(value);
+            }
             self.persist_draft(e);
         }
         Outcome::default()

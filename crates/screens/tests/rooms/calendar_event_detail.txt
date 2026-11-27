@@ -10,6 +10,7 @@ room pushed_page key="calendar/event/01900000-0000-7000-8000-000000000102"
           item "Split series" #menu/split
           item "Cancel event" #menu/cancel
           item "Move to trash" destructive #menu/trash
+          item "Move or tag" #menu/organize
   ready
     hero "Morning standup" noun="Event" mark=glyph:Calendar
       line "2026-06-15T09:00 – 2026-06-15T09:30"
@@ -23,3 +24,5 @@ room pushed_page key="calendar/event/01900000-0000-7000-8000-000000000102"
     section #section/alerts "Alerts"
       trailing "Snooze" sym="Bell" #alert/snooze
       row #alert/3803fd15-bc5e-7905-887e-71d1ea18d326 "15 min before"
+    linked "Linked"
+      add "Add link" #footer/linked/add

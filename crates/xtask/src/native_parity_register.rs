@@ -127,18 +127,8 @@ pub const REGISTER: &[Entry] = &[
     ("UploadsEnqueue.parts", platform(Shell::Ios, OS_UPLOADS)),
     ("UploadsOp.cancel_all", platform(Shell::Ios, OS_UPLOADS)),
     ("UploadsOp.enqueue", platform(Shell::Ios, OS_UPLOADS)),
-    // Lane F, one shell reads it and nobody owns the other half yet.
-    // LockerSearchField.answered_term: Compose copies it into a kit holder and nothing draws it
-    // HeldFrozen.since: `fetchPersistentChanges(since:)`; `strings::vault::frozen_line` is called only by tests, so the frozen vault's line is never shown. Owner decides: wire it into Home's frozen vault row, or delete both fields
     ("HeldFrozen.since", gap("F", Missing::Android)),
     ("HeldFrozen.unacked", gap("F", Missing::Both)),
-    // HomeEvent.status_told: no production sender, so Home's `status` is always unset and its ribbon (a stranded write, a low disk) can never show. Owner decides: wire a producer, or delete `HomeStatus` and the ribbon
-    // ViewState.imports_files: the follower's headless view; tests/imports_roots.rs pins the arm. Owner decides: headless screens return an empty view, or the arm stays for tests
-    // Lane F, Rust features no shell exposes yet. owner question (#1152): expose or delete.
-    // Calendar visibility
-    // Range select
-    // The folder follower's explicit trigger; `HealthRationale.requested` is a Kotlin flag. owner question (#1152): expose or delete
-    // Lane F, read by no shell and no Rust outside the tests, which use it as the one observable of the grid, the camera-roll service and the vault shelf. owner question (#1152): keep each as that observable, or delete it with the assertions that read it.
     ("HeldVault.keyed", gap("F", Missing::Both)),
     ("HeldVault.own_words", gap("F", Missing::Both)),
     // Rust only: Rust writes it and reads it back, or hands it from one screen or service to another.

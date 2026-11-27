@@ -1,7 +1,5 @@
-//! FOLLOWING A PHONE STORE, AS A MORE SHEET SAYS IT (app-plane §16). Each owning app puts these
-//! rows in its More: one to turn the store on, the state it is in, one to stop. A row asks the core
-//! through the door (`FollowRequest`); the core decides what the shell reads and whether the OS
-//! may be asked. The room reloads on the `follow` watch when a pass or a refusal changes the state.
+//! Follow controls for phone stores. The core owns reader and permission decisions; rooms reload
+//! when a follow pass or refusal changes state.
 
 use centraid_api_proto::core_v1 as wire;
 
@@ -9,50 +7,161 @@ use super::blocks::{self, Confirm};
 use super::door::Door;
 use super::frame::room;
 use super::screen::{Build, Event, Input, Nav, Outcome, Registry, RoomScreen, Status};
-use super::selector::Handler;
+use super::selector::{Act, Handler, Sel};
 use crate::kit::permission::{self, Resource, State};
 use crate::strings::{Locale, fill, follow as words, shared};
 
 const EN: Locale = Locale::En;
 
-/// The table name a room watches for a change in what a pass left.
-pub const WATCH: &str = "follow";
+/// Show only fields the phone stated that differ from the member's current values.
+pub fn phone_says(
+    sel: &mut Sel,
+    door: &dyn Door,
+    entity_id: &str,
+    source: &centraid_domain::apps::entity::PhoneDifferenceRow,
+    current: &[(&str, String, serde_json::Value)],
+) -> Option<wire::RoomBlock> {
+    let stated: serde_json::Value = serde_json::from_str(&source.stated).ok()?;
+    let mut fields = Vec::new();
+    for (key, label, mine) in current {
+        let title_value = if *key == "title" {
+            source
+                .stated_title
+                .as_ref()
+                .map(|title| serde_json::Value::String(title.clone()))
+        } else {
+            None
+        };
+        let Some(value) = (if *key == "title" {
+            title_value.as_ref()
+        } else {
+            stated.get(*key)
+        }) else {
+            continue;
+        };
+        if comparable(value) == comparable(mine) {
+            continue;
+        }
+        let phone = display_value(door, key, value);
+        let held = display_value(door, key, mine);
+        fields.push(blocks::says_field(
+            sel,
+            &format!("phone-says/{}/{}", source.id, key),
+            label,
+            &phone,
+            &held,
+            Handler::Act(Act::new(
+                "follow.take_stated",
+                serde_json::json!({ "entity": entity_id, "field": key, "origin": source.origin_id }),
+            )),
+        ));
+    }
+    (!fields.is_empty()).then(|| {
+        blocks::says(
+            wire::RoomSaysSource::Phone,
+            &shared::phone_says(EN),
+            fields,
+            &shared::take_phone_value(EN),
+        )
+    })
+}
 
-fn resource(system: &str) -> Resource {
-    match system {
-        "contacts" => Resource::Contacts,
-        "calendar" => Resource::Calendar,
-        "reminders" => Resource::Reminders,
-        "health" => Resource::Health,
-        "files" => Resource::Files,
-        _ => Resource::Photos,
+fn comparable(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Array(values) => {
+            let mut stable: Vec<String> = values.iter().map(comparable).collect();
+            stable.sort();
+            serde_json::to_string(&stable).unwrap_or_default()
+        }
+        serde_json::Value::Object(_) => serde_json::to_string(value).unwrap_or_default(),
+        _ => serde_json::to_string(value).unwrap_or_default(),
     }
 }
 
-fn store(system: &str) -> String {
-    match system {
-        "contacts" => words::store_contacts(EN),
-        "calendar" => words::store_calendar(EN),
-        "reminders" => words::store_reminders(EN),
-        "health" => words::store_health(EN),
-        "files" => words::store_files(EN),
-        _ => words::store_camera_roll(EN),
+fn display_value(door: &dyn Door, field: &str, value: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match value {
+        Value::Null => shared::phone_value_none(EN),
+        Value::Array(items) if items.is_empty() => shared::phone_value_none(EN),
+        Value::Array(items) => items
+            .iter()
+            .map(|item| display_item(door, field, item))
+            .collect::<Vec<_>>()
+            .join(", "),
+        Value::String(text) => display_text(door, field, text),
+        other => other.to_string(),
     }
 }
 
-fn source(system: &str) -> String {
-    match system {
-        "contacts" => words::source_contacts(EN),
-        "calendar" => words::source_calendar(EN),
-        "reminders" => words::source_reminders(EN),
-        "health" => words::source_health(EN),
-        "files" => words::source_files(EN),
-        _ => words::source_camera_roll(EN),
+fn display_item(door: &dyn Door, field: &str, item: &serde_json::Value) -> String {
+    use serde_json::Value;
+    if let Some(object) = item.as_object() {
+        if matches!(field, "points" | "dates") {
+            let label = object
+                .get("label")
+                .and_then(Value::as_str)
+                .or_else(|| object.get("kind").and_then(Value::as_str));
+            let value = object
+                .get("value")
+                .or_else(|| object.get("date"))
+                .map(|value| {
+                    display_value(door, if field == "dates" { "due" } else { field }, value)
+                })
+                .unwrap_or_default();
+            return match (label, value.is_empty()) {
+                (Some(label), false) => format!("{label}: {value}"),
+                (Some(label), true) => label.to_owned(),
+                (None, _) => value,
+            };
+        }
+        if field == "attendees" {
+            let name = object
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let email = object
+                .get("email")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let status = object
+                .get("state")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let role = object
+                .get("role")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            return [name, email, status, role]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ");
+        }
     }
+    if field == "reminders"
+        && let Some(minutes) = item.as_i64()
+    {
+        return if minutes == 0 {
+            "At the time".to_owned()
+        } else {
+            format!("{minutes} min before")
+        };
+    }
+    display_value(door, field, item)
 }
 
-/// Where a store stands on this device, as the core says it; `None` when the core would not say.
-#[must_use]
+fn display_text(door: &dyn Door, field: &str, text: &str) -> String {
+    if matches!(field, "starts" | "ends" | "due") {
+        if crate::kit::civil::epoch_day_of(text).is_some() {
+            return crate::kit::civil::short_day(EN, text);
+        }
+        if let Some(local) = door.wall_time(text) {
+            return local;
+        }
+    }
+    text.to_owned()
+}
+
 pub fn status(door: &dyn Door, system: &str) -> Option<wire::FollowStatus> {
     let request = wire::Request {
         kind: Some(wire::request::Kind::Follow(wire::FollowRequest {
@@ -308,5 +417,187 @@ impl RoomScreen for StopConfirm {
             },
             Err(refused) => Outcome::refuse(&refused.0),
         }
+    }
+}
+
+pub const WATCH: &str = "follow";
+
+fn resource(system: &str) -> Resource {
+    match system {
+        "contacts" => Resource::Contacts,
+        "calendar" => Resource::Calendar,
+        "reminders" => Resource::Reminders,
+        "health" => Resource::Health,
+        "files" => Resource::Files,
+        _ => Resource::Photos,
+    }
+}
+
+fn store(system: &str) -> String {
+    match system {
+        "contacts" => words::store_contacts(EN),
+        "calendar" => words::store_calendar(EN),
+        "reminders" => words::store_reminders(EN),
+        "health" => words::store_health(EN),
+        "files" => words::store_files(EN),
+        _ => words::store_camera_roll(EN),
+    }
+}
+
+fn source(system: &str) -> String {
+    match system {
+        "contacts" => words::source_contacts(EN),
+        "calendar" => words::source_calendar(EN),
+        "reminders" => words::source_reminders(EN),
+        "health" => words::source_health(EN),
+        "files" => words::source_files(EN),
+        _ => words::source_camera_roll(EN),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::selector::Act;
+    use super::phone_says;
+    use crate::room::door::{Done, Refused};
+    use crate::room::selector::Sel;
+    use centraid_domain::apps::entity::PhoneDifferenceRow;
+
+    struct TestDoor;
+
+    impl super::super::door::Door for TestDoor {
+        fn act(&self, _: &Act) -> Result<Done, Refused> {
+            Err(Refused("not used".to_owned()))
+        }
+
+        fn undo(&self) -> Result<Done, Refused> {
+            Err(Refused("not used".to_owned()))
+        }
+
+        fn now_ms(&self) -> i64 {
+            0
+        }
+    }
+
+    fn difference(stated: &str) -> PhoneDifferenceRow {
+        PhoneDifferenceRow {
+            id: "source-1".to_owned(),
+            origin_id: "origin-1".to_owned(),
+            system: "contacts".to_owned(),
+            external_id: "external-1".to_owned(),
+            stated: stated.to_owned(),
+            stated_title: serde_json::from_str::<serde_json::Value>(stated)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("title")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                }),
+            seen_at: "2026-11-27T00:00:00Z".to_owned(),
+            origin_label: "Phone".to_owned(),
+        }
+    }
+
+    #[test]
+    fn phone_says_only_offers_a_changed_stated_field() {
+        let current = [("given", "Given name".to_owned(), serde_json::json!("Jo"))];
+        let mut matching = Sel::new();
+        assert!(
+            phone_says(
+                &mut matching,
+                &TestDoor,
+                "person-1",
+                &difference(r#"{"given":"Jo"}"#),
+                &current
+            )
+            .is_none()
+        );
+
+        let mut changed = Sel::new();
+        assert!(
+            phone_says(
+                &mut changed,
+                &TestDoor,
+                "person-1",
+                &difference(r#"{"given":"Jordan"}"#),
+                &current
+            )
+            .is_some()
+        );
+        let handlers = changed.finish().unwrap();
+        assert_eq!(handlers.len(), 1);
+        assert!(
+            matches!(handlers.get("phone-says/source-1/given"), Some(crate::room::selector::Handler::Act(act)) if act.name == "follow.take_stated" && act.input == serde_json::json!({"entity":"person-1","field":"given","origin":"origin-1"}))
+        );
+    }
+
+    #[test]
+    fn an_explicit_phone_clear_is_shown_but_a_missing_field_is_not() {
+        let mut cleared = Sel::new();
+        assert!(
+            phone_says(
+                &mut cleared,
+                &TestDoor,
+                "person-1",
+                &difference(r#"{"given":null}"#),
+                &[("given", "Given name".to_owned(), serde_json::json!("Jo"))],
+            )
+            .is_some()
+        );
+
+        let mut unchanged = Sel::new();
+        assert!(
+            phone_says(
+                &mut unchanged,
+                &TestDoor,
+                "person-1",
+                &difference(r#"{"given":null}"#),
+                &[("given", "Given name".to_owned(), serde_json::Value::Null)],
+            )
+            .is_none()
+        );
+
+        let mut absent = Sel::new();
+        assert!(
+            phone_says(
+                &mut absent,
+                &TestDoor,
+                "person-1",
+                &difference("{}"),
+                &[("given", "Given name".to_owned(), serde_json::json!("Jo"))],
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn canonical_collection_changes_are_one_scoped_take_action() {
+        let mut selectors = Sel::new();
+        let source = difference(r#"{"points":[{"kind":"phone","value":"+1 555 010 0000"}]}"#);
+        let current = [(
+            "points",
+            "Contact details".to_owned(),
+            serde_json::json!([{"kind":"phone","value":"+1 555 010 9999"}]),
+        )];
+        assert!(phone_says(&mut selectors, &TestDoor, "person-1", &source, &current).is_some());
+        let handlers = selectors.finish().unwrap();
+        assert_eq!(handlers.len(), 1);
+        assert!(
+            matches!(handlers.get("phone-says/source-1/points"), Some(crate::room::selector::Handler::Act(act)) if act.input == serde_json::json!({"entity":"person-1","field":"points","origin":"origin-1"}))
+        );
+    }
+
+    #[test]
+    fn imported_title_uses_its_separate_stated_title() {
+        let mut selectors = Sel::new();
+        let mut source = difference("{}");
+        source.stated_title = Some("Phone name".to_owned());
+        let current = [("title", "Title".to_owned(), serde_json::json!("Vault name"))];
+        assert!(phone_says(&mut selectors, &TestDoor, "event-1", &source, &current).is_some());
+        let handlers = selectors.finish().unwrap();
+        assert!(
+            matches!(handlers.get("phone-says/source-1/title"), Some(crate::room::selector::Handler::Act(act)) if act.input == serde_json::json!({"entity":"event-1","field":"title","origin":"origin-1"}))
+        );
     }
 }

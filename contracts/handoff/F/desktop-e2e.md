@@ -1,4 +1,6 @@
-# Lane F → lane G: the two desktop gate steps
+# Historical: Lane F → lane G desktop gate proposal
+
+This is a record of a former desktop app layout and gate proposal. Centraid no longer has the `desktop/` app or Vitest project described below; do not use these commands as current repository instructions.
 
 **Status: already applied.** Lane G had landed by the time lane F reached this point, so the steps were spliced into `crates/xtask/src/gate.rs` directly rather than handed over as a patch — the route the umbrella's state block named as preferred once G was done. This note is the record of what was added and why, so a reader of `gate.rs` does not have to reconstruct the reasoning from the diff.
 

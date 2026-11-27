@@ -31,20 +31,32 @@ fn alive(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 fn newest(ctx: &CommandCtx<'_, '_>) -> Result<Option<i64>> {
+    newest_for(ctx, ctx.required_str("id")?)
+}
+
+fn newest_for(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<i64>> {
     Ok(ctx.connection().query_row(
         "SELECT MAX(seq) FROM revision WHERE entity_id = ?1",
-        [ctx.required_str("id")?],
+        [id],
         |row| row.get(0),
     )?)
 }
 
 fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    if let Some(sentence) = alive(ctx)? {
+    pre_restore_pair(
+        ctx,
+        ctx.required_str("id")?,
+        ctx.input["seq"].as_i64().unwrap_or_default(),
+    )
+}
+
+fn pre_restore_pair(ctx: &CommandCtx<'_, '_>, id: &str, seq: i64) -> Result<Option<String>> {
+    if let Some(sentence) = lookup_live(ctx.connection(), id)?.err() {
         return Ok(Some(sentence));
     }
     let held: i64 = ctx.connection().query_row(
         "SELECT COUNT(*) FROM revision WHERE entity_id = ?1 AND seq = ?2",
-        rusqlite::params![ctx.required_str("id")?, ctx.input["seq"].as_i64()],
+        rusqlite::params![id, seq],
         |row| row.get(0),
     )?;
     if held == 0 {
@@ -52,14 +64,9 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             "That version is not in this record's history.".to_owned(),
         ));
     }
-    let id = ctx.required_str("id")?;
     let connection = ctx.connection();
     let (Some(wanted), Some(now)) = (
-        history::version_state(
-            connection,
-            id,
-            ctx.input["seq"].as_i64().unwrap_or_default(),
-        )?,
+        history::version_state(connection, id, seq)?,
         history::current_state(connection, id)?,
     ) else {
         return Ok(None);
@@ -68,6 +75,55 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         wanted["txn"].get(column) != now["txn"].get(column) && now["txn"].get(column).is_some()
     });
     Ok((fixed && is_statement_line(connection, id)?).then(|| STATEMENT_LINE_SAYS.to_owned()))
+}
+
+#[derive(serde::Deserialize)]
+struct RestoreManyItem {
+    id: String,
+    seq: i64,
+    expected_rev: i64,
+}
+
+#[derive(serde::Deserialize)]
+struct RestoreManyInput {
+    items: Vec<RestoreManyItem>,
+}
+
+fn pre_restore_many(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let input: RestoreManyInput = ctx.parse_input()?;
+    let mut seen = std::collections::BTreeSet::new();
+    for item in input.items {
+        if !seen.insert(item.id.clone()) {
+            return Ok(Some("A record was included more than once.".to_owned()));
+        }
+        if let Some(sentence) = pre_restore_pair(ctx, &item.id, item.seq)? {
+            return Ok(Some(sentence));
+        }
+        if newest_for(ctx, &item.id)? != Some(item.expected_rev) {
+            return Ok(Some(CHANGED_SINCE.to_owned()));
+        }
+    }
+    Ok(None)
+}
+
+fn restore_many(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: RestoreManyInput = ctx.parse_input()?;
+    let mut restored = Vec::new();
+    for item in input.items {
+        let result = history::restore_version(ctx, &item.id, item.seq, Scope::All)?.unwrap_or(
+            history::Restored {
+                restored: false,
+                kept_current: Vec::new(),
+            },
+        );
+        restored.push(serde_json::json!({
+            "id": item.id,
+            "seq": item.seq,
+            "restored": result.restored,
+            "kept_current": result.kept_current,
+        }));
+    }
+    Ok(serde_json::json!({ "items": restored }))
 }
 
 /// The columns of a line the bank stated that are never edited.
@@ -251,6 +307,11 @@ const RESTORE: &[CommandCondition] = &[CommandCondition {
     check: pre_restore,
 }];
 
+const RESTORE_MANY: &[CommandCondition] = &[CommandCondition {
+    predicate: "every record is live and each version is in its history",
+    check: pre_restore_many,
+}];
+
 const UNDO: &[CommandCondition] = &[CommandCondition {
     predicate: "the record is live and has an earlier version",
     check: pre_undo,
@@ -274,6 +335,32 @@ pub fn definitions() -> Vec<CommandDefinition> {
             Idempotency::Idempotent,
             RESTORE,
             restore_version,
+        ),
+        CommandDefinition::plain(
+            "history.restore_many",
+            "history",
+            r#"{
+              "type": "object",
+              "required": ["items"],
+              "additionalProperties": false,
+              "properties": {
+                "items": {
+                  "type": "array", "minItems": 1, "maxItems": 500,
+                  "items": {
+                    "type": "object", "required": ["id", "seq", "expected_rev"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "seq": { "type": "integer", "minimum": 1 },
+                      "expected_rev": { "type": "integer", "minimum": 1 }
+                    }
+                  }
+                }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            RESTORE_MANY,
+            restore_many,
         ),
         CommandDefinition::plain(
             "history.keep_version",

@@ -19,6 +19,29 @@ impl Open {
         format!("{}/{}", self.kind, self.id)
     }
 
+    pub fn route_key(&self) -> Result<String, Refused> {
+        let route = match self.kind.as_str() {
+            "person" => "person",
+            "event" => "calendar/event",
+            "calendar" => "calendar/calendar",
+            "task" => "reminders/task",
+            "task_list" => "reminders/list",
+            "txn" => "money/txn",
+            "account" => "money/account",
+            "note" => "notes/note",
+            "notebook" => "notes/notebook",
+            "document" => "docs/doc",
+            "folder" => "docs/folder",
+            "photo" => "photos/photo",
+            "album" => "photos/album",
+            "place" => "photos/place",
+            "workout" => "health/workout",
+            "locker_item" => "locker/item",
+            _ => return Err(Refused::NoRoom(self.kind.clone())),
+        };
+        Ok(format!("{route}/{}", self.id))
+    }
+
     #[must_use]
     pub fn url(&self) -> String {
         format!("centraid://open/{}/{}", self.kind, self.id)
@@ -32,6 +55,7 @@ pub enum Refused {
     NotOpen,
     UnknownKind(String),
     BadId,
+    NoRoom(String),
 }
 
 impl std::fmt::Display for Refused {
@@ -41,6 +65,7 @@ impl std::fmt::Display for Refused {
             Self::NotOpen => f.write_str("not an open link"),
             Self::UnknownKind(kind) => write!(f, "no kind `{kind}`"),
             Self::BadId => f.write_str("the id is not an id"),
+            Self::NoRoom(kind) => write!(f, "no room opens `{kind}`"),
         }
     }
 }
@@ -89,4 +114,63 @@ pub fn parse(url: &str) -> Result<Open, Refused> {
 #[must_use]
 pub fn link(kind: &str, id: &str) -> String {
     format!("centraid://open/{kind}/{id}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grammar_resolves_entity_to_its_app_route() {
+        let parsed = parse("centraid://open/event/event-1").expect("valid item URL");
+        assert_eq!(parsed.route_key(), Ok("calendar/event/event-1".to_owned()));
+        assert_eq!(parsed.url(), "centraid://open/event/event-1");
+    }
+
+    #[test]
+    fn routes_are_named_by_each_registered_detail_room() {
+        for (kind, route) in [
+            ("person", "person"),
+            ("event", "calendar/event"),
+            ("calendar", "calendar/calendar"),
+            ("task", "reminders/task"),
+            ("task_list", "reminders/list"),
+            ("txn", "money/txn"),
+            ("account", "money/account"),
+            ("note", "notes/note"),
+            ("notebook", "notes/notebook"),
+            ("document", "docs/doc"),
+            ("folder", "docs/folder"),
+            ("photo", "photos/photo"),
+            ("album", "photos/album"),
+            ("place", "photos/place"),
+            ("workout", "health/workout"),
+            ("locker_item", "locker/item"),
+        ] {
+            let open = Open {
+                kind: kind.to_owned(),
+                id: "item-1".to_owned(),
+                app: "unused",
+            };
+            assert_eq!(open.route_key(), Ok(format!("{route}/item-1")));
+        }
+    }
+
+    #[test]
+    fn grammar_rejects_unknown_or_extra_path_parts() {
+        assert!(matches!(
+            parse("centraid://open/not_a_kind/item"),
+            Err(Refused::UnknownKind(_))
+        ));
+        assert_eq!(
+            parse("centraid://open/event/event-1/edit"),
+            Err(Refused::BadId)
+        );
+        assert_eq!(
+            parse("centraid://open/reading/item-1")
+                .expect("reading is a kind")
+                .route_key(),
+            Err(Refused::NoRoom("reading".to_owned()))
+        );
+    }
 }

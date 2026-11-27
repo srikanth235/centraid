@@ -19,6 +19,7 @@ const TASK_TODAY: &str = "01900000-0000-7000-8000-000000000202";
 const TASK_OVERDUE: &str = "01900000-0000-7000-8000-000000000203";
 const TASK_SUB: &str = "01900000-0000-7000-8000-000000000204";
 const TASK_DONE: &str = "01900000-0000-7000-8000-000000000205";
+const TASK_INBOX: &str = "01900000-0000-7000-8000-000000000206";
 const PERSON_ID: &str = "01900000-0000-7000-8000-000000000301";
 
 fn phone(dir: &std::path::Path) -> Handle {
@@ -216,6 +217,12 @@ fn seed_world(handle: &Handle) {
     );
     cmd(
         handle,
+        "task.add",
+        json!({ "id": TASK_INBOX, "title": "Pay water bill" }),
+        "seed-inbox-task",
+    );
+    cmd(
+        handle,
         "flag.set",
         json!({ "flag": "starred", "ids": [TASK_TODAY] }),
         "seed-star",
@@ -293,10 +300,52 @@ fn reminders_smart_lists_subtasks_typed_date_chips_and_holder_confirm() {
     let handle = phone(dir.path());
     seed_world(&handle);
 
+    cmd(
+        &handle,
+        "task.edit",
+        json!({ "id": TASK_INBOX, "title": "Pay water bill next week" }),
+        "edit-inbox-task",
+    );
+    let versions = open(
+        &handle,
+        &format!("reminders/task/{TASK_INBOX}/versions"),
+        "reminders",
+        false,
+    );
+    assert!(snapshot::render(room_of(&versions)).contains("Restore"));
+    let restored = send(&handle, versions.instance, tap("version/1")).remove(0);
+    assert_eq!(
+        room_of(&restored)
+            .status_line
+            .as_ref()
+            .unwrap()
+            .action_label,
+        "Undo"
+    );
+    let restored_task = open(
+        &handle,
+        &format!("reminders/task/{TASK_INBOX}"),
+        "reminders",
+        false,
+    );
+    let restored_text = snapshot::render(room_of(&restored_task));
+    assert!(restored_text.contains("Pay water bill"));
+    assert!(!restored_text.contains("next week"));
+
     let root = open(&handle, "reminders", "reminders", true);
     snapshot::assert_room("reminders_today", room_of(&root));
+    let root_text = snapshot::render(room_of(&root));
+    assert!(root_text.contains("Inbox"));
+    assert!(
+        root_text.contains("1 open"),
+        "only the one open unfiled task counts: {root_text}"
+    );
+    let inbox = open(&handle, "reminders/inbox", "reminders", false);
+    assert!(snapshot::render(room_of(&inbox)).contains("Pay water bill"));
+    assert!(!snapshot::render(room_of(&inbox)).contains("Book flights"));
 
     // Switch to Completed smart list (exercises task_by_done).
+    let root = send(&handle, inbox.instance, tap("back")).remove(0);
     let completed = send(
         &handle,
         root.instance,
@@ -334,7 +383,40 @@ fn reminders_smart_lists_subtasks_typed_date_chips_and_holder_confirm() {
     let ftext = snapshot::render(room_of(&typed));
     assert!(ftext.contains("Buy milk"), "{ftext}");
     assert!(ftext.contains("Tomorrow"), "{ftext}");
-    assert!(ftext.contains("2026-06-16"), "{ftext}");
+    assert!(ftext.contains("Tue 16 Jun"), "{ftext}");
+
+    let ambiguous = send(
+        &handle,
+        form.instance,
+        text_change("field/title", 2, "Pay utilities tomorrow or Friday"),
+    )
+    .remove(0);
+    assert!(snapshot::render(room_of(&ambiguous)).contains("date wording is unclear"));
+    let refused = send(&handle, ambiguous.instance, tap("form/save")).remove(0);
+    assert!(room_of(&refused).status_line.as_ref().unwrap().refused);
+
+    // A reopened draft keeps the ambiguous-date guard; entering one exact date only previews it.
+    let reopened_form = open(&handle, "reminders/new", "reminders", false);
+    assert!(snapshot::render(room_of(&reopened_form)).contains("date wording is unclear"));
+    let refused = send(&handle, reopened_form.instance, tap("form/save")).remove(0);
+    assert!(room_of(&refused).status_line.as_ref().unwrap().refused);
+    let preview = send(
+        &handle,
+        reopened_form.instance,
+        text_change("field/due", 1, "2026-06-18"),
+    )
+    .remove(0);
+    let preview_text = snapshot::render(room_of(&preview));
+    assert!(
+        preview_text.contains("Review before adding"),
+        "{preview_text}"
+    );
+    assert!(preview_text.contains("Add reminder"), "{preview_text}");
+    let added = send(&handle, reopened_form.instance, tap("form/save")).remove(0);
+    assert_eq!(
+        room_of(&added).status_line.as_ref().unwrap().sentence,
+        "Reminder added"
+    );
 
     // Holder trash confirm names held task count.
     let confirm = open(
@@ -388,6 +470,38 @@ fn restore_inverse_undo_restores_edited_event_and_refuses_when_changed_since() {
     let dir = tempfile::tempdir().expect("tempdir");
     let handle = phone(dir.path());
     seed_world(&handle);
+
+    cmd(
+        &handle,
+        "event.edit",
+        json!({ "id": EV_STANDUP, "title": "Evening standup" }),
+        "edit-event-for-version-restore",
+    );
+    let versions = open(
+        &handle,
+        &format!("calendar/event/{EV_STANDUP}/versions"),
+        "calendar",
+        false,
+    );
+    assert!(snapshot::render(room_of(&versions)).contains("Restore"));
+    let restored = send(&handle, versions.instance, tap("version/1")).remove(0);
+    assert_eq!(
+        room_of(&restored)
+            .status_line
+            .as_ref()
+            .unwrap()
+            .action_label,
+        "Undo"
+    );
+    let restored_event = open(
+        &handle,
+        &format!("calendar/event/{EV_STANDUP}"),
+        "calendar",
+        false,
+    );
+    let restored_text = snapshot::render(room_of(&restored_event));
+    assert!(restored_text.contains("Morning standup"));
+    assert!(!restored_text.contains("Evening standup"));
 
     // Open event detail, then push edit form, rename it, and save.
     let _detail = open(

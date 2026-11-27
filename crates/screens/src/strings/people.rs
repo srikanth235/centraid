@@ -72,7 +72,6 @@ catalog! {
     plain reminder_added = ("Reminder set", "Reminder set");
     plain reminder_removed = ("Reminder removed", "Reminder removed");
     plain copied = ("Copied", "Copied");
-    plain opened = ("Opened", "Opened");
     plain shared = ("Ready to share", "Ready to share");
 
     plain footer_linked = ("Linked", "Linked");
@@ -86,6 +85,10 @@ catalog! {
     plain attach_photo = ("Photo", "Photo");
 
     plain field_name = ("Name", "Name");
+    plain field_given = ("Given name", "Given name");
+    plain field_family = ("Family name", "Family name");
+    plain field_phonetic = ("Pronunciation", "Pronunciation");
+    plain field_form = ("Name form", "Name form");
     plain field_name_required = ("Enter a name", "Enter a name");
     plain field_role = ("Role", "Role");
     plain field_org = ("Organisation", "Organisation");
@@ -143,5 +146,8 @@ catalog! {
     plain add_member_empty = ("Everyone is already in this list.", "Everyone is already in this list.");
     plain follow_contacts_note = ("Phone contacts following is managed in device settings.", "Phone contacts following is managed in device settings.");
     plain import_note = ("Choose a vCard or CSV file on this phone to import.", "Choose a vCard or CSV file on this phone to import.");
-    plain export_note = ("Confirm it's you on this phone to export People.", "Confirm it's you on this phone to export People.");
+    plain import_failed = ("This contacts file could not be imported.", "This contacts file could not be imported.");
+    plain import_review_title = ("Review contacts import", "Review contacts import");
+    plain import_review_body = ("{added} new, {merged} updates, {unchanged} unchanged, {declined} skipped.", "{added} new, {merged} updates, {unchanged} unchanged, {declined} skipped.");
+    plain import_review_confirm = ("Import contacts", "Import contacts");
 }

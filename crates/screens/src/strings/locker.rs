@@ -2,15 +2,20 @@ catalog! {
     plain title = ("Locker", "Locker");
     plain tab_items = ("Items", "Items");
     plain tab_starred = ("Starred", "Starred");
-    plain more_export = ("Export", "Export");
     plain more_alerts = ("Expiry alerts", "Expiry alerts");
+    counted selected_count = ("1 selected", "{n} selected");
+    plain menu_select = ("Select", "Select");
 
     plain wall_title = ("Locker is locked", "Locker is locked");
     plain wall_body = ("Confirm it's you to view your saved items.", "Confirm it's you to view your saved items.");
     plain wall_unlock = ("Unlock Locker", "Unlock Locker");
-    plain unlocked_subtitle = ("Unlocked · locks after 5 minutes idle", "Unlocked · locks after 5 minutes idle");
+    plain unlocked_subtitle = ("Unlocked", "Unlocked");
     plain locked_subtitle = ("Locked", "Locked");
     plain lock_action = ("Lock", "Lock");
+    plain wall_unlock_cleared = ("Cleared {count} failed unlocks.", "Cleared {count} failed unlocks.");
+    plain wall_failed = ("{count} failed unlocks · Last: {at}", "{count} failed unlocks · Last: {at}");
+    plain wall_no_passcode = ("Set a passcode on this phone to open Locker.", "Set a passcode on this phone to open Locker.");
+    plain wall_unlock_failed = ("The phone did not confirm it was you.", "The phone did not confirm it was you.");
 
     plain search_placeholder = ("Search titles and usernames", "Search titles and usernames");
     plain items_empty_title = ("Locker is empty", "Locker is empty");
@@ -31,12 +36,19 @@ catalog! {
     plain item_title_required = ("Enter a title.", "Enter a title.");
     plain item_fields_heading = ("Fields", "Fields");
     plain item_passkeys_heading = ("Passkeys", "Passkeys");
+    plain item_passkey_rename = ("Rename passkey", "Rename passkey");
+    plain item_passkey_name = ("Name", "Name");
     plain item_files_heading = ("Private files", "Private files");
     plain item_file_hidden = ("Protected file", "Protected file");
     plain item_reveal_note = ("Confirm it's you to reveal this value.", "Confirm it's you to reveal this value.");
+    plain item_copied = ("Copied to clipboard.", "Copied to clipboard.");
+    plain item_copy_failed = ("The value could not be copied.", "The value could not be copied.");
     plain item_passkey_remove = ("Remove passkey", "Remove passkey");
     plain item_passkey_removed = ("Passkey removed", "Passkey removed");
     plain item_field_add = ("Add field", "Add field");
+    plain item_field_edit = ("Edit field", "Edit field");
+    plain item_field_manage = ("Manage fields", "Manage fields");
+    plain item_field_secret_replacement = ("New secret · leave blank to keep", "New secret · leave blank to keep");
     plain item_field_label = ("Field label", "Field label");
     plain item_field_value = ("Value", "Value");
     plain item_field_kind = ("Field kind", "Field kind");
@@ -61,11 +73,6 @@ catalog! {
     plain alert_snoozed = ("Alert snoozed for 1 hour", "Alert snoozed for 1 hour");
     plain alert_snoozed_meta = ("Snoozed", "Snoozed");
 
-    plain export_title = ("Export Locker", "Export Locker");
-    plain export_body = ("Confirm it's you to export Locker as a portable archive.", "Confirm it's you to export Locker as a portable archive.");
-    plain export_confirm = ("Confirm and export", "Confirm and export");
-    plain export_started = ("Confirm it's you to export Locker.", "Confirm it's you to export Locker.");
-
     plain type_login = ("Login", "Login");
     plain type_card = ("Card", "Card");
     plain type_note = ("Private note", "Private note");
@@ -85,6 +92,8 @@ catalog! {
     plain field_kind_text = ("Text", "Text");
     plain field_kind_url = ("Website", "Website");
     plain field_kind_date = ("Date", "Date");
+    plain field_kind_sealed = ("Secret", "Secret");
+    plain field_kind_otp = ("One-time code", "One-time code");
 
     plain linked_heading = ("Linked", "Linked");
     plain attachments_heading = ("Attachments", "Attachments");

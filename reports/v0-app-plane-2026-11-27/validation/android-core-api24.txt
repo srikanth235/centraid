@@ -1,0 +1,12 @@
+==> building aarch64-linux-android
+   Compiling centraid-vault v1.0.0-alpha.0 (/workspace/centraid/crates/vault)
+   Compiling centraid-domain v1.0.0-alpha.0 (/workspace/centraid/crates/domain)
+   Compiling centraid-search v1.0.0-alpha.0 (/workspace/centraid/crates/search)
+   Compiling centraid-blobs v1.0.0-alpha.0 (/workspace/centraid/crates/blobs)
+   Compiling centraid-assist v1.0.0-alpha.0 (/workspace/centraid/crates/assist)
+   Compiling centraid-core v1.0.0-alpha.0 (/workspace/centraid/crates/core)
+   Compiling centraid-assist-llama v1.0.0-alpha.0 (/workspace/centraid/crates/assist-llama)
+   Compiling centraid-screens v1.0.0-alpha.0 (/workspace/centraid/crates/screens)
+   Compiling centraid-core-ffi v1.0.0-alpha.0 (/workspace/centraid/crates/core-ffi)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 07s
+==> /workspace/centraid/mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so

@@ -406,6 +406,9 @@ pub fn banned_in(key: &str, value: &str) -> Vec<&'static str> {
         ("successfully", &["successfully"]),
         ("simply", &["simply"]),
         ("in order to", &["in order to"]),
+        ("Retry", &["retry", "retries"]),
+        ("Pair a laptop", &["pair a laptop", "pair your laptop"]),
+        ("thumbnails", &["thumbnail", "thumbnails"]),
     ];
     for &(name, variants) in plain_words {
         if variants.iter().any(|v| has_word_phrase(&lower, v)) {

@@ -6,7 +6,7 @@
     {
       "name": "current",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "last_ack_ms": 1794560000000
       },
       "standing": "Up to date",
@@ -16,7 +16,7 @@
     {
       "name": "paired_but_never_acknowledged",
       "device": {
-        "label": "Office NAS"
+        "label": "Home computer"
       },
       "standing": "Catching up",
       "notes": [],
@@ -25,7 +25,7 @@
     {
       "name": "another_phone_took_over",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "reach_state": "moved"
       },
       "standing": "Another phone took over",
@@ -35,7 +35,7 @@
     {
       "name": "paused_by_its_operator",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "reach_state": "frozen"
       },
       "standing": "Paused by whoever runs it",
@@ -45,7 +45,7 @@
     {
       "name": "too_old",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "reach_state": "gateway_old"
       },
       "standing": "Needs an update",
@@ -55,7 +55,7 @@
     {
       "name": "an_old_backup_cannot_be_read",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "manifest_unreadable": true,
         "last_ack_ms": 1794560000000
       },
@@ -66,7 +66,7 @@
     {
       "name": "a_damaged_piece_is_sent_again",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "reach_state": "repairing",
         "last_ack_ms": 1794560000000
       },
@@ -77,7 +77,7 @@
     {
       "name": "three_deletes_held",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "held_count": 3,
         "held_undoable": 3,
         "held_purge_at_ms": 1795176000000,
@@ -90,7 +90,7 @@
     {
       "name": "one_delete_held",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "held_count": 1,
         "held_undoable": 1,
         "held_purge_at_ms": 1795176000000,
@@ -103,7 +103,7 @@
     {
       "name": "held_on_a_paused_device_says_kept_and_no_date_and_cannot_be_undone_from_here",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "reach_state": "frozen",
         "held_count": 2,
         "held_undoable": 2
@@ -115,7 +115,7 @@
     {
       "name": "a_held_count_with_no_date_says_nothing",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "held_count": 2,
         "held_undoable": 2,
         "last_ack_ms": 1794560000000
@@ -127,7 +127,7 @@
     {
       "name": "all_three_notes_in_order",
       "device": {
-        "label": "Office NAS",
+        "label": "Home computer",
         "reach_state": "repairing",
         "manifest_unreadable": true,
         "held_count": 3,
@@ -154,7 +154,7 @@
         "content_confirmed": 10,
         "devices": [
           {
-            "label": "Office NAS",
+            "label": "Home computer",
             "last_ack_ms": 1794560280000
           }
         ]
@@ -176,14 +176,14 @@
             "last_ack_ms": 1794560280000
           },
           {
-            "label": "Office NAS",
+            "label": "Home computer",
             "last_ack_ms": 1794560280000,
             "reach_state": "frozen"
           }
         ]
       },
-      "sentence": "Office NAS is paused",
-      "reason": "Office NAS is paused by whoever runs it. Centraid asks again at the next backup.",
+      "sentence": "Home computer is paused",
+      "reason": "Home computer is paused by whoever runs it. Centraid asks again at the next backup.",
       "tone": "attention"
     },
     {
@@ -198,14 +198,14 @@
             "last_ack_ms": 1794560280000
           },
           {
-            "label": "Office NAS",
+            "label": "Home computer",
             "last_ack_ms": 1794560280000,
             "reach_state": "gateway_old"
           }
         ]
       },
-      "sentence": "Office NAS needs an update",
-      "reason": "Office NAS runs an older version than this phone. Update it, then back up again.",
+      "sentence": "Home computer needs an update",
+      "reason": "Home computer runs an older version than this phone. Update it, then back up again.",
       "tone": "attention"
     },
     {
@@ -220,13 +220,13 @@
             "last_ack_ms": 1794560280000
           },
           {
-            "label": "Office NAS",
+            "label": "Home computer",
             "last_ack_ms": 1794560280000,
             "reach_state": "moved"
           }
         ]
       },
-      "sentence": "Another phone took over Office NAS",
+      "sentence": "Another phone took over Home computer",
       "reason": "Not you? Ask whoever runs your backup device to pause it.",
       "tone": "attention"
     }
@@ -267,8 +267,8 @@
     {
       "name": "one_gateway_cannot_prove_it_holds_the_newest",
       "date": "Sunday 8 November",
-      "label": "Office NAS",
-      "sentence": "The newest backup found is from Sunday 8 November, on Office NAS. A newer one may be on a backup device that didn't answer. Restore this one?"
+      "label": "Home computer",
+      "sentence": "The newest backup found is from Sunday 8 November, on Home computer. A newer one may be on a backup device that didn't answer. Restore this one?"
     }
   ],
   "classes": [
@@ -626,7 +626,7 @@
             ]
           },
           {
-            "label": "Office NAS",
+            "label": "Home computer",
             "last_ack_ms": 1794473880000,
             "classes": [
               {
@@ -690,14 +690,14 @@
         {
           "name": "Photo previews",
           "detail": "All 1,240 on Mac mini",
-          "note": "184 waiting for Office NAS",
+          "note": "184 waiting for Home computer",
           "status": "1 of 2 devices",
           "waiting": true
         },
         {
           "name": "Photos and files",
           "detail": "All 1,282 on Mac mini",
-          "note": "184 waiting for Office NAS",
+          "note": "184 waiting for Home computer",
           "status": "1 of 2 devices",
           "waiting": true
         }

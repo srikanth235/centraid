@@ -266,13 +266,16 @@ fn home_tile_opens_money_activity_and_list_flows_work() {
     )
     .remove(0);
     let text = snapshot::render(searched.room.as_ref().unwrap());
-    assert!(text.contains("Market Fresh"));
+    assert!(
+        text.contains("Market Fresh"),
+        "search must retain the seeded matching transaction: {text}"
+    );
     assert!(!text.contains("Payroll"));
 
     let detail = send(
         &handle,
         activity.instance,
-        tap(&format!("row/{TXN_GROCERY_ID}")),
+        tap(&format!("search/hit/{TXN_GROCERY_ID}")),
     )
     .remove(0);
     assert_eq!(
@@ -308,7 +311,7 @@ fn home_tile_opens_money_activity_and_list_flows_work() {
     let undone = send(&handle, activity.instance, tap("status/undo")).remove(0);
     assert!(snapshot::render(undone.room.as_ref().unwrap()).contains("Payroll"));
 
-    // Select mode: bulk categorize in one commit.
+    // Select two rows: one category action receives both ids and exposes one Undo.
     let selecting = send(
         &handle,
         activity.instance,
@@ -321,15 +324,85 @@ fn home_tile_opens_money_activity_and_list_flows_work() {
         activity.instance,
         tap(&format!("row/{TXN_SALARY_ID}")),
     );
+    let selecting = send(
+        &handle,
+        activity.instance,
+        tap(&format!("row/{TXN_GROCERY_ID}")),
+    )
+    .remove(0);
+    assert!(snapshot::render(selecting.room.as_ref().unwrap()).contains("2 selected"));
     let bulk = send(&handle, activity.instance, tap("selection/categorize")).remove(0);
+    let bulk_room = bulk.room.as_ref().unwrap();
+    assert_eq!(
+        bulk_room
+            .status_line
+            .as_ref()
+            .map(|status| status.action_label.as_str()),
+        Some("Undo"),
+        "one batch category action has one Undo"
+    );
+    assert!(!bulk_room.selection.as_ref().is_some_and(|s| s.on));
+
+    let salary = open(
+        &handle,
+        &format!("money/txn/{TXN_SALARY_ID}"),
+        "home",
+        false,
+    );
+    let salary_category = snapshot::render(salary.room.as_ref().unwrap());
+    send(&handle, salary.instance, tap("back"));
+    let grocery = open(
+        &handle,
+        &format!("money/txn/{TXN_GROCERY_ID}"),
+        "home",
+        false,
+    );
+    let grocery_category = snapshot::render(grocery.room.as_ref().unwrap());
+    send(&handle, grocery.instance, tap("back"));
+    let category = |rendered: &str| {
+        rendered
+            .lines()
+            .find(|line| line.trim_start().starts_with("fact \"Category\""))
+            .and_then(|line| line.split("\"Category\" \"").nth(1))
+            .and_then(|rest| rest.split('"').next())
+            .expect("transaction detail shows a category")
+            .to_owned()
+    };
+    assert_eq!(category(&salary_category), category(&grocery_category));
+    assert_ne!(category(&salary_category), "Uncategorized");
+
+    let undone = send(&handle, activity.instance, tap("status/undo")).remove(0);
     assert!(
-        !bulk
+        !undone
             .room
             .as_ref()
             .unwrap()
-            .selection
+            .status_line
             .as_ref()
-            .is_some_and(|s| s.on)
+            .unwrap()
+            .refused
+    );
+    let salary = open(
+        &handle,
+        &format!("money/txn/{TXN_SALARY_ID}"),
+        "home",
+        false,
+    );
+    let salary_after_undo = snapshot::render(salary.room.as_ref().unwrap());
+    assert!(
+        salary_after_undo.contains("Uncategorized"),
+        "{salary_after_undo}"
+    );
+    let grocery = open(
+        &handle,
+        &format!("money/txn/{TXN_GROCERY_ID}"),
+        "home",
+        false,
+    );
+    let grocery_after_undo = snapshot::render(grocery.room.as_ref().unwrap());
+    assert!(
+        grocery_after_undo.contains("Groceries"),
+        "{grocery_after_undo}"
     );
 }
 
@@ -431,6 +504,98 @@ fn txn_detail_shows_splits_statement_says_and_footers() {
     assert!(text.contains("Groceries"));
     assert!(text.contains("Dining"));
     snapshot::assert_room("money_txn_detail", detail.room.as_ref().unwrap());
+
+    let versions = open(
+        &handle,
+        &format!("money/txn/{stmt_id}/versions"),
+        "home",
+        false,
+    );
+    assert!(snapshot::render(versions.room.as_ref().unwrap()).contains("Restore"));
+    let restored = send(&handle, versions.instance, tap("version/1")).remove(0);
+    let status = restored
+        .room
+        .as_ref()
+        .unwrap()
+        .status_line
+        .as_ref()
+        .unwrap();
+    assert!(status.refused);
+    assert_eq!(
+        status.sentence,
+        "The bank stated this line, so its day, amount and account stay the bank's."
+    );
+    let restored_detail = open(&handle, &format!("money/txn/{stmt_id}"), "home", false);
+    let restored_text = snapshot::render(restored_detail.room.as_ref().unwrap());
+    assert!(restored_text.contains("hero \"Corner Co-op\""));
+    assert!(restored_text.contains("line \"-$60.00\""));
+
+    // Hand-entered transactions can restore an earlier version, then undo that restore once.
+    cmd(
+        &handle,
+        "entity.retitle",
+        json!({ "id": TXN_SALARY_ID, "title": "Payroll revised" }),
+        "edit-payroll-title",
+    );
+    cmd(
+        &handle,
+        "txn.edit",
+        json!({ "id": TXN_SALARY_ID, "amount_minor": 410_000 }),
+        "edit-payroll-amount",
+    );
+    let versions = open(
+        &handle,
+        &format!("money/txn/{TXN_SALARY_ID}/versions"),
+        "home",
+        false,
+    );
+    let restored = send(&handle, versions.instance, tap("version/1")).remove(0);
+    let status = restored
+        .room
+        .as_ref()
+        .unwrap()
+        .status_line
+        .as_ref()
+        .unwrap();
+    assert!(!status.refused);
+    assert_eq!(status.action_label, "Undo");
+    let salary = open(
+        &handle,
+        &format!("money/txn/{TXN_SALARY_ID}"),
+        "home",
+        false,
+    );
+    let restored_text = snapshot::render(salary.room.as_ref().unwrap());
+    assert!(
+        restored_text.contains("hero \"Payroll\""),
+        "{restored_text}"
+    );
+    assert!(restored_text.contains("$4,200.00"), "{restored_text}");
+    send(&handle, salary.instance, tap("back"));
+
+    let undone = send(&handle, restored.instance, tap("status/undo")).remove(0);
+    assert!(
+        !undone
+            .room
+            .as_ref()
+            .unwrap()
+            .status_line
+            .as_ref()
+            .unwrap()
+            .refused
+    );
+    let salary = open(
+        &handle,
+        &format!("money/txn/{TXN_SALARY_ID}"),
+        "home",
+        false,
+    );
+    let edited_text = snapshot::render(salary.room.as_ref().unwrap());
+    assert!(
+        edited_text.contains("hero \"Payroll revised\""),
+        "{edited_text}"
+    );
+    assert!(edited_text.contains("$4,100.00"), "{edited_text}");
 }
 
 #[test]
@@ -515,6 +680,71 @@ fn csv_import_maps_columns_previews_three_rows_and_imports() {
     send(&handle, csv.instance, tap("form/save"));
     let activity = open(&handle, "money", "home", true);
     assert!(snapshot::render(activity.room.as_ref().unwrap()).contains("Bakery"));
+}
+
+#[test]
+fn ambiguous_slash_dates_are_not_importable_until_member_chooses_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = phone(dir.path());
+    seed_money(&handle);
+
+    let csv = open(&handle, "money/import-csv", "home", true);
+    send(
+        &handle,
+        csv.instance,
+        text_change(
+            "field/csv",
+            1,
+            "Date,Description,Amount\n03/04/2026,Bakery,-12.50\n04/03/2026,Transit,-3.25",
+        ),
+    );
+    send(
+        &handle,
+        csv.instance,
+        option_change("csv/date_col", 1, "Date"),
+    );
+    send(
+        &handle,
+        csv.instance,
+        option_change("csv/desc_col", 1, "Description"),
+    );
+    let before_choice = send(
+        &handle,
+        csv.instance,
+        option_change("csv/amount_col", 1, "Amount"),
+    )
+    .remove(0);
+    let before_text = snapshot::render(before_choice.room.as_ref().unwrap());
+    assert!(before_text.contains("03/04/2026 could mean March 4 or April 3"));
+    assert!(
+        !before_text.contains("section #section/preview"),
+        "{before_text}"
+    );
+    assert!(before_text.contains("Import"));
+
+    // Even a direct tap while the selector is disabled cannot get past the parse guard.
+    let refused = send(&handle, csv.instance, tap("form/save")).remove(0);
+    let current = refused.room.as_ref().unwrap();
+    assert!(
+        current
+            .status_line
+            .as_ref()
+            .is_none_or(|status| status.refused || !status.sentence.contains("imported")),
+        "no import success is reported before the choice"
+    );
+    let csv = send(
+        &handle,
+        csv.instance,
+        option_change("csv/date_order", 1, "mdy"),
+    )
+    .remove(0);
+    let chosen_text = snapshot::render(csv.room.as_ref().unwrap());
+    assert!(chosen_text.contains("2026-03-04"), "{chosen_text}");
+    assert!(chosen_text.contains("2026-04-03"), "{chosen_text}");
+    send(&handle, csv.instance, tap("form/save"));
+    let activity = open(&handle, "money", "home", true);
+    let activity_text = snapshot::render(activity.room.as_ref().unwrap());
+    assert!(activity_text.contains("Bakery"), "{activity_text}");
 }
 
 #[test]

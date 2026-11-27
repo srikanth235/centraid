@@ -48,7 +48,7 @@ catalog! {
     plain backup_waiting = ("Waiting", "Waiting");
     plain backup_devices = ("Backup devices", "Backup devices");
     plain backup_no_devices = ("No backup device yet", "No backup device yet");
-    plain backup_no_devices_body = ("Pair a laptop to keep a copy it can't open.", "Pair a laptop to keep a copy it can't open.");
+    plain backup_no_devices_body = ("Connect a backup device to keep a copy it can't open.", "Connect a backup device to keep a copy it can't open.");
     plain backup_not_ready = ("Backup isn't ready yet.", "Backup isn't ready yet.");
     plain backup_retry = ("Try again", "Try again");
     plain backup_started = ("Backing up", "Backing up");

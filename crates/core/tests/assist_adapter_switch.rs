@@ -65,7 +65,12 @@ impl ModelLoader for Loader {
 /// The committed record with its current model named `BASE` and an adapter made for it, for the
 /// runtime's own catalogue and prompt.
 fn record_with_adapter() -> Record {
-    let current = centraid_assist::record::record().current;
+    let mut current = centraid_assist::record::record().current;
+    let mode = centraid_assist::native::prompt::ToolsMode::parse(&current.tools_mode)
+        .expect("the synthetic model uses the committed catalogue mode");
+    let (tools_hash, prompt_hash) = centraid_assist::record::runtime_hashes(mode);
+    current.tools_hash = tools_hash.clone();
+    current.prompt_hash = prompt_hash.clone();
     let adapter = Adapter {
         url: format!(
             "https://huggingface.co/x/adapter/resolve/{}/a.gguf",
@@ -75,8 +80,8 @@ fn record_with_adapter() -> Record {
         sha256: "e".repeat(64),
         bytes: ADAPTER_BYTES.len() as u64,
         base_sha256: "b".repeat(64),
-        tools_hash: current.tools_hash.clone(),
-        prompt_hash: current.prompt_hash.clone(),
+        tools_hash,
+        prompt_hash,
         score: None,
     };
     let local = adapter.local_name();

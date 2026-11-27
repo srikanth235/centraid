@@ -2,16 +2,14 @@ catalog! {
     plain title = ("Chat", "Chat");
     plain threads_title = ("Chats", "Chats");
     plain new_chat = ("New chat", "New chat");
-    plain empty_title = ("Ask your vault", "Ask your vault");
-    plain empty_body = ("Search and ask about anything kept on this phone.", "Search and ask about anything kept on this phone.");
+    plain empty_title = ("The assistant isn’t available yet", "The assistant isn’t available yet");
+    plain empty_body = ("Saved chats stay on this phone. Sending a question will be available when the assistant is ready.", "Saved chats stay on this phone. Sending a question will be available when the assistant is ready.");
+    plain assistant_unavailable = ("The assistant isn’t available yet.", "The assistant isn’t available yet.");
     plain threads_empty_title = ("No chats yet", "No chats yet");
     plain threads_empty_body = ("Your conversations with the assistant appear here.", "Your conversations with the assistant appear here.");
     plain search_placeholder = ("Search chats", "Search chats");
+    plain question_context = ("Question: {question}", "Question: {question}");
 
-    plain composer_label = ("Ask your vault", "Ask your vault");
-    plain composer_send = ("Send", "Send");
-    plain composer_empty = ("Type a question first.", "Type a question first.");
-    plain composer_queued = ("Assistant ready on this phone.", "Assistant ready on this phone.");
 
     plain role_you = ("You", "You");
     plain role_assistant = ("Assistant", "Assistant");

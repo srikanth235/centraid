@@ -42,7 +42,7 @@ catalog! {
     plain check_foot_nothing = ("Nothing was checked.", "Nothing was checked.");
     plain check_foot_unpaired = ("No backup device is paired.", "No backup device is paired.");
     plain check_failed = ("The check didn't finish. Try again.", "The check didn't finish. Try again.");
-    plain check_retry = ("Retry", "Retry");
+    plain check_retry = ("Try again", "Try again");
     plain check_foot_problem = ("Found a problem {when}", "Found a problem {when}");
     plain check_row_never = ("Never checked", "Never checked");
     plain check_start = ("Check my backup", "Check my backup");

@@ -1,39 +1,60 @@
 package dev.centraid.core
 
-import centraid.core.v1.FollowGrant
+import centraid.core.v1.FollowRequest
 import centraid.core.v1.FollowVerb
+import centraid.core.v1.ShellDone
 import centraid.core.v1.ShellEffect
-import centraid.core.v1.ShellOpenSettings
+import centraid.core.v1.ShellEffectResult
+import centraid.core.v1.ShellOwnerCheck
 import centraid.core.v1.ShellStoreRead
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 
 class ShellEffectAnswersSpec : StringSpec({
-    "a room's effect is answered with its id and an unavailable grant" {
-        val answer = ShellEffectAnswers.roomResult(
-            ShellEffect(effect_id = 7, open_settings = ShellOpenSettings(system = "photos")),
-            unavailableReason = REASON,
+    "a room effect carries one result naming that effect" {
+        val event = ShellEffectAnswers.roomResult(
+            ShellEffect(effect_id = 7, open_settings = centraid.core.v1.ShellOpenSettings(system = "photos")),
+            ShellEffectResult(effect_id = 7, done = ShellDone()),
         )
-        val result = answer.effect_result!!
-        result.effect_id shouldBe 7L
-        result.failed!!.grant shouldBe FollowGrant.FOLLOW_GRANT_UNAVAILABLE
-        result.failed!!.reason shouldBe REASON
-        result.done shouldBe null
+        event.effect_result!!.effect_id shouldBe 7L
+        event.effect_result!!.done shouldBe ShellDone()
     }
 
-    "a store read the core asked is passed back unavailable, naming its ask" {
-        val request = ShellEffectAnswers.coreAnswer(
-            ShellEffect(effect_id = 9, store_read = ShellStoreRead(system = "calendar")),
-        )!!
-        request.verb shouldBe FollowVerb.FOLLOW_VERB_PASS
-        request.system shouldBe "calendar"
-        request.ask_id shouldBe 9L
-        request.grant shouldBe FollowGrant.FOLLOW_GRANT_UNAVAILABLE
+    "a result for another effect is refused" {
+        shouldThrow<IllegalArgumentException> {
+            ShellEffectAnswers.roomResult(
+                ShellEffect(effect_id = 7, owner_check = ShellOwnerCheck()),
+                ShellEffectResult(effect_id = 8, done = ShellDone()),
+            )
+        }
     }
 
-    "an effect the core asked that is not a store read has no answer" {
-        ShellEffectAnswers.coreAnswer(ShellEffect(effect_id = 3, open_settings = ShellOpenSettings())) shouldBe null
+    "a missing outcome is refused" {
+        shouldThrow<IllegalArgumentException> {
+            ShellEffectAnswers.roomResult(
+                ShellEffect(effect_id = 7, owner_check = ShellOwnerCheck()),
+                ShellEffectResult(effect_id = 7),
+            )
+        }
+    }
+
+    "a followed store answer names the effect ask and system" {
+        val effect = ShellEffect(effect_id = 9, store_read = ShellStoreRead(system = "calendar"))
+        val answer = ShellEffectAnswers.coreAnswer(
+            effect,
+            FollowRequest(verb = FollowVerb.FOLLOW_VERB_PASS, system = "calendar", ask_id = 9),
+        )
+        answer.ask_id shouldBe 9L
+        answer.system shouldBe "calendar"
+    }
+
+    "a followed store answer for another ask is refused" {
+        shouldThrow<IllegalArgumentException> {
+            ShellEffectAnswers.coreAnswer(
+                ShellEffect(effect_id = 9, store_read = ShellStoreRead(system = "calendar")),
+                FollowRequest(verb = FollowVerb.FOLLOW_VERB_PASS, system = "calendar", ask_id = 8),
+            )
+        }
     }
 })
-
-private const val REASON = "unavailable"

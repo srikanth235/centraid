@@ -50,6 +50,8 @@ room app_place key="money"
         item "Categories" #more/categories
         item "Transfers" #more/transfers
         item "Match dismissals" #more/dismissals
+        item "Match lines" #more/match-lines
+        item "Recurring" #more/recurring
         item "Import CSV" #more/import-csv
         item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash
@@ -61,6 +63,7 @@ room app_place key="money"
             item "Open" #row/01900000-0000-7000-8000-000000000301/menu/open
             item "Edit" #row/01900000-0000-7000-8000-000000000301/menu/edit
             item "Star" #row/01900000-0000-7000-8000-000000000301/menu/star
+            item "Move or tag" #row/01900000-0000-7000-8000-000000000301/menu/organize
             item "Select" #row/01900000-0000-7000-8000-000000000301/menu/select
             item "Move to trash" destructive #row/01900000-0000-7000-8000-000000000301/menu/trash
       row #row/01900000-0000-7000-8000-000000000303 "Corner Co-op" meta="2026-11-20 · Checking" trailing="-$60.00" swipe="Move to trash" #row/01900000-0000-7000-8000-000000000303/trash
@@ -69,6 +72,7 @@ room app_place key="money"
             item "Open" #row/01900000-0000-7000-8000-000000000303/menu/open
             item "Edit" #row/01900000-0000-7000-8000-000000000303/menu/edit
             item "Star" #row/01900000-0000-7000-8000-000000000303/menu/star
+            item "Move or tag" #row/01900000-0000-7000-8000-000000000303/menu/organize
             item "Select" #row/01900000-0000-7000-8000-000000000303/menu/select
             item "Move to trash" destructive #row/01900000-0000-7000-8000-000000000303/menu/trash
       row #row/01900000-0000-7000-8000-000000000302 "Payroll" meta="2026-11-15 · Checking" trailing="$4,200.00":net swipe="Move to trash" #row/01900000-0000-7000-8000-000000000302/trash
@@ -77,6 +81,7 @@ room app_place key="money"
             item "Open" #row/01900000-0000-7000-8000-000000000302/menu/open
             item "Edit" #row/01900000-0000-7000-8000-000000000302/menu/edit
             item "Star" #row/01900000-0000-7000-8000-000000000302/menu/star
+            item "Move or tag" #row/01900000-0000-7000-8000-000000000302/menu/organize
             item "Select" #row/01900000-0000-7000-8000-000000000302/menu/select
             item "Move to trash" destructive #row/01900000-0000-7000-8000-000000000302/menu/trash
   search placeholder="Search transactions" #search

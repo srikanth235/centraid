@@ -23,6 +23,7 @@ room app_place key="docs"
         menu #doc/01900000-0000-7000-8000-000000002030/menu
           section
             item "Open" #doc/01900000-0000-7000-8000-000000002030/menu/open
+            item "Move or tag" #doc/01900000-0000-7000-8000-000000002030/menu/organize
             item "Star" #doc/01900000-0000-7000-8000-000000002030/menu/star
             item "Share" #doc/01900000-0000-7000-8000-000000002030/menu/share
             item "Select" #doc/01900000-0000-7000-8000-000000002030/menu/select

@@ -1,6 +1,6 @@
 # Wording
 
-**Copy is signage, not conversation**: calm, concrete, specific, read at a glance. "Photo deleted" is the register; "Deleted" drops the noun and "Your photo has been successfully deleted." pads a fact. Copy lives in the Rust string catalogue, `crates/screens/src/strings`, and only there; the kit's fixed words (`strings/shared.rs`) are emitted into both shells' `Words` tables, and the assistant's turn sentences are `copy/chat.json`. **Every word on a board exists in the core's strings**, or is added there in the PR that builds the screen. `scripts/lint-copy.mjs` enforces the rest.
+**Copy is signage, not conversation**: calm, concrete, specific, read at a glance. "Photo deleted" is the register; "Deleted" drops the noun and "Your photo has been successfully deleted." pads a fact. Copy lives in the Rust string catalogue, `crates/screens/src/strings`, and only there; the kit's fixed words (`strings/shared.rs`) are emitted into both shells' `Words` tables, and the assistant's turn sentences are `copy/chat.json`. **Every word on a board exists in the core's strings**, or is added there in the PR that builds the screen. `crates/xtask/src/copy_rules.rs` enforces the rest.
 
 Members read _backup device_; code and docs say _gateway_.
 

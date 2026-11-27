@@ -1,0 +1,73 @@
+   Compiling syn v2.0.119
+   Compiling digest v0.11.3
+   Compiling cipher v0.5.2
+   Compiling universal-hash v0.6.1
+   Compiling cc v1.4.5
+   Compiling polyval v0.7.3
+   Compiling getrandom v0.3.4
+   Compiling serde v1.0.229
+   Compiling rand_core v0.9.5
+   Compiling ghash v0.6.0
+   Compiling ctr v0.10.1
+   Compiling aes v0.9.3
+   Compiling sha2 v0.11.0
+   Compiling hmac v0.13.0
+   Compiling aead v0.6.1
+   Compiling syn v3.0.5
+   Compiling aes-gcm v0.11.1
+   Compiling hkdf v0.13.0
+   Compiling rand_chacha v0.9.0
+   Compiling unicode-normalization v0.1.25
+   Compiling getrandom v0.4.3
+   Compiling bip39 v3.0.0
+   Compiling rand v0.9.5
+   Compiling blake3 v1.8.7
+   Compiling thiserror-impl v2.0.20
+   Compiling zeroize_derive v1.5.0
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling thiserror v2.0.20
+   Compiling zeroize v1.9.0
+   Compiling curve25519-dalek v5.0.0
+   Compiling x25519-dalek v3.0.0
+   Compiling ed25519-dalek v3.0.0
+   Compiling hpke v0.14.1
+   Compiling centraid-identity v1.0.0-alpha.0 (/workspace/centraid/crates/identity)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 26.71s
+     Running unittests src/lib.rs (target/debug/deps/centraid_identity-7a442e63656a39e7)
+
+running 32 tests
+test derive::tests::deriving_only_the_locker_leaf_matches_full_vault_derivation ... ok
+test derive::tests::a_vault_index_is_never_reused ... ok
+test derive::tests::no_key_prints_itself ... ok
+test derive::tests::a_refused_index_does_not_move_the_mark ... ok
+test derive::tests::derivation_is_a_function_of_the_seed_alone ... ok
+test derive::tests::restore_re_derives_a_minted_vault_without_a_mark ... ok
+test derive::tests::the_account_index_is_not_a_vault_index ... ok
+test derive::tests::sibling_vaults_share_no_key_material ... ok
+test derive::tests::the_slip_0010_vectors_are_what_this_build_computes ... ok
+test phrase::tests::a_broken_checksum_is_refused ... ok
+test phrase::tests::a_cell_is_judged_against_the_english_list_and_offers_its_prefix ... ok
+test derive::tests::the_locker_key_is_the_seeds_and_no_other_seeds ... ok
+test phrase::tests::a_short_phrase_is_counted_not_merely_refused ... ok
+test derive::tests::the_four_keys_of_a_vault_are_four_different_secrets ... ok
+test phrase::tests::neither_secret_prints_itself ... ok
+test derive::tests::the_box_key_is_not_the_identity_key_reinterpreted ... ok
+test phrase::tests::a_generated_phrase_round_trips_and_is_twenty_four_words ... ok
+test phrase::tests::the_settings_recheck_forgives_spacing_and_case_only ... ok
+test phrase::tests::two_generated_phrases_differ ... ok
+test safety_number::tests::both_people_read_the_same_digits ... ok
+test phrase::tests::the_bip39_vector_is_what_this_build_computes ... ok
+test safety_number::tests::any_two_byte_strings_have_a_number_and_two_keys_have_their_own ... ok
+test safety_number::tests::one_bit_in_either_key_changes_the_number ... ok
+test safety_number::tests::a_key_with_itself_is_not_a_constant ... ok
+test sealed_box::tests::a_truncated_wire_form_is_refused_before_any_crypto ... ok
+test sealed_box::tests::a_tampered_aad_does_not_open ... ok
+test safety_number::tests::the_rendering_is_sixty_digits_in_twelve_groups ... ok
+test sealed_box::tests::kind_and_role_cannot_be_reshuffled_across_the_boundary ... ok
+test sealed_box::tests::another_vaults_box_key_does_not_open_it ... ok
+test sealed_box::tests::a_sealed_box_opens_with_the_vaults_box_key ... ok
+test sealed_box::tests::the_wire_form_round_trips_and_a_flipped_bit_does_not_open ... ok
+test sealed_box::tests::two_seals_of_one_plaintext_differ ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

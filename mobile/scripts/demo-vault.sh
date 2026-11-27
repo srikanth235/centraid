@@ -48,14 +48,15 @@ place_ios() {
   local udid="${CENTRAID_SIMULATOR:-booted}"
   local container
   if ! container="$(xcrun simctl get_app_container "$udid" dev.centraid.Centraid data 2>/dev/null)"; then
-    echo "==> no booted simulator with the app installed; skipping ios"
-    return
+    echo "error: no booted simulator with the app installed" >&2
+    return 1
   fi
   local home="$container/Documents/$stem"
   echo "==> ios: $home"
   rm -rf "$home"
   mkdir -p "$container/Documents"
   cp -R "$staging/$stem" "$home"
+  [ -f "$home/vault.db" ] || { echo "error: vault was not placed in the iOS app container" >&2; return 1; }
   SIMCTL_CHILD_CENTRAID_DEV_SEED="$demo_seed" \
     xcrun simctl launch --terminate-running-process "$udid" dev.centraid.Centraid >/dev/null
 }
@@ -64,8 +65,8 @@ place_android() {
   local adb="${ANDROID_HOME:-}/platform-tools/adb"
   [ -x "$adb" ] || adb="$(command -v adb || echo adb)"
   if ! "$adb" get-state >/dev/null 2>&1; then
-    echo "==> no android device; skipping android"
-    return
+    echo "error: no Android device is connected" >&2
+    return 1
   fi
   echo "==> android: files/$stem"
   "$adb" push "$staging/$stem/vault.db" "/data/local/tmp/$stem.db" >/dev/null
@@ -74,10 +75,12 @@ place_android() {
     "$adb" push "$staging/$stem/vault.bytes" "/data/local/tmp/$stem.bytes" >/dev/null
   fi
   "$adb" shell "run-as dev.centraid sh -c 'rm -rf files/$stem && mkdir -p files/$stem && cat /data/local/tmp/$stem.db > files/$stem/vault.db && { [ ! -d /data/local/tmp/$stem.bytes ] || cp -R /data/local/tmp/$stem.bytes files/$stem/vault.bytes; }'" \
-    || echo "   (the app is not installed yet; install it, then re-run)"
+    || { echo "error: vault was not placed; install the app and re-run" >&2; return 1; }
+  "$adb" shell "run-as dev.centraid test -f files/$stem/vault.db" \
+    || { echo "error: vault is missing from the Android app container" >&2; return 1; }
   "$adb" shell am start -S -n dev.centraid/dev.centraid.android.MainActivity \
     --es dev.centraid.DEV_SEED "$demo_seed" >/dev/null 2>&1 \
-    || echo "   (the app is not installed yet; re-run after installing)"
+    || { echo "error: app launch failed after vault placement" >&2; return 1; }
 }
 
 case "$target" in

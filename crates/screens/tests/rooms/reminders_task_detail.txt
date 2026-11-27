@@ -6,6 +6,7 @@ room pushed_page key="reminders/task/01900000-0000-7000-8000-000000000202"
         section
           item "Edit" #menu/edit
           item "Unstar" #menu/star
+          item "Move or tag" #menu/organize
           item "Snooze" #menu/snooze
           item "Move to trash" destructive #menu/trash
   ready
@@ -25,4 +26,8 @@ room pushed_page key="reminders/task/01900000-0000-7000-8000-000000000202"
             item "Open" #sub/01900000-0000-7000-8000-000000000204/menu/open
             item "Done" #sub/01900000-0000-7000-8000-000000000204/menu/done
             item "Star" #sub/01900000-0000-7000-8000-000000000204/menu/star
+            item "Select" #sub/01900000-0000-7000-8000-000000000204/menu/select
+            item "Move or tag" #sub/01900000-0000-7000-8000-000000000204/menu/organize
             item "Move to trash" destructive #sub/01900000-0000-7000-8000-000000000204/menu/trash
+    linked "Linked"
+      add "Add link" #footer/linked/add

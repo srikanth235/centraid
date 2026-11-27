@@ -1,6 +1,4 @@
-//! DAY ONE ON THE ROOM PLANE (2026-11-17 ruling "Day one is Welcome, then the one Home, filling in"):
-//! the Welcome room, what each Home widget says while its app is empty or its permission refused,
-//! and the first-open card every app's root shows. Rust decides the words; the shells draw blocks.
+//! Welcome and first-open content for Home and each app root.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_domain::apps::entity as entity_reads;

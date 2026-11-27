@@ -1,5 +1,4 @@
-//! A ROOM'S SCREEN (app-plane §1, "room builders"): turns what a read answered into a [`Room`],
-//! holds nothing a rebuild cannot recompute, and answers the events that are its own.
+//! Screen builders turn read results into rooms and handle their events without retaining rebuildable state.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_domain::read::{ReadContext, ReadDecl};
@@ -28,6 +27,7 @@ pub enum Nav {
     #[default]
     Stay,
     Push(String),
+    Ask(String),
     Pop,
     Replace(String),
 }

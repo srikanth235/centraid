@@ -1,4 +1,6 @@
-# Type testing with expectTypeOf
+# Type testing with expectTypeOf (target)
+
+This guidance applies if a TypeScript test project is added. Centraid currently has no Vitest project.
 
 Test TypeScript types without runtime execution.
 

@@ -133,11 +133,11 @@ Test: `the_phones_four_flows_round_trip_through_call`
 
 _Where the release op is:_ the backup plane's, because the proof that makes an original releasable is every chunk of it confirmed at a gateway, which the device state records (clause 4g's `releasable` and `released`, #1080's ruling A19, superseding R-1029-PH-1). The keep list is what holds an album back from it.
 
-Test: `the_originals_on_this_phone_round_trip_through_call` (and, below the ABI, `crates/core/src/originals.rs` and `crates/vault/tests/originals.rs`)
+Test: `the_originals_on_this_phone_round_trip_through_call` (and, below the ABI, `crates/core/src/originals.rs` and `crates/core/src/originals.rs`)
 
 ## 4e. An app's own query is a request kind
 
-`app_query` (20) runs a registered query in the core and answers `AppQueryResponse`, and is **bounded**. Its arms are typed per query. Today they are the shell's own: `chat_threads`, `chat_thread` and `chat_card` at 70–72; the old per-app ranges are retired and their numbers are never reused. The new app plane's reads arrive as arms declared in `crates/domain` **(target)**.
+`app_query` (20) runs a registered query in the core and answers `AppQueryResponse`, and is **bounded**. Its arms are typed per query. The shell-specific arms are `chat_threads`, `chat_thread` and `chat_card` at 70–72; the old per-app ranges are retired and their numbers are never reused. App-plane SQL reads are declared in `crates/domain` and run through its Rust read registry; they are not separate FFI query arms.
 
 **Civil time is answered in the zone the shell states.** `tz` is the device's IANA zone; empty is the vault's own (`vault.zone`).
 

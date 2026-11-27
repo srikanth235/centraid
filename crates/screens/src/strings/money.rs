@@ -17,9 +17,40 @@ catalog! {
     plain more_categories = ("Categories", "Categories");
     plain more_transfers = ("Transfers", "Transfers");
     plain more_dismissals = ("Match dismissals", "Match dismissals");
+    plain more_recurring = ("Recurring", "Recurring");
+    plain more_match_lines = ("Match lines", "Match lines");
     plain more_import_csv = ("Import CSV", "Import CSV");
     plain more_export = ("Export", "Export");
-    plain export_note = ("Confirm it's you on this phone to export Money.", "Confirm it's you on this phone to export Money.");
+
+    plain recurring_title = ("Recurring", "Recurring");
+    plain recurring_basis = ("Patterns from statement lines in the last 90 days.", "Patterns from statement lines in the last 90 days.");
+    plain recurring_empty_title = ("No recurring patterns found", "No recurring patterns found");
+    plain recurring_empty_body = ("No repeating statement charges were found in the last 90 days.", "No repeating statement charges were found in the last 90 days.");
+    plain recurring_weekly = ("Weekly", "Weekly");
+    plain recurring_monthly = ("Monthly", "Monthly");
+    counted recurring_payments = ("1 payment", "{n} payments");
+    plain recurring_meta = ("{cadence} · {payments} · {account}", "{cadence} · {payments} · {account}");
+
+    plain match_accounts_title = ("Choose an account", "Choose an account");
+    plain match_accounts_empty_title = ("No accounts", "No accounts");
+    plain match_accounts_empty_body = ("Add an account before reviewing transaction matches.", "Add an account before reviewing transaction matches.");
+    plain match_title = ("Match lines", "Match lines");
+    plain match_empty_title = ("No possible matches", "No possible matches");
+    plain match_empty_body = ("No hand entries match statement lines in this account.", "No hand entries match statement lines in this account.");
+    plain match_hand_meta = ("Hand entered · {day}", "Hand entered · {day}");
+    plain match_candidates_title = ("Possible matches", "Possible matches");
+    plain match_candidates_empty_title = ("No possible matches", "No possible matches");
+    plain match_candidates_empty_body = ("These possible matches are no longer available.", "These possible matches are no longer available.");
+    plain match_statement_meta = ("Statement line · {day}", "Statement line · {day}");
+    plain match_review_title = ("Review match", "Review match");
+    plain match_review_body = ("The statement line will replace the hand entry after you confirm.", "The statement line will replace the hand entry after you confirm.");
+    plain match_confirm = ("Confirm match", "Confirm match");
+    plain match_dismiss = ("Dismiss pair", "Dismiss pair");
+    plain match_confirmed = ("Transaction matched", "Transaction matched");
+    plain match_dismissed = ("Match dismissed", "Match dismissed");
+    plain page_previous = ("Previous page", "Previous page");
+    plain page_next = ("Next page", "Next page");
+    plain match_stale = ("This possible match is no longer available.", "This possible match is no longer available.");
 
     plain filter_section_account = ("Account", "Account");
     plain filter_section_category = ("Category", "Category");
@@ -134,6 +165,10 @@ catalog! {
     plain csv_memo_col = ("Memo column", "Memo column");
     plain csv_none_option = ("None", "None");
     plain csv_date_order = ("Date order", "Date order");
+    plain csv_choose_date_order = (
+        "A date like 03/04/2026 could mean March 4 or April 3. Choose the order used in this file.",
+        "A date like 03/04/2026 could mean March 4 or April 3. Choose the order used in this file."
+    );
     plain csv_order_mdy = ("Month first", "Month first");
     plain csv_order_dmy = ("Day first", "Day first");
     plain csv_order_ymd = ("Year first", "Year first");

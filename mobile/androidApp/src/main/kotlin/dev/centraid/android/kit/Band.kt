@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -49,6 +50,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -58,6 +62,11 @@ import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
 import centraid.core.v1.ShellBandTab
+import android.os.Build
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
 
 /**
  * THE BAND — invariant 1 (#1020, wave A; v0 `screens/home/HomeBand.tsx`).
@@ -94,13 +103,7 @@ public fun HomeBand(
                 top = BandPolicy.BAND_TOP_GAP.dp,
             )
             .bandFloor()
-            .clip(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
-            .background(Surface.card)
-            .border(
-                CentraidGeometry.HAIRLINE.dp,
-                Surface.border,
-                RoundedCornerShape(BandPolicy.BAND_RADIUS.dp),
-            )
+            .bandGround(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
             .padding(BandPolicy.BAND_PLATE_PAD.dp)
             .testTag("home-band"),
     ) {
@@ -216,13 +219,12 @@ internal fun Modifier.bandFloor(): Modifier {
 }
 
 /**
- * THE BAND'S GROUND, ONCE FOR EVERY BAND: Material 3 Expressive's floating pill — a SOLID tonal
- * surface, not glass. The plate is `bgElev` (raised paper, this theme's nearest token to Material's
- * surfaceContainer) at full opacity, on the shape's own rounded corners, lifted by a soft shadow
- * ([BandPolicy.BAND_ELEVATION]). Nothing is translucent and nothing is blurred: what the page
- * scrolls under the band is hidden by the plate, and shows only around it. iOS draws the same
- * controls as real Liquid Glass (`BandGround`); parity is the same behaviour, words and ids, not
- * the same pixels.
+ * THE BAND'S GROUND, ONCE FOR EVERY BAND: source-backed blur, a fine rim, and a soft lift.
+ * Haze samples only the room's content source (never this plate or its children) on API 31+;
+ * text and icons remain sharp. API 24–30 use the matching translucent tint without blur, and
+ * high-contrast or secure rooms use an opaque plate. iOS uses system Liquid Glass where available
+ * and thinMaterial otherwise; the Android treatment follows the same layered material without
+ * claiming Apple's refractive or morphing behavior.
  *
  * Callers must not clip before this, which would cut the shadow off; clip after it when a child
  * needs the shape (a ripple, a press ground).
@@ -234,15 +236,56 @@ internal fun Modifier.bandFloor(): Modifier {
  */
 @Composable
 internal fun Modifier.bandGround(shape: Shape): Modifier {
+    val dark = centraidDark()
+    val highContrast = rememberHighTextContrast()
+    val hazeState = LocalBandHazeState.current
+    val canBlur = hazeState != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !highContrast
     val plate = this
-        .shadow(BandPolicy.BAND_ELEVATION.dp, shape, clip = false)
-        .background(Surface.card, shape)
-    return if (rememberHighTextContrast()) {
-        plate.border(CentraidGeometry.HAIRLINE.dp, Surface.border, shape)
+        .shadow(
+            elevation = BandPolicy.BAND_ELEVATION.dp,
+            shape = shape,
+            clip = false,
+            ambientColor = Color.Black.copy(alpha = if (dark) 0.12f else 0.045f),
+            spotColor = Color.Black.copy(alpha = if (dark) 0.16f else 0.065f),
+        )
+        .then(
+            if (canBlur) {
+                Modifier.clip(shape).hazeEffect(
+                    state = hazeState,
+                    style = HazeStyle(
+                        backgroundColor = Surface.page,
+                        tint = HazeTint(Surface.card.copy(alpha = if (dark) 0.18f else 0.12f)),
+                        blurRadius = 16.dp,
+                        noiseFactor = 0f,
+                        fallbackTint = HazeTint(Surface.card.copy(alpha = if (dark) 0.82f else 0.76f)),
+                    ),
+                    block = { blurEnabled = true },
+                )
+            } else {
+                Modifier.background(
+                    if (highContrast || LocalBandOpaqueFallback.current) Surface.card
+                    else Surface.card.copy(alpha = if (dark) 0.82f else 0.76f),
+                    shape,
+                )
+            },
+        )
+    val rim = if (highContrast) {
+        SolidColor(Surface.border)
     } else {
-        plate
+        Brush.verticalGradient(
+            colors = if (dark) {
+                listOf(Color.White.copy(alpha = 0.16f), Surface.border.copy(alpha = 0.72f))
+            } else {
+                listOf(Color.White.copy(alpha = 0.88f), Surface.border.copy(alpha = 0.74f))
+            },
+        )
     }
+    return plate.border(CentraidGeometry.HAIRLINE.dp, rim, shape)
 }
+
+/** A source is deliberately scoped to one ordinary room; secure rooms use an opaque plate. */
+internal val LocalBandHazeState = compositionLocalOf<HazeState?> { null }
+internal val LocalBandOpaqueFallback = compositionLocalOf { false }
 
 /**
  * WHAT THE BAND STANDS ON: nothing, so what scrolls beneath shows around the floating plates; the
@@ -308,8 +351,8 @@ private val STATE_CHANGE = tween<Dp>(
  * place is one selection tick. More is a tab in the plate when the app has a
  * More sheet, and absent when it has none.
  *
- * Both plates are solid tonal floating pills ([bandGround]) and what the page scrolls runs under
- * the band (`AppPlace`), showing around the pills.
+ * Both plates use the shared glass ground ([bandGround]) and what the page scrolls runs under
+ * the band (`AppPlace`), showing through its blur/tint.
  */
 @Composable
 public fun AppBand(

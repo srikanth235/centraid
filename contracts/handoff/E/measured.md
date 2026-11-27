@@ -1,3 +1,5 @@
+Historical: archived handoff notes; implementation paths in this snapshot may no longer exist.
+
 # The numbers `cargo xtask measure --write` should write
 
 Measured on `ci-linux-x64-4c` (4 vCPU / 15 GB), JDK 21.0.10, Gradle 9.7.1, Kotlin 2.4.20, on the real `libcentraid_core_ffi.so` from `cargo build -p centraid-core-ffi` over a vault `spike-fixture` founded ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3 lane E).

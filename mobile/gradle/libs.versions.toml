@@ -22,6 +22,8 @@ jna = "5.19.1"
 # Android-only, unresolvable here.
 androidx-activity-compose = "1.12.0"
 androidx-compose-bom = "2025.10.01"
+haze = "1.6.10"
+desugar-jdk-libs = "2.1.5"
 androidx-core = "1.17.0"
 androidx-lifecycle = "2.9.4"
 androidx-work = "2.10.5"
@@ -81,6 +83,8 @@ jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }
+haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar-jdk-libs" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 # The Compose BOM stopped bringing the icon set in transitively; the three
 # screens that use `Icons.Filled.*` need it named (#1020, wave A).

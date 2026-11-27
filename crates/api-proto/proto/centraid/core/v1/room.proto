@@ -7,6 +7,9 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/chat_screens.proto";
+import "centraid/core/v1/content.proto";
+
 enum RoomKind {
   ROOM_KIND_UNSPECIFIED = 0;
   ROOM_KIND_HOME = 1;
@@ -42,6 +45,7 @@ message Room {
   RoomSelection selection = 10;
   RoomPlace restore = 11;
   bool secure = 12;
+  string hue_key = 13;
 }
 
 message RoomLoading {}
@@ -894,6 +898,8 @@ message RoomShown {
   uint32 depth = 3;
   RoomTransition transition = 4;
   Room room = 5;
+  // Monotonic Locker session epoch. Shells reject secure payloads older than their local floor.
+  uint64 secure_epoch = 6;
 }
 
 // Open the room registered under `key` on `tab`: pushed over the tab's top room, or, with
@@ -904,6 +910,9 @@ message RoomOpen {
   bool root = 3;
   // The shell's platform, `ios` or `android`, sent with its opens; empty keeps the last one told.
   string platform = 4;
+  // A raw Centraid URL. The core parses it with the canonical deep-link grammar.
+  string deep_link = 5;
+  string time_zone = 6;
 }
 
 message RoomSend {
@@ -915,7 +924,17 @@ message RoomRequest {
   oneof kind {
     RoomOpen open = 1;
     RoomSend send = 2;
+    RoomLifecycle lifecycle = 3;
   }
+}
+
+message RoomLifecycle {
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    FOREGROUND = 1;
+    BACKGROUND = 2;
+  }
+  Phase phase = 1;
 }
 
 // Zero shown when nothing the shell draws changed (a scroll report, a stale selector).
@@ -923,6 +942,8 @@ message RoomResponse {
   repeated RoomShown shown = 1;
   // What the event asks the shell to do on the phone, in order (app-plane §17).
   repeated ShellEffect effects = 2;
+  // Current Locker epoch, including when no room changed.
+  uint64 secure_epoch = 3;
 }
 
 // The device store (app-plane §10), through the core's key registry: a key that is not listed, or a
@@ -994,12 +1015,16 @@ message ShellStoreRead {
   int64 workouts_since_ms = 7;
   // Health Connect: also ask to read while the app is closed (only with `ask_permission`).
   bool ask_background = 8;
+  // Files: active origin refs in this vault only; shells must never enumerate grants from other vaults.
+  repeated string folder_refs = 9;
 }
 
 // Start or stop watching a store; on each change the shell sends `FollowRequest{TRIGGER, system}`.
 message ShellPhoneWatch {
   string system = 1;
   bool on = 2;
+  // Files: active origin refs in this vault only.
+  repeated string folder_refs = 3;
 }
 
 // Open the OS settings page where the member can allow `system` (a store, `notifications`, `photos`
@@ -1017,6 +1042,7 @@ message ShellReleaseGrant {
 // Answered with `ShellOwner`.
 message ShellOwnerCheck {
   string reason = 1;
+  bool cancel = 2;
 }
 
 message ShellShareItem {
@@ -1060,6 +1086,8 @@ message ShellClipboardCopy {
   string text = 1;
   bool sealed = 2;
   uint32 lease_s = 3;
+  string owner_vault_id = 4;
+  bool clear_owned = 5;
 }
 
 // Delete originals from the phone's photo library (only what a gateway acknowledged). Answered with
@@ -1071,6 +1099,7 @@ message ShellPhotoDelete {
 // Fetch the on-device model's file. Answered with `ShellDone` when it is on disk.
 message ShellModelDownload {
   string name = 1;
+  ModelDownload transfer = 2;
 }
 
 // What the OS says about a grant (`notifications`, `photos`, `camera`, or a store). Answered with `ShellGrant`.
@@ -1091,6 +1120,7 @@ message ShellPickedItem {
   string name = 2;
   string media_type = 3;
   uint64 size = 4;
+  StageHandle stage_handle = 5;
 }
 
 message ShellPicked {
@@ -1105,6 +1135,7 @@ message ShellOwner {
   bool passed = 1;
   // The phone has no passcode: the check goes ahead with a warning.
   bool no_passcode = 2;
+  bool cancelled = 3;
 }
 
 message ShellEffectResult {
@@ -1155,7 +1186,7 @@ message FollowRequest {
   FollowVerb verb = 1;
   string system = 2;
   // PASS: the follow command's input as JSON (`origin`, `records`, `complete`, `since`, `gone`; for
-  // Health `{"workouts": …, "readings": …}`). STOP: `{"ref": …}` to stop one origin, empty for all.
+  // Health `{"workouts": …, "readings": …, "totals":{"origin":…,"days":[…]}}`). STOP: `{"ref": …}` to stop one origin, empty for all.
   string input_json = 3;
   string invoke_key = 4;
   // PASS: the ask this answers. An answer to an ask that is no longer the store's current one is stale.

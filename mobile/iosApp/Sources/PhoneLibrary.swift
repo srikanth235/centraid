@@ -23,6 +23,7 @@ struct RollResourceRecord {
 }
 
 struct RollAssetRecord {
+    var localIdentifier = ""
     var after = ""
     var video = false
     var capturedAt = ""
@@ -50,6 +51,7 @@ struct LibraryStageOutcome {
     var byteSize: UInt64 = 0
     var alreadyHeld = false
     var derivativesHeld: [String] = []
+    var handle: Centraid_Core_V1_StageHandle?
 }
 
 enum PhoneLibrary {
@@ -163,6 +165,7 @@ enum PhoneLibrary {
         let edited = asset.hasAdjustments
         let camera = edited && resources.contains(where: isRender) && cameraOf(resources) != nil
         var rolled = RollAssetRecord()
+        rolled.localIdentifier = identifier
         rolled.after = after
         rolled.video = asset.mediaType == .video
         rolled.capturedAt = iso(epochMillis: cursor.epochMillis)
@@ -241,6 +244,7 @@ enum PhoneLibrary {
             staged.byteSize = handle.byteSize
             staged.alreadyHeld = handle.alreadyHeld
             staged.derivativesHeld = handle.derivativesHeld
+            staged.handle = handle
         case .refused:
             // The sentence is Rust's to word.
             staged.outcome = .failed

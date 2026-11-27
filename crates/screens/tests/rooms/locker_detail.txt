@@ -5,8 +5,11 @@ room pushed_page key="locker/item/019a1111-1111-7111-8111-111111111111" secure
       menu #header/menu
         section
           item "Edit" #menu/edit
+          item "Manage fields" #menu/fields
           item "Change type" #menu/type
           item "Star" #menu/star
+          item "Move or tag" #menu/organize
+          item "Lock" #menu/lock
           item "Move to trash" destructive #menu/trash
   ready
     hero "GitHub" noun="Login" mark=glyph:Lock
@@ -16,8 +19,10 @@ room pushed_page key="locker/item/019a1111-1111-7111-8111-111111111111" secure
       facts
         fact "Username" "srikanth" kind=text copy=#field/019a1111-1111-7111-8111-111111111111:username/copy
         fact "Passport renewal" "2027-01-15" kind=date
-        fact "Password" kind=secret sealed reveal=#field/019a1111-1111-7111-8111-111111111111:password/reveal
+        fact "Password" kind=secret sealed copy=#field/019a1111-1111-7111-8111-111111111111:password/copy reveal=#field/019a1111-1111-7111-8111-111111111111:password/reveal
     section #section/files "Private files"
       facts
-        fact "Protected file" kind=secret sealed reveal=#file/019a1111-1111-7111-8111-333333333333/reveal
+        fact "Protected file" kind=secret sealed
+    linked "Linked"
+      add "Add link" #footer/linked/add
     earlier_versions "Earlier versions" count=1 #earlier

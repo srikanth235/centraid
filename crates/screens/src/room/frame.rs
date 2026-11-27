@@ -1,5 +1,4 @@
-//! THE ROOM'S OWN SLOTS (app-plane §5.2): header, band, state, status line, search and selection.
-//! The room owns them; a screen only fills them.
+//! Shared frame slots that each room screen fills.
 
 use centraid_api_proto::core_v1 as wire;
 

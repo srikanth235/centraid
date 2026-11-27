@@ -5,14 +5,12 @@ catalog! {
     plain new_album_title = ("New album", "New album");
     plain new_place_title = ("New place", "New place");
     plain rename_place_title = ("Rename place", "Rename place");
-    plain free_space_title = ("Free up space", "Free up space");
 
     plain tab_library = ("Library", "Library");
     plain tab_albums = ("Albums", "Albums");
     plain tab_places = ("Places", "Places");
 
     plain more_camera_roll = ("Camera roll", "Camera roll");
-    plain more_free_space = ("Free up space", "Free up space");
     plain more_export = ("Export", "Export");
 
     plain search_placeholder = ("Search photos", "Search photos");
@@ -73,7 +71,6 @@ catalog! {
     plain menu_remove_from_album = ("Remove from album", "Remove from album");
     plain menu_set_place = ("Adjust location", "Adjust location");
     plain menu_download = ("Download original", "Download original");
-    plain menu_share = ("Share", "Share");
     plain menu_select = ("Select", "Select");
     plain menu_rename = ("Rename", "Rename");
     plain menu_merge = ("Merge", "Merge");
@@ -83,6 +80,7 @@ catalog! {
     plain fact_dimensions = ("Dimensions", "Dimensions");
     plain fact_size = ("Size", "Size");
     plain fact_place = ("Place", "Place");
+    plain fact_edited_from = ("Edited from", "Edited from");
     plain fact_type = ("Type", "Type");
     plain fact_address = ("Address", "Address");
     plain fact_locality = ("Area", "Area");
@@ -102,14 +100,12 @@ catalog! {
     plain place_merged = ("Places merged", "Places merged");
     plain added_to_album = ("Added to album", "Added to album");
     plain removed_from_album = ("Removed from album", "Removed from album");
-    plain shared = ("Ready to share", "Ready to share");
-    plain add_photo_note = ("Photo picker opens on this phone.", "Photo picker opens on this phone.");
+    plain edited_copy_action = ("Add edited copy", "Add edited copy");
+    plain edited_copy_title = ("Add an edited copy", "Add an edited copy");
+    plain edited_copy_body = ("Choose the edited image. A new photo links to this one and keeps its date and place. The original stays unchanged.", "Choose the edited image. A new photo links to this one and keeps its date and place. The original stays unchanged.");
+    plain edited_copy_choose = ("Choose edited photo", "Choose edited photo");
+    plain edited_copy_source_invalid = ("Choose a photo to add an edited copy.", "Choose a photo to add an edited copy.");
     plain camera_roll_note = ("Camera roll following runs on this phone.", "Camera roll following runs on this phone.");
-    plain export_note = ("Confirm it's you to export photos.", "Confirm it's you to export photos.");
-    plain download_note = ("Downloading the original from your backup device.", "Downloading the original from your backup device.");
-    plain free_space_body = ("Remove local originals that are already backed up on your backup device. Previews stay on this phone.", "Remove local originals that are already backed up on your backup device. Previews stay on this phone.");
-    plain free_space_action = ("Free up space", "Free up space");
-    plain free_space_done = ("Local copies cleared", "Local copies cleared");
 
     plain unbacked_up_warning_one = ("This photo isn't backed up yet. No backup device can bring it back.", "This photo isn't backed up yet. No backup device can bring it back.");
     counted unbacked_up_warning_many = ("1 of these photos isn't backed up yet. No backup device can bring it back.", "{n} of these photos aren't backed up yet. No backup device can bring them back.");

@@ -10,7 +10,7 @@ room editor key="money/new"
         option "Checking" selected
         option "Savings"
       text #field/title "Payee"  rev=0
-      text #field/date "Date" "2026-11-26" rev=1
+      moment #field/date "Date" "Thu 26 Nov"
       text #field/memo "Memo"  rev=0
       choice #field/status "Status"
         option "Posted" selected

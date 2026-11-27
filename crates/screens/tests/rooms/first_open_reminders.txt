@@ -19,4 +19,6 @@ room app_place key="reminders"
       action "Import your reminders" #first/reminders/action
     section #section/my-lists "My Lists"
       trailing "New list" sym="Plus" #lists/add
+      row #list/inbox "Inbox" meta="0 open" mark=glyph:Tray
   search placeholder="Search Reminders" #search
+  selection

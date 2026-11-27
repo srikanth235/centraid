@@ -20,7 +20,12 @@ const ADAPTER_FILE: &str = "centraid-adapter-dddddddddddd.gguf";
 
 /// A record whose current model is `New-Q4_0.gguf` with a 4-byte adapter made for it.
 fn adapter_record() -> centraid_assist::record::Record {
-    let current = centraid_assist::record::record().current;
+    let mut current = centraid_assist::record::record().current;
+    let mode = centraid_assist::native::prompt::ToolsMode::parse(&current.tools_mode)
+        .expect("the synthetic model uses the committed catalogue mode");
+    let (tools_hash, prompt_hash) = centraid_assist::record::runtime_hashes(mode);
+    current.tools_hash = tools_hash.clone();
+    current.prompt_hash = prompt_hash.clone();
     let adapter = centraid_assist::record::Adapter {
         url: format!(
             "https://huggingface.co/x/adapter/resolve/{}/a.gguf",
@@ -30,8 +35,8 @@ fn adapter_record() -> centraid_assist::record::Record {
         sha256: "d".repeat(64),
         bytes: 4,
         base_sha256: "b".repeat(64),
-        tools_hash: current.tools_hash.clone(),
-        prompt_hash: current.prompt_hash.clone(),
+        tools_hash,
+        prompt_hash,
         score: None,
     };
     centraid_assist::record::Record {

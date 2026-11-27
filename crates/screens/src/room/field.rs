@@ -5,6 +5,7 @@
 //! unsent, so the caret never jumps.
 
 use std::collections::BTreeMap;
+use zeroize::Zeroizing;
 
 /// What became of one change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,9 +17,9 @@ pub enum Taken {
 }
 
 /// One field's value, `rev` and the last `seq` taken.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct TextField {
-    value: String,
+    value: Zeroizing<String>,
     rev: u64,
     seq: u64,
 }
@@ -27,7 +28,7 @@ impl TextField {
     #[must_use]
     pub fn new(value: impl Into<String>) -> Self {
         Self {
-            value: value.into(),
+            value: Zeroizing::new(value.into()),
             rev: 0,
             seq: 0,
         }
@@ -55,11 +56,11 @@ impl TextField {
             return Taken::Stale;
         }
         self.seq = seq;
-        let kept: String = if max_chars == 0 {
+        let kept = Zeroizing::new(if max_chars == 0 {
             text.to_owned()
         } else {
             text.chars().take(max_chars).collect()
-        };
+        });
         if kept != self.value {
             self.value = kept;
             self.rev += 1;
@@ -70,13 +71,23 @@ impl TextField {
     /// Rust's own change (a chip made from a typed date, a cleared form): the shell adopts it.
     /// Returns whether the value changed.
     pub fn set(&mut self, value: impl Into<String>) -> bool {
-        let value = value.into();
+        let value = Zeroizing::new(value.into());
         if value == self.value {
             return false;
         }
         self.value = value;
         self.rev += 1;
         true
+    }
+}
+
+impl std::fmt::Debug for TextField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TextField")
+            .field("value", &"[redacted]")
+            .field("rev", &self.rev)
+            .field("seq", &self.seq)
+            .finish()
     }
 }
 
@@ -116,6 +127,12 @@ impl Fields {
 
     pub fn get_mut(&mut self, name: &str) -> Option<&mut TextField> {
         self.by_name.get_mut(name)
+    }
+
+    /// Replaces a field's zeroizing value and sequence state, for a new input identity.
+    pub fn reset(&mut self, name: &str, initial: impl Into<String>) {
+        self.by_name
+            .insert(name.to_owned(), TextField::new(initial));
     }
 
     #[must_use]
@@ -188,5 +205,24 @@ mod tests {
         fields.get_or("title", "first");
         fields.change("title", 1, "typed");
         assert_eq!(fields.get_or("title", "first").value(), "typed");
+    }
+
+    #[test]
+    fn debug_output_redacts_typed_field_contents() {
+        let mut fields = Fields::default();
+        fields.change("password", 1, "synthetic-private-value");
+        let debug = format!("{fields:?}");
+        assert!(!debug.contains("synthetic-private-value"));
+        assert!(debug.contains("[redacted]"));
+    }
+
+    #[test]
+    fn reset_drops_the_prior_value_and_starts_a_new_input_sequence() {
+        let mut fields = Fields::default();
+        fields.change("value", 1, "synthetic-private-value");
+        fields.reset("value", "");
+        assert_eq!(fields.value("value"), Some(""));
+        assert_eq!(fields.change("value", 1, "new value"), Taken::Applied);
+        assert_eq!(fields.value("value"), Some("new value"));
     }
 }

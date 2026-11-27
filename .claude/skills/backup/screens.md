@@ -1,10 +1,10 @@
 # The Backup screens
 
-What the Rust screens draw, and the code that keeps them honest. The wording rule for "backed up" lives in [product.md](./product.md). Code: [`crates/screens/src/backup/`](../../../crates/screens/src/backup/mod.rs) and the room-based Backup and Pair screens in [`crates/screens/src/room/shell.rs`](../../../crates/screens/src/room/shell.rs). Tests: [`tests.rs`](../../../crates/screens/src/backup/tests.rs) and [`room_shell.rs`](../../../crates/screens/tests/room_shell.rs).
+What the Rust screens draw, and the code that keeps them honest. The wording rule for "backed up" lives in [product.md](./product.md). The legacy Backup page is under [`crates/screens/src/backup/`](../../../crates/screens/src/backup/mod.rs); the current room-based Backup and Pair screens are in [`crates/screens/src/room/shell.rs`](../../../crates/screens/src/room/shell.rs). Their tests are [`backup_page.rs`](../../../crates/screens/tests/backup_page.rs) and [`room_shell.rs`](../../../crates/screens/tests/room_shell.rs).
 
 ## Where the numbers come from
 
-- The room-based Backup screen (`backup`) and Home's subtitle (`shell::backup_line_status`) call `BackupStatusRequest` directly through `Door::call` and parse `BackupStatusResponse` with `reading::Reading::from_wire`; the legacy `backup.home` screen reads `shell.backup-status` through `reading::load`. Both run the same `reading::Reading` and `line::line`. The core answers from the device state and dials nobody. A failed read is a `Failed` room (or `Reading::Failed`), never an empty reading. A refresh that fails keeps what was drawn, under one sentence.
+- The room-based Backup screen (`backup`) and Home's subtitle call `BackupStatusRequest` through `Door::call` and parse `BackupStatusResponse` with `reading::Reading::from_wire`; the legacy `backup.home` screen reads the same status through `reading::load`. Both use the same `Reading` and `line::line`. The core answers from device state and dials nobody. A failed read is a failed room (or `Reading::Failed`), never an empty reading. A refresh that fails keeps what was drawn, under one sentence.
 - Every time that is a gateway's (acknowledgements, last answered) is the gateway's clock. The phone's clock (`now_ms`) is used only for "2 minutes ago" and for dating notices.
 - `Destination::footing` ranks a device worst-first: rolled back, refusing, too large, full, behind, current. Anything but current names the device by the label the member gave it.
 
@@ -30,7 +30,7 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 ## One vault, delete warning, restore (#1209)
 
 - **One vault per phone** (R1). Home has no vault sheet, switch, picker, rename or forget; the lockup is not a control; Settings has no Vault section and no "Make a vault" row. The shelf stays underneath for launch and restore. Rust: `HomeEvent` lost its vault arms (reserved in the proto), `VaultCommand` keeps only make, restore and open, `Ctx::switch_vault` is gone.
-- **Delete warning** (R4, `room/photos.rs`): before Delete forever on one photo and on Empty trash, Photos' confirm rooms (`PurgeConfirm`, `EmptyTrashConfirm`) check `BackupStatusRequest` via `originals_unbacked_up` (reads the device state, dials nobody; the core also exposes `HeldWholeRequest.content_hashes`, answered `not_held`, for per-hash checks), and `Confirm.warning` carries one amber line ("This photo isn’t backed up yet. No backup device can bring it back." / "Some of these photos aren’t backed up yet. No backup device can bring them back."). The read happens when the confirm is raised, not on every draw. A failed read counts as unbacked up. The member can still delete.
+- **Delete warning** (R4, [`crates/screens/src/room/photos.rs`](../../../crates/screens/src/room/photos.rs)): before Delete forever on one photo and on Empty trash, Photos' confirm rooms (`PurgeConfirm`, `EmptyTrashConfirm`) check backup status via `originals_unbacked_up` (reads device state, dials nobody; the core also exposes `HeldWholeRequest.content_hashes`, answered `not_held`, for per-hash checks), and `Confirm.warning` carries one amber line. The read happens when the confirm is raised, not on every draw. A failed read counts as unbacked up. The member can still delete.
 - **Restore** (R3): the words page's working phase lists Records, Photo previews, Photos and files in order (`WordsEnterState.restore_rows`: "Restoring", "Next", "Then"). Once the vault opens, `BackupStatusResponse.restoring` (present only while the restore's originals marker exists) gives previews and originals back of total, counted from the vault's content rows against the content store; Home's line, the Photos library's scope line and the viewer say it ("Restoring previews. 312 of 1,240 back.", then "Restoring photos. 410 of 1,282 back."), a photo whose original has not come back wears a down arrow (`HELD_COMING_BACK`), and its viewer says "This photo is still coming back. Showing its preview." beside the existing "Load the original". Counts only, never a time.
 
 - **Pair again on the status card (ruling 28, #1202).** While any backup device no longer knows this phone (`pair_again`), the top status card that says "Pair it again" carries a "Pair again" button: `pair_again_label` and `pair_again` on `BackupHomeData`, empty/absent otherwise and on a moved vault. Its route is `add_destination`'s, the pairing page; the device's row keeps its own "Pair it again". Both shells draw it with their kit button under the id `backup-card-pair-again`. Board: `BackupPairAgain`.
@@ -38,7 +38,7 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 ## Reasons
 
 - `REASONS` lists the 13 `WaitReason`s in the order the line shows them. One row per reason with a count above zero, each worded by `strings::backup`.
-- The reasons come from the core (`phone/status.rs`). A screen never decides one. Add a reason in `phone.proto`, the core, `REASONS`, `waiting_words`, `row_reason` and the strings together.
+- The reasons come from the core ([`crates/core/src/phone/status.rs`](../../../crates/core/src/phone/status.rs)). A screen never decides one. Add a reason in `phone.proto`, the core, `REASONS`, `waiting_words`, `row_reason` and the strings together.
 - While items wait on `Gateway`, Home browses the local network for the gateway's new address. It runs only with the page and the app in front.
 
 ## The pass conductor (`crates/screens/src/passes/`)
@@ -60,7 +60,7 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 
 ## Check my backup (`check.rs`)
 
-- `backup.check` is pushed from Backup's Recovery section. It asks the core for `CheckBackup` with the member's rule, whether the link is metered (metered if unknown) and whether videos are excluded. It polls progress every second and offers Stop. The work is `phone/check.rs`, described in [phone.md](./phone.md).
+- `backup.check` is pushed from Backup's Recovery section. It asks the core for `CheckBackup` with the member's rule, whether the link is metered (metered if unknown) and whether videos are excluded. It polls progress every second and offers Stop. The work is [`crates/core/src/phone/check.rs`](../../../crates/core/src/phone/check.rs), described in [phone.md](./phone.md).
 - Each device gets a row: opens, will not open, files missing, a file damaged, or not run (Wi-Fi, space, stopped, no backup yet, a backup running, no answer). A device that was not checked is never drawn as a pass.
 - No answer from the core is a failure with Retry, not "Not checked".
 - A verdict is kept (`opens` or `problem` plus the time, in the device store) only when a backup was actually opened. Backup's row then reads "Checked ... ago" or "Found a problem ... ago", or "Never checked".

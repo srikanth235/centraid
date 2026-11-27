@@ -9,17 +9,25 @@ import PhotosUI
 import UIKit
 #endif
 
-/// WHAT THE STORE TALKS TO: the core (`Core`), or a test's stand-in for it.
+/// Core interface shared by the app and test fakes.
 protocol ScreenCore: Sendable {
     func call(_ request: Centraid_Core_V1_Request) async throws -> Centraid_Core_V1_Response
     func call(_ request: Centraid_Core_V1_Request, lane: Core.Lane) async throws -> Centraid_Core_V1_Response
     var updates: AsyncStream<Centraid_Core_V1_ScreenUpdate> { get }
     var roomUpdates: AsyncStream<Centraid_Core_V1_RoomShown> { get }
+    var effects: AsyncStream<Centraid_Core_V1_ShellEffect> { get }
+    var changes: AsyncStream<Centraid_Core_V1_ChangeEvent> { get }
     var notifyUpdates: AsyncStream<Centraid_Core_V1_ScheduleNotifications> { get }
 }
 
 extension ScreenCore {
     var roomUpdates: AsyncStream<Centraid_Core_V1_RoomShown> {
+        AsyncStream { $0.finish() }
+    }
+    var effects: AsyncStream<Centraid_Core_V1_ShellEffect> {
+        AsyncStream { $0.finish() }
+    }
+    var changes: AsyncStream<Centraid_Core_V1_ChangeEvent> {
         AsyncStream { $0.finish() }
     }
     var notifyUpdates: AsyncStream<Centraid_Core_V1_ScheduleNotifications> {
@@ -29,23 +37,17 @@ extension ScreenCore {
 
 extension Core: ScreenCore {}
 
-/// WHAT SWIFTUI DRAWS FROM (#1135, lane C2): the latest navigation and the
-/// latest view state of every open screen, exactly as Rust made them.
-///
-/// The store keeps no copy of its own and decides nothing. It forwards events,
-/// applies updates (dropping any older than what it holds — each view and each
-/// navigation carries a revision, so a push that overtakes a response is not
-/// undone by it), and performs the platform work Rust asks for, answering each
-/// effect with an event. A screen is a `ViewState` whichever screen made it.
+/// Holds the latest core navigation and view states, and forwards screen events.
+/// Updates with older revisions are ignored; platform effects are answered once
+/// through the event channel.
 @MainActor
 final class ScreenStore: ObservableObject {
     @Published private(set) var navigation: Centraid_Core_V1_Navigation?
     @Published private(set) var views: [UInt64: Centraid_Core_V1_ViewState] = [:]
-    /// THE SCREENS RUST SHIELDED (`ScreenshotShield`): `RustScreenView` draws an instance in
-    /// `WordsShield` while its id is here. Dropped when the screen closes.
+    /// Instances currently covered by the screenshot privacy shield.
     @Published private(set) var shielded: Set<UInt64> = []
 
-    /// Told when Rust announces something the shell may act on (a gateway paired).
+    /// Receives core announcements the shell can act on.
     var onAnnounce: ((String) -> Void)?
 
     private let core: any ScreenCore
@@ -54,27 +56,23 @@ final class ScreenStore: ObservableObject {
     private let scheduleNotifications: NotificationScheduler
     private var startup: Task<Bool, Never>?
     private var closed: Set<UInt64> = []
-    /// The instances the core has closed (a closed one has no view left to draw).
+    /// Instances closed by the core.
     var closedInstances: Set<UInt64> { closed }
-    /// Instances this shell opened with `open`, so two opens never claim one entry.
+    /// Instances opened by this shell, to avoid claiming an entry twice.
     private var claimed: Set<UInt64> = []
-    /// OPEN A PAGE NOW, wherever the member is (`OpenRoute`): the shell pushes the
-    /// route as it pushes a tapped row's route. Set by `ShellModel`.
+    /// Receives routes opened by the core.
     var onOpenRoute: ((Centraid_Core_V1_Route) -> Void)?
-    /// Home's `scheme` moved (the member's light/dark choice, which Rust keeps).
+    /// Receives Home's appearance setting.
     var onHomeScheme: ((Centraid_Core_V1_HomeScheme) -> Void)?
-    /// Home's first view arrived: the shell tells it the phone's scheme.
+    /// Called after Home's first view arrives.
     var onHomeAppeared: (() -> Void)?
-    /// Rust closed these instances (a screen finished itself, or the stacks were rebuilt
-    /// under it): the shell takes their pages off its path.
+    /// Called when the core closes screen instances.
     var onClosed: (([UInt64]) -> Void)?
     private var homeTold: UInt64?
 
-    /// THE PASS SCHEDULER'S WINDOWS (`passes` in Rust): a granted background window waits
-    /// here, by name, for `PassWindowDone`, which carries the answer `setTaskCompleted` takes.
+    /// Background windows awaiting their matching `PassWindowDone` event.
     private var windowWaiters: [String: CheckedContinuation<Bool, Never>] = [:]
-    /// Each OS callback waits for its exact answer's terminal schedule to be performed.
-    /// Startup/refresh schedules and another button never release it.
+    /// OS notification callbacks wait for their own answer's schedule to be performed.
     private struct NotificationAnswerKey: Hashable {
         let id: String
         let verb: Centraid_Core_V1_NotificationVerb
@@ -82,19 +80,15 @@ final class ScreenStore: ObservableObject {
     }
     private var notifyWaiters: [NotificationAnswerKey: [UInt64: CheckedContinuation<Bool, Never>]] = [:]
     private var notifyTokens: UInt64 = 0
-    /// The UIKit grace held while the app leaves the screen and Rust runs its pass; released
-    /// on `PassWindowDone` for the background entry (or by iOS taking it back).
+    /// Holds UIKit background time while the core runs the background pass.
     #if os(iOS)
     private var backgroundGrace: ForegroundGrace?
     #endif
-    /// EACH SCREEN'S EFFECTS, PERFORMED IN THE ORDER IT ASKED (phone
-    /// imports): a service tells its answers apart by what they answer, so a cursor write that is
-    /// answered after the wait behind it would be taken for the wait. One queue per instance; an
-    /// effect that answers more than once and for long (a model download, a browse, a pick)
-    /// answers through its own callback and does not hold the queue.
+    /// Per-instance effect queues preserve request order. Long-running effects
+    /// return after installing a callback so they do not block later effects.
     private var queues: [UInt64: [Centraid_Core_V1_EffectRequest]] = [:]
     private var running: Set<UInt64> = []
-    /// Clipboard writes and clears are one shell-wide FIFO across screen instances.
+    /// Clipboard writes and clears share one FIFO across screen instances.
     private var clipboardQueue: [Centraid_Core_V1_EffectRequest] = []
     private var clipboardRunning = false
 
@@ -103,8 +97,7 @@ final class ScreenStore: ObservableObject {
         self.scheduleNotifications = scheduleNotifications
     }
 
-    /// One event reader and first snapshot, shared by every startup caller. A cold
-    /// callback may use the store only after this snapshot actually succeeded.
+    /// Starts the event readers and shares one initial snapshot across callers.
     @discardableResult
     func start() async -> Bool {
         if let startup { return await startup.value }
@@ -146,13 +139,11 @@ final class ScreenStore: ObservableObject {
         Task { await request(.nav(nav)) }
     }
 
-    /// The app left or came back to the foreground; Rust tells every open screen
-    /// (a Locker relocks the instant it leaves). `.background` only, never
-    /// `.inactive`, which a system prompt causes.
+    /// Reports app background/foreground transitions. System prompts do not count
+    /// as background transitions.
     func lifecycle(foreground: Bool) {
         #if os(iOS)
-        // LEAVING THE SCREEN RUNS A PASS UNDER THE PLATFORM'S GRACE (Rust asks for it): hold the
-        // UIKit background task until Rust says that pass ended (`PassWindowDone`).
+        // Keep the app alive until the core finishes its background pass.
         if !foreground, backgroundGrace == nil { backgroundGrace = ForegroundGrace(name: "dev.centraid.pass.background") }
         #endif
         var lifecycle = Centraid_Core_V1_AppLifecycle()
@@ -160,15 +151,13 @@ final class ScreenStore: ObservableObject {
         Task { await request(.lifecycle(lifecycle)) }
     }
 
-    /// Report a fact about the phone (the link, a granted window, an upload the OS finished);
-    /// the pass scheduler in Rust decides what it means.
+    /// Reports a phone or OS fact for the core to process.
     func report(_ fact: Centraid_Core_V1_ShellFact.OneOf_Fact) {
         Task { await reportAndWait(fact) }
     }
 
-    /// Report a fact and wait until the core has answered it — used when the
-    /// caller must hold an OS wake (such as a background upload completion
-    /// handler) until Rust has received the fact.
+    /// Reports a fact and waits for the core response when the caller must keep
+    /// an OS wake active until delivery.
     @discardableResult
     func reportAndWait(_ fact: Centraid_Core_V1_ShellFact.OneOf_Fact) async -> Bool {
         var shell = Centraid_Core_V1_ShellFact()
@@ -176,10 +165,8 @@ final class ScreenStore: ObservableObject {
         return await request(.shellFact(shell))
     }
 
-    /// A notification button or tap stays alive until Rust marks this exact answer
-    /// terminal and its resulting OS schedule has actually been performed. True
-    /// means that matching performance finished; false is the existing expiry,
-    /// never a claim that the task write committed.
+    /// Waits for the schedule caused by this exact notification answer. `true`
+    /// means scheduling completed; it does not claim the underlying write committed.
     @discardableResult
     func answerNotification(id: String, verb: Centraid_Core_V1_NotificationVerb, pressID: String = "") async -> Bool {
         var answered = Centraid_Core_V1_NotificationAnswered()
@@ -199,8 +186,7 @@ final class ScreenStore: ObservableObject {
                 let answered = await request(.shellFact(shell))
                 NotificationStartupTrace.mark(.notificationFactCompleted, succeeded: answered)
             }
-            // Existing OS callback grace: only this callback is released if its
-            // performer never arrives. No unrelated refresh can acknowledge it.
+            // Bound this callback if its matching schedule never arrives.
             Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
                 self?.notifyPerformed(key: key, token: token)
@@ -226,8 +212,7 @@ final class ScreenStore: ObservableObject {
         }
     }
 
-    /// A BACKGROUND WINDOW THE OS GRANTED: tell Rust, then wait for the pass it runs to end.
-    /// Answers whether every held vault's spool emptied (what `setTaskCompleted(success:)` takes).
+    /// Reports a granted background window and waits for its completion.
     func windowGranted(_ name: String, budgetMs: UInt64) async -> Bool {
         await withCheckedContinuation { continuation in
             windowWaiters[name]?.resume(returning: false)
@@ -239,7 +224,7 @@ final class ScreenStore: ObservableObject {
         }
     }
 
-    /// iOS took the window back: forget it, so the next grant is not mistaken for this one.
+    /// Reports that iOS revoked the background window.
     func windowExpired(_ name: String) {
         windowWaiters.removeValue(forKey: name)?.resume(returning: false)
         var expired = Centraid_Core_V1_WindowExpired()
@@ -247,30 +232,26 @@ final class ScreenStore: ObservableObject {
         report(.expired(expired))
     }
 
-    /// Report the device's locale, zone, OS and 12 or 24 hour setting, and that
-    /// Photos deletes from the library behind its own confirmation; Rust formats
-    /// from them and offers "Free up space" only where the platform can.
+    /// Reports locale, time zone, hour cycle, and photo deletion capability.
     func reportEnvironment() {
         var environment = Centraid_Core_V1_Environment()
         environment.locale = Locale.current.identifier
         environment.zone = TimeZone.current.identifier
         environment.platform = "ios"
         environment.libraryDeletes = true
-        // The "j" template resolves to the phone's own hour cycle: "h a" (12-hour)
-        // carries an AM/PM marker, "HH" does not.
+        // The `j` template follows the phone's 12/24-hour setting.
         environment.hourCycle12 = DateFormatter
             .dateFormat(fromTemplate: "j", options: 0, locale: .current)?
             .contains("a") ?? false
         Task { await request(.environment(environment)) }
     }
 
-    /// THE OS WANTS ITS MEMORY BACK: the shelf closes every vault's core but the one in front.
+    /// Releases inactive core state after an OS memory warning.
     func memoryWarning() {
         Task { await request(.memoryWarning(Centraid_Core_V1_MemoryWarning())) }
     }
 
-    /// THE CERTIFICATES THE BACKGROUND MOVER PINS: the core's `pins`, read from the ledger of
-    /// the vault in front; nil when it would not answer.
+    /// Returns certificate pins for the active vault, if available.
     func pins() async -> [Centraid_Core_V1_Destination]? {
         var request = Centraid_Core_V1_Request()
         request.kind = .pins(Centraid_Core_V1_PinsRequest())
@@ -278,9 +259,7 @@ final class ScreenStore: ObservableObject {
         return answer.destinations
     }
 
-    /// Push a route onto a tab and answer the instance Rust opened for it, or
-    /// nil when the push was not answered. The shell remembers the instance:
-    /// it draws that instance's view and reports its pop (`popped`).
+    /// Pushes a route and returns the new instance when the core reports it.
     func open(tab: String, route: Centraid_Core_V1_Route) async -> UInt64? {
         let before = Set(entries(of: tab).map(\.instance))
         var push = Centraid_Core_V1_NavPush()
@@ -294,7 +273,7 @@ final class ScreenStore: ObservableObject {
         return opened
     }
 
-    /// The shell popped a screen it opened (a back control or a swipe); Rust drops it.
+    /// Reports that a shell-owned screen was popped.
     func popped(tab: String, instance: UInt64) {
         claimed.remove(instance)
         var popped = Centraid_Core_V1_NavPopped()
@@ -313,21 +292,21 @@ final class ScreenStore: ObservableObject {
         send(instance, .home(event))
     }
 
-    /// A band press: Rust selects the tab and the shell hears the new navigation.
+    /// Requests a tab selection from the core.
     func selectTab(_ tab: String) {
         var select = Centraid_Core_V1_NavSelectTab()
         select.tab = tab
         navigate(.selectTab(select))
     }
 
-    /// Every page above the tab's root goes (the apps' Home control): Rust closes them in one move.
+    /// Requests that the core close every page above a tab's root.
     func popToRoot(tab: String) {
         var pop = Centraid_Core_V1_NavPopToRoot()
         pop.tab = tab
         navigate(.popToRoot(pop))
     }
 
-    /// A tab's stack, root first, as Rust holds it.
+    /// Returns the core's stack for a tab, root first.
     func entries(of tab: String) -> [Centraid_Core_V1_StackEntry] {
         navigation?.tabs.first { $0.tab == tab }?.entries ?? []
     }
@@ -354,7 +333,7 @@ final class ScreenStore: ObservableObject {
             views[id] = nil
             queues[id] = nil
             shielded.remove(id)
-            // A BROWSE LASTS AS LONG AS THE SCREEN THAT ASKED FOR IT.
+            // Stop browsing when its screen closes.
             GatewayBrowsing.shared.stop(id)
         }
         if !update.closed.isEmpty { onClosed?(update.closed) }
@@ -367,8 +346,7 @@ final class ScreenStore: ObservableObject {
 
     /// Queue `request` behind what its screen asked before, and run the queue.
     private func enqueue(_ request: Centraid_Core_V1_EffectRequest) {
-        // A WITHDRAWN PROMPT JUMPS THE QUEUE: it exists to end the owner check the queue is
-        // waiting on, so it cannot wait behind it.
+        // Cancellation must bypass the owner check it ends.
         if case .ownerCheck(let check)? = request.effect.kind, check.cancel {
             Task { await perform(request) }
             return
@@ -418,10 +396,8 @@ final class ScreenStore: ObservableObject {
         #endif
     }
 
-    /// Perform what Rust asked and answer it by `effect_id`. Returns once the one answer is
-    /// given; an effect that answers later, or more than once, answers through its own callback
-    /// and returns at once, so its screen's next effect is not held behind a member's pick. A
-    /// screen popped meanwhile tolerates a late answer.
+    /// Performs an effect and answers by `effect_id`. Callback-based work does
+    /// not block later effects; late answers for closed screens are ignored.
     private func perform(_ request: Centraid_Core_V1_EffectRequest) async {
         let done = Centraid_Core_V1_EffectResult.OneOf_Outcome.done(Centraid_Core_V1_EffectDone())
         switch request.effect.kind {
@@ -429,9 +405,8 @@ final class ScreenStore: ObservableObject {
         case .clipboardSet(let set)?:
             let pasteboard = UIPasteboard.general
             if set.sensitive && set.clearAfterMs_p > 0 {
-                // THE OS KEEPS THE DEADLINE: a local-only pasteboard item expires on its own. The
-                // shell persists only its vault, opaque item marker and expiry before answering
-                // Copy. Lock after process restart checks the marker type before reading its token.
+                // The OS expires local-only pasteboard items; the marker lets Lock
+                // clear only a lease this vault still owns after process restart.
                 let expiresAt = Date(timeIntervalSinceNow: Double(set.clearAfterMs_p) / 1000)
                 var item: [String: Any] = ["public.utf8-plain-text": set.text]
                 if !set.ownerVaultID.isEmpty {
@@ -476,12 +451,11 @@ final class ScreenStore: ObservableObject {
                 markerPresent: hasLockerMarker
             ) {
             case .keepOwnedLease:
-                // A text-only clear cannot spend a vault-owned clipboard lease.
+                // A text-only clear cannot consume another vault's lease.
                 answer(request, done)
                 return
             case .retireStaleLease:
-                // Missing marker proves the old owned item was replaced. Retire only metadata;
-                // never read the unrelated clipboard to satisfy this legacy clear.
+                // A missing marker means the owned item was replaced; retire metadata only.
                 LockerClipboardLeaseStore.remove()
                 answer(request, done)
                 return
@@ -520,7 +494,7 @@ final class ScreenStore: ObservableObject {
                 answer(request, .failed(Self.failure(EffectReason.unsupported)))
             }
         case .exportOriginals(let export)?:
-            // THE ORIGINALS OF A PICK, to the share sheet or this phone's photos.
+            // Offer selected originals to the share sheet or photo library.
             answer(request, await ShelfCopyExport.run(export, core: core))
         case .openMap(let map)?:
             var components = URLComponents(string: "https://maps.apple.com/")
@@ -534,7 +508,7 @@ final class ScreenStore: ObservableObject {
         case .cameraRoll(let roll)?:
             answer(request, Self.cameraRoll(roll))
         case .openNotificationSettings?:
-            // THE APP'S PAGE in Settings, where its notifications are switched.
+            // Open this app's notification settings.
             #if os(iOS)
             if let url = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.open(url, options: [:], completionHandler: nil)
@@ -553,8 +527,7 @@ final class ScreenStore: ObservableObject {
             await PhoneLibrary.derivatives(derivatives, core: core)
             answer(request, done)
         #endif
-        // THE VAULT'S SECRETS (lane H2): the device-only and synchronised stores, and
-        // whether the synchronised one would carry a key to another device.
+        // Read the device-only and synchronized secret stores.
         case .secrets(let batch)?:
             answer(request, .secrets(SecretStores.run(batch)))
         case .syncedProbe?:
@@ -573,16 +546,14 @@ final class ScreenStore: ObservableObject {
             #else
             answer(request, .failed(Self.failure(EffectReason.unavailable)))
             #endif
-        // THE PASS SCHEDULER (#1135, `passes`): Rust decides which windows exist, when a pass ran
-        // and what the OS carries; this performs and answers.
+        // Apply the core's background-window schedule.
         case .scheduleWindows(let schedule)?:
             #if os(iOS)
             answer(request, .windowsScheduled(BackgroundPasses.schedule(schedule.windows)))
             #else
             answer(request, .failed(Self.failure(EffectReason.unavailable)))
             #endif
-        // NOTIFICATIONS (#1173, `agenda.notify`): Rust sends the whole desired set; this makes the
-        // OS hold it and answers the permission and the count.
+        // Apply the complete notification schedule and report the OS result.
         case .scheduleNotifications(let schedule)?:
             #if os(iOS)
             NotificationStartupTrace.mark(.notificationScheduleStarted, count: schedule.completedAnswers.count)
@@ -602,7 +573,7 @@ final class ScreenStore: ObservableObject {
             #endif
             answer(request, .passNoted(Centraid_Core_V1_PassNoted()))
         case .longRun(let run)?:
-            // "Back up now" keeps the screen awake while it runs; the OS suspends a locked phone.
+            // Keep the screen awake while the requested backup runs.
             #if os(iOS)
             UIApplication.shared.isIdleTimerDisabled = run.start
             #endif
@@ -623,10 +594,10 @@ final class ScreenStore: ObservableObject {
             FilePerformer.pick(pick) { [weak self] outcome in self?.answer(request, outcome) }
         case .saveFile(let save)?:
             FilePerformer.save(save) { [weak self] outcome in self?.answer(request, outcome) }
-        // A STREAMED EXPORT: the file the core staged, offered to the same save sheet.
+        // Offer the staged export through the system save sheet.
         case .saveFilePath(let save)?:
             FilePerformer.savePath(save) { [weak self] outcome in self?.answer(request, outcome) }
-        // PAIRING (#1135): read one QR code, and browse the network for gateways.
+        // Pairing scans a QR code and browses for gateways.
         case .scanCode(let scan)?:
             PairScan.run(scan) { [weak self] outcome in self?.answer(request, outcome) }
         #endif
@@ -674,8 +645,7 @@ final class ScreenStore: ObservableObject {
         }
     }
 
-    /// THE PLATFORM'S OWN PHOTO PAGES: Settings, and iOS's limited selection. The prompt and a
-    /// walk are the camera roll's, in Rust.
+    /// Returns camera-library grant status without enumerating photos; Rust owns the walk.
     private static func cameraRoll(_ roll: Centraid_Core_V1_CameraRoll) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
         #if os(iOS)
         switch roll.action {
@@ -759,8 +729,7 @@ final class ScreenStore: ObservableObject {
     }
 
     #if os(iOS)
-    /// THE OS-OWNED UPLOADS (iOS's background URLSession): how many tasks it holds, the whole
-    /// requests Rust handed off, and letting go of all of them.
+    /// Reports pending background upload counts and handles core upload requests.
     private static func uploadsOp(_ op: Centraid_Core_V1_UploadsOp) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
         switch op.op {
         case .pending?:
@@ -779,8 +748,7 @@ final class ScreenStore: ObservableObject {
     }
     #endif
 
-    /// THE KEYCHAIN, for per-device habits that must stay off the vault. One
-    /// generic-password item per key, readable after first unlock, never synced.
+    /// Stores per-device habits in non-synchronizing Keychain entries.
     private static func keychain(_ operation: Centraid_Core_V1_KeychainOp) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -836,8 +804,7 @@ final class ScreenStore: ObservableObject {
         else { return }
         while let next = top.presentedViewController { top = next }
         let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        // THE WORDS NEVER REACH THE CLIPBOARD (#1202): this sheet carries the recovery words ("Save a
-        // copy"), so its own Copy action is left off; Notes, Files and Mail stay.
+        // Recovery words must not be copied by the system share sheet.
         sheet.excludedActivityTypes = [.copyToPasteboard]
         if !share.subject.isEmpty { sheet.setValue(share.subject, forKey: "subject") }
         sheet.popoverPresentationController?.sourceView = top.view

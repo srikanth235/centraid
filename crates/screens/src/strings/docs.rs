@@ -77,6 +77,10 @@ catalog! {
 
     plain field_name = ("Name", "Name");
     plain field_name_required = ("Enter a name", "Enter a name");
+    plain discard_title = ("Discard changes?", "Discard changes?");
+    plain discard_body = ("Your unsaved edits to this form will be lost.", "Your unsaved edits to this form will be lost.");
+    plain discard_confirm = ("Discard", "Discard");
+    plain discard_keep = ("Keep editing", "Keep editing");
     plain field_body = ("Text", "Text");
     plain field_folder_name = ("Folder name", "Folder name");
 
@@ -85,10 +89,6 @@ catalog! {
     plain doc_saved = ("Document saved", "Document saved");
     plain version_restored = ("Version restored", "Version restored");
     plain shared = ("Ready to share", "Ready to share");
-    plain scan_note = ("Camera scan opens on this phone.", "Camera scan opens on this phone.");
-    plain choose_file_note = ("File picker opens on this phone.", "File picker opens on this phone.");
-    plain export_note = ("Confirm it's you to export documents.", "Confirm it's you to export documents.");
-    plain download_note = ("Downloading the original from your backup device.", "Downloading the original from your backup device.");
     plain followed_active = ("Following", "Following");
     plain followed_stopped = ("Stopped", "Stopped");
 

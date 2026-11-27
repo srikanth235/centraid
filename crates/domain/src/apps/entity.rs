@@ -1,9 +1,9 @@
 //! Reads over `entity` that no one app owns: a kind's starred rows, what a home holds, and how
-//! many of each kind it holds (the number a delete confirm names, N11).
+//! how many of each kind it holds for delete confirmation.
 
 use rusqlite::Row;
 
-use crate::read::{DEFAULT_PAGE, ParamTy, Read, ReadDecl, Shape, desc, param, read};
+use crate::read::{DEFAULT_PAGE, ParamTy, Read, ReadDecl, Shape, asc, desc, param, read};
 
 use super::{Held, Item, Titled};
 
@@ -333,6 +333,30 @@ pub const BY_KIND_RECENT: Read<EntitySearchRow> = read(
     EntitySearchRow::of,
 );
 
+/// Keyset pages for kinds deliberately outside FTS, ordered by the vault's title index. Callers
+/// fold and compare each bounded page with the same Unicode normalizer as the text index.
+pub const TITLES_BY_KIND_PAGE: Read<EntitySearchRow> = read(
+    ReadDecl {
+        name: "entity.titles_by_kind_page",
+        shape: Shape::PagedList,
+        sql: "SELECT id, kind, title, created_at, created_at AS at \
+              FROM entity INDEXED BY entity_by_title_nocase \
+              WHERE kind = :kind AND deleted_at IS NULL \
+                AND (title COLLATE NOCASE, created_at, id) > (:after_title, :after_created_at, :after_id) \
+              ORDER BY title COLLATE NOCASE ASC, created_at ASC, id ASC LIMIT :n",
+        params: &[param("kind", ParamTy::Text)],
+        reads: &["entity"],
+        across: &[],
+        bound: DEFAULT_PAGE,
+        cursor: &[
+            asc("title", "after_title"),
+            asc("created_at", "after_created_at"),
+            asc("id", "after_id"),
+        ],
+    },
+    EntitySearchRow::of,
+);
+
 pub const CONTAINERS_BY_KIND: Read<ContainerRow> = read(
     ReadDecl {
         name: "entity.containers_by_kind",
@@ -346,6 +370,25 @@ pub const CONTAINERS_BY_KIND: Read<ContainerRow> = read(
         across: &["entity"],
         bound: 100,
         cursor: &[],
+    },
+    ContainerRow::of,
+);
+
+/// One keyset page of the containers of a kind, for pickers that can continue past the first
+/// window without loading every container into a room.
+pub const CONTAINERS_BY_KIND_PAGE: Read<ContainerRow> = read(
+    ReadDecl {
+        name: "entity.containers_by_kind_page",
+        shape: Shape::PagedList,
+        sql: "SELECT c.id, c.kind, e.title, c.color, c.icon \
+              FROM container c INDEXED BY container_by_kind JOIN entity e ON e.id = c.id \
+              WHERE c.kind = :kind AND e.deleted_at IS NULL AND c.id > :after_id \
+              ORDER BY c.id ASC LIMIT :n",
+        params: &[param("kind", ParamTy::Text)],
+        reads: &["container"],
+        across: &["entity"],
+        bound: DEFAULT_PAGE,
+        cursor: &[asc("id", "after_id")],
     },
     ContainerRow::of,
 );
@@ -552,6 +595,8 @@ pub const READS: &[ReadDecl] = &[
     MENTIONED_IN.decl,
     BY_KIND_RECENT.decl,
     CONTAINERS_BY_KIND.decl,
+    CONTAINERS_BY_KIND_PAGE.decl,
+    TITLES_BY_KIND_PAGE.decl,
     FILES_FOLLOWED.decl,
     FOLLOWED_STORES.decl,
     PHONE_DIFFERENCES.decl,

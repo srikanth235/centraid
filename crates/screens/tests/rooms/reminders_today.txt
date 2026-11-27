@@ -23,6 +23,8 @@ room app_place key="reminders"
             item "Done" #task/01900000-0000-7000-8000-000000000203/menu/done
             item "Star" #task/01900000-0000-7000-8000-000000000203/menu/star
             item "Snooze" #task/01900000-0000-7000-8000-000000000203/menu/snooze
+            item "Select" #task/01900000-0000-7000-8000-000000000203/menu/select
+            item "Move or tag" #task/01900000-0000-7000-8000-000000000203/menu/organize
             item "Move to trash" destructive #task/01900000-0000-7000-8000-000000000203/menu/trash
       row #task/01900000-0000-7000-8000-000000000202 "Send invoice" meta="2026-06-15" chips="Starred":accent mark=check:off#task/01900000-0000-7000-8000-000000000202/check swipe="Move to trash" #task/01900000-0000-7000-8000-000000000202/swipe
         menu #task/01900000-0000-7000-8000-000000000202/menu
@@ -31,11 +33,15 @@ room app_place key="reminders"
             item "Done" #task/01900000-0000-7000-8000-000000000202/menu/done
             item "Unstar" #task/01900000-0000-7000-8000-000000000202/menu/star
             item "Snooze" #task/01900000-0000-7000-8000-000000000202/menu/snooze
+            item "Select" #task/01900000-0000-7000-8000-000000000202/menu/select
+            item "Move or tag" #task/01900000-0000-7000-8000-000000000202/menu/organize
             item "Move to trash" destructive #task/01900000-0000-7000-8000-000000000202/menu/trash
     section #section/my-lists "My Lists"
       trailing "New list" sym="Plus" #lists/add
+      row #list/inbox "Inbox" meta="1 open" mark=glyph:Tray
       row #list/01900000-0000-7000-8000-000000000201 "Work" mark=glyph:List swipe="Move to trash" #list/01900000-0000-7000-8000-000000000201/swipe
         menu #list/01900000-0000-7000-8000-000000000201/menu
           section
             item "Move to trash" destructive #list/01900000-0000-7000-8000-000000000201/trash
   search placeholder="Search Reminders" #search
+  selection

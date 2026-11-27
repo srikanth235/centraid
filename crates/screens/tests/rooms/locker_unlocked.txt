@@ -1,5 +1,5 @@
 room app_place key="locker" secure
-  header title="Locker" subtitle="Unlocked · locks after 5 minutes idle"
+  header title="Locker" subtitle="Unlocked"
     key add sym="Add" "Add item" #key/add
     filter clear=#filter/clear
       menu #locker-filter-menu
@@ -25,8 +25,8 @@ room app_place key="locker" secure
     tab "Starred" sym="Star" #tab/starred
     menu #band/more/menu
       section
+        item "Lock" #more/lock
         item "Expiry alerts" #more/alerts
-        item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash
   ready
     section #section/items "Items"
@@ -37,5 +37,8 @@ room app_place key="locker" secure
             item "Edit" #row/019a1111-1111-7111-8111-111111111111/menu/edit
             item "Change type" #row/019a1111-1111-7111-8111-111111111111/menu/type
             item "Star" #row/019a1111-1111-7111-8111-111111111111/menu/star
+            item "Select" #row/019a1111-1111-7111-8111-111111111111/menu/select
+            item "Move or tag" #row/019a1111-1111-7111-8111-111111111111/menu/organize
             item "Move to trash" destructive #row/019a1111-1111-7111-8111-111111111111/menu/trash
   search placeholder="Search titles and usernames" #search
+  selection

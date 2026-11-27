@@ -1,6 +1,5 @@
-//! ONE MODULE PER APP: its kinds and its reads (app-plane §1). The actions belong to kinds, not
-//! apps, and are one table of their own ([`crate::action`]). An app's SQL stays inside its own
-//! tables and the tables it names in `across`; the authorizer holds it to that.
+//! Each app declares its kinds and reads. Actions belong to kinds, and each read is confined to
+//! its declared tables by the authorizer.
 
 use rusqlite::Row;
 

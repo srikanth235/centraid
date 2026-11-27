@@ -524,6 +524,7 @@ dependencies = [
  "image",
  "jsonschema",
  "prost",
+ "rand",
  "rustix",
  "serde",
  "serde_json",
@@ -532,6 +533,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]
@@ -654,6 +656,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]
@@ -721,6 +724,7 @@ dependencies = [
  "centraid-gateway",
  "centraid-identity",
  "centraid-ontology",
+ "centraid-search",
  "centraid-vault",
  "prost",
  "rand",

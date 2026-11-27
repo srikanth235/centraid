@@ -1,0 +1,8 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.31s
+     Running tests/review_room_artifacts.rs (target/debug/deps/review_room_artifacts-8bc24385b8d1095d)
+
+running 1 test
+test emit_review_room_artifacts_when_opted_in ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+

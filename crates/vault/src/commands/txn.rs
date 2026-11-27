@@ -770,30 +770,84 @@ pub struct Proposal {
 pub fn proposed_matches(connection: &Connection, account_id: &str) -> Result<Vec<Proposal>> {
     let mut statement = connection.prepare_cached(PROPOSALS)?;
     let rows = statement
-        .query_map(rusqlite::params![account_id, MATCH_DAYS], |row| {
-            Ok(Proposal {
-                hand_id: row.get(0)?,
-                statement_id: row.get(1)?,
-            })
-        })?
+        .query_map(
+            rusqlite::named_params! { ":account": account_id, ":days": MATCH_DAYS },
+            |row| {
+                Ok(Proposal {
+                    hand_id: row.get("hand_id")?,
+                    statement_id: row.get("statement_id")?,
+                })
+            },
+        )?
         .collect::<rusqlite::Result<Vec<Proposal>>>()?;
     let mut rows = rows;
     rows.sort_by(|a, b| (&a.hand_id, &a.statement_id).cmp(&(&b.hand_id, &b.statement_id)));
     Ok(rows)
 }
 
-/// The statement of [`proposed_matches`]; `money_walks.rs` plans it.
-pub const PROPOSALS: &str = "SELECT h.id, s.id
-   FROM txn h
-   CROSS JOIN entity he ON he.id = h.id AND he.deleted_at IS NULL
-   CROSS JOIN txn s ON s.account_id = h.account_id
-             AND s.posted_on >= date(h.posted_on, '-' || ?2 || ' days')
-             AND s.posted_on <= date(h.posted_on, '+' || ?2 || ' days')
-             AND s.amount_minor = h.amount_minor AND s.entered = 'statement'
-   JOIN entity se ON se.id = s.id AND se.deleted_at IS NULL
-  WHERE h.account_id = ?1 AND h.entered = 'hand'
-    AND NOT EXISTS (SELECT 1 FROM txn_match_dismissal d
-                     WHERE d.hand_id = h.id AND d.statement_id = s.id)";
+macro_rules! proposal_candidate {
+    () => {
+        "s.account_id = h.account_id \
+         AND s.posted_on >= date(h.posted_on, '-' || :days || ' days') \
+         AND s.posted_on <= date(h.posted_on, '+' || :days || ' days') \
+         AND s.amount_minor = h.amount_minor AND s.entered = 'statement'"
+    };
+}
+
+macro_rules! proposal_not_dismissed {
+    () => {
+        "NOT EXISTS (SELECT 1 FROM txn_match_dismissal d \
+                    WHERE d.hand_id = h.id AND d.statement_id = s.id)"
+    };
+}
+
+/// The pair statement of [`proposed_matches`]; `money_walks.rs` plans it.
+pub const PROPOSALS: &str = concat!(
+    "SELECT h.id AS hand_id, s.id AS statement_id \
+     FROM txn h CROSS JOIN entity eh ON eh.id = h.id AND eh.deleted_at IS NULL \
+     CROSS JOIN txn s ON ",
+    proposal_candidate!(),
+    " CROSS JOIN entity es ON es.id = s.id AND es.deleted_at IS NULL \
+     WHERE h.account_id = :account AND h.entered = 'hand' AND ",
+    proposal_not_dismissed!()
+);
+/// Hand lines with at least one possible statement partner. The partner list is
+/// read on demand by `PROPOSAL_CANDIDATES`, avoiding an unbounded grouped value.
+pub const PROPOSAL_HANDS: &str = concat!(
+    "SELECT h.id AS hand_id, eh.title AS hand_title, h.posted_on AS hand_day, \
+            h.amount_minor AS amount_minor, a.currency AS currency \
+       FROM txn h INDEXED BY txn_hand_by_account \
+       CROSS JOIN entity eh ON eh.id = h.id \
+       CROSS JOIN account a ON a.id = h.account_id \
+      WHERE h.account_id = :account AND h.entered = 'hand' \
+        AND eh.deleted_at IS NULL \
+        AND EXISTS (SELECT 1 FROM txn s INDEXED BY txn_by_account_day \
+                     CROSS JOIN entity es ON es.id = s.id \
+                    WHERE ",
+    proposal_candidate!(),
+    " AND ",
+    proposal_not_dismissed!(),
+    " AND es.deleted_at IS NULL) \
+        AND (h.posted_on, h.id) > (:after_day, :after_id) \
+      ORDER BY h.posted_on, h.id LIMIT :n"
+);
+
+/// All non-dismissed statement partners for the selected hand line, in the
+/// account/day index order. The statement is paged so dense dates remain bounded.
+pub const PROPOSAL_CANDIDATES: &str = concat!(
+    "SELECT s.id AS statement_id, es.title AS statement_title, s.posted_on AS statement_day \
+       FROM txn h CROSS JOIN txn s INDEXED BY txn_by_account_day \
+         ON s.account_id = h.account_id \
+       CROSS JOIN entity eh ON eh.id = h.id \
+       CROSS JOIN entity es ON es.id = s.id \
+      WHERE h.id = :hand AND h.entered = 'hand' AND eh.deleted_at IS NULL \
+        AND es.deleted_at IS NULL AND ",
+    proposal_candidate!(),
+    " AND ",
+    proposal_not_dismissed!(),
+    " AND (s.posted_on, s.id) > (:after_day, :after_id) \
+      ORDER BY s.posted_on, s.id LIMIT :n"
+);
 
 fn pre_confirm(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let connection = ctx.connection();

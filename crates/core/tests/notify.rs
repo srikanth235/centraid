@@ -272,6 +272,41 @@ fn a_trashed_event_has_its_pending_and_delivered_entries_cancelled() {
 }
 
 #[test]
+fn a_purged_event_cannot_keep_a_pending_or_delivered_alert() {
+    let world = World::new();
+    let event = world.event(3, "2026-11-27T12:00:00.000Z");
+    world.remind(&event, 0);
+    let scheduler = Scheduler::new();
+    let before = world.set(&scheduler, NOW - 1);
+    let id = before.all[0].notification_id.clone();
+    scheduler.scheduled(&wire::NotificationsScheduled {
+        permission: wire::NotificationPermission::Granted as i32,
+        delivered: vec![wire::DeliveredNotification {
+            notification_id: id.clone(),
+            source_fingerprint: String::new(),
+        }],
+        ..wire::NotificationsScheduled::default()
+    });
+
+    common::command(
+        &world.handle,
+        "entity.trash",
+        &json!({ "id": event }),
+        "trash-for-purge",
+    );
+    common::command(
+        &world.handle,
+        "entity.purge",
+        &json!({ "id": event }),
+        "purge-event",
+    );
+    let after = world.set(&scheduler, NOW + 1);
+    assert!(after.all.is_empty());
+    assert!(!after.live_ids.contains(&id));
+    assert!(after.cancel_delivered_ids.contains(&id));
+}
+
+#[test]
 fn a_locker_expiry_says_only_that_something_expires_and_names_nothing() {
     let world = World::new();
     let item = id(20);

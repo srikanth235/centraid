@@ -1,10 +1,8 @@
 # Chat on Android: the same band place and ids as `chat.yaml`; only the package differs (`dev.centraid`).
 #
-# THE POINT: Chat is a band place, not an app. It opens from Home's band, lists the member's chats
-# over the composer, and the band's Home place returns the springboard. Ids are the room's own
-# (`crates/screens/tests/rooms/chat_root.txt`). The model's download step, suggestions and proposed
-# write cards are not rooms of this tree and are not driven here; neither is a reply, which needs a
-# model (a DEBUG build with the chat script named in `crates/assist/src/testing.rs`).
+# Chat is an unavailable state today: no composer or Send action is drawn. This flow checks the
+# empty-state block, opens the thread list, returns to Chat, and uses the band's Home tab. It never
+# submits a fake message. Selectors are from the Rust room state (`chat_root.txt`).
 #
 # THE DEMO VAULT (`mobile/scripts/demo-vault.sh`), as `home.yaml`.
 appId: dev.centraid
@@ -20,16 +18,23 @@ name: chat-android
 - assertVisible:
     id: "key/threads"
 - assertVisible:
-    id: "section/threads"
-- assertVisible:
+    id: "block-empty"
+- assertVisible: "No chats yet"
+- assertNotVisible:
     id: "field/composer"
-# Send waits for words.
-- tapOn:
-    id: "field/composer"
-- inputText: "Who am I meeting?"
-- assertVisible:
+- assertNotVisible:
     id: "form/save"
-# BACK TO HOME: the band's Home place returns the springboard.
+- tapOn:
+    id: "key/threads"
+- assertVisible:
+    id: "room-chat/threads"
+- assertVisible:
+    id: "block-empty"
+- tapOn:
+    id: "room-back"
+- assertVisible:
+    id: "room-chat"
+# The band's Home place returns the springboard.
 - tapOn:
     id: "tab/home"
 - assertVisible:

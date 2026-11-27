@@ -1,5 +1,8 @@
 catalog! {
     plain title = ("Health", "Health");
+    plain search_placeholder = ("Search Health", "Search Health");
+    plain empty_search_title = ("Nothing matches", "Nothing matches");
+    plain empty_search_body = ("No workout matches “{term}”.", "No workout matches “{term}”.");
     plain tab_summary = ("Summary", "Summary");
     plain tab_workouts = ("Workouts", "Workouts");
     plain tab_vitals = ("Vitals", "Vitals");
@@ -7,7 +10,11 @@ catalog! {
     plain more_workout_kinds = ("Workout kinds", "Workout kinds");
     plain more_export = ("Export", "Export");
     plain follow_health_note = ("Follow your phone's health store from this phone.", "Follow your phone's health store from this phone.");
-    plain export_note = ("Confirm it's you to export your health records.", "Confirm it's you to export your health records.");
+    plain export_title = ("Export health data", "Export health data");
+    plain export_heading = ("Choose a kind", "Choose a kind");
+    plain export_measurements = ("Daily measurements", "Daily measurements");
+    plain export_readings = ("Readings", "Readings");
+    plain export_workouts = ("Workouts", "Workouts");
 
     plain summary_heading = ("Today", "Today");
     plain summary_empty_title = ("No figures for this day", "No figures for this day");
@@ -15,6 +22,12 @@ catalog! {
     plain summary_edit_action = ("Edit figures", "Edit figures");
     plain summary_chart_summary = ("{metric} over the last 14 days", "{metric} over the last 14 days");
     plain summary_chart_empty = ("No {metric} figures yet.", "No {metric} figures yet.");
+    plain summary_today_nothing = ("Nothing yet today", "Nothing yet today");
+    plain summary_typical_heading = ("Typical range", "Typical range");
+    plain summary_typical_period = ("{metric} · previous 28 completed days", "{metric} · previous 28 completed days");
+    plain summary_typical_days = ("{count} days with recorded {metric}", "{count} days with recorded {metric}");
+    plain summary_typical_wait = ("A typical range appears after 7 days with recorded values.", "A typical range appears after 7 days with recorded values.");
+    plain summary_typical_value = ("{lower}–{upper}", "{lower}–{upper}");
     plain prev_day = ("Previous day", "Previous day");
     plain next_day = ("Next day", "Next day");
 
@@ -94,6 +107,7 @@ catalog! {
     plain discard_title = ("Discard changes?", "Discard changes?");
     plain discard_body = ("Your unsaved edits will be lost.", "Your unsaved edits will be lost.");
     plain discard_confirm = ("Discard", "Discard");
+    plain discard_keep = ("Keep editing", "Keep editing");
     plain earlier_versions_summary = ("Earlier versions", "Earlier versions");
     plain linked_heading = ("Linked", "Linked");
     plain attachments_heading = ("Attachments", "Attachments");

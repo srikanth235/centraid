@@ -3,6 +3,8 @@ use centraid_domain::apps::{entity as entity_reads, locker as reads};
 use centraid_domain::read::Args;
 use rand::RngCore as _;
 use serde_json::{Map, Value, json};
+use std::collections::BTreeMap;
+use zeroize::Zeroizing;
 
 use super::blocks::{self, Confirm, glyph};
 use super::first;
@@ -16,7 +18,6 @@ pub const LOCKER: &str = "locker";
 pub const STARRED: &str = "locker/starred";
 pub const NEW_ITEM: &str = "locker/new";
 pub const ALERTS: &str = "locker/alerts";
-pub const EXPORT: &str = "locker/export";
 pub const TRASH: &str = "locker/trash";
 
 const EN: Locale = Locale::En;
@@ -40,7 +41,7 @@ const ITEM_TYPES: [&str; 15] = [
     "document",
 ];
 
-const PLAIN_FIELD_KINDS: [&str; 3] = ["text", "url", "date"];
+const FIELD_KINDS: [&str; 5] = ["text", "url", "date", "sealed", "otp"];
 
 #[must_use]
 pub fn registry() -> Registry {
@@ -49,7 +50,6 @@ pub fn registry() -> Registry {
         .exact(STARRED, || Box::new(LockerStarredRoom::default()))
         .exact(NEW_ITEM, || Box::new(LockerItemForm::new_item()))
         .exact(ALERTS, || Box::new(ExpiryAlertsRoom))
-        .exact(EXPORT, || Box::new(LockerExportConfirm))
         .exact(TRASH, || Box::new(LockerTrash::default()))
         .exact("locker/trash/empty", || Box::new(EmptyTrashConfirm))
         .with(Box::new(|key| {
@@ -57,21 +57,45 @@ pub fn registry() -> Registry {
                 return Some(Box::new(PurgeConfirm { id: id.to_owned() }));
             }
             if let Some(rest) = key.strip_prefix("locker/item/") {
+                if let Some(id) = rest.strip_suffix("/link") {
+                    return Some(Box::new(super::link_picker::LinkPicker::new(
+                        id.to_owned(),
+                        format!("locker/item/{id}"),
+                        words::title(EN),
+                    )));
+                }
+                if let Some(id) = rest.strip_suffix("/field/new") {
+                    return Some(Box::new(AddFieldForm::new(id.to_owned())));
+                }
+                if let Some((item_id, field_id)) = rest.split_once("/field/")
+                    && let Some(field_id) = field_id.strip_suffix("/edit")
+                {
+                    return Some(Box::new(AddFieldForm::edit(
+                        item_id.to_owned(),
+                        field_id.to_owned(),
+                    )));
+                }
                 if let Some(id) = rest.strip_suffix("/edit") {
                     return Some(Box::new(LockerItemForm::edit_item(id.to_owned())));
                 }
                 if let Some(id) = rest.strip_suffix("/type") {
                     return Some(Box::new(ChangeTypeRoom::new(id.to_owned())));
                 }
-                if let Some(id) = rest.strip_suffix("/field/new") {
-                    return Some(Box::new(AddFieldForm::new(id.to_owned())));
+                if let Some(id) = rest.strip_suffix("/fields") {
+                    return Some(Box::new(LockerFieldsRoom::new(id.to_owned())));
+                }
+                if let Some((item_id, passkey_id)) = rest.split_once("/passkey/")
+                    && let Some(passkey_id) = passkey_id.strip_suffix("/rename")
+                {
+                    return Some(Box::new(PasskeyRenameForm::new(
+                        item_id.to_owned(),
+                        passkey_id.to_owned(),
+                    )));
                 }
                 if let Some(id) = rest.strip_suffix("/versions") {
                     return Some(Box::new(EarlierVersionsRoom { id: id.to_owned() }));
                 }
-                return Some(Box::new(LockerDetailRoom {
-                    id: rest.to_owned(),
-                }));
+                return Some(Box::new(LockerDetailRoom::new(rest.to_owned())));
             }
             None
         }))
@@ -135,8 +159,29 @@ fn field_kind_label(kind: &str) -> String {
     match kind {
         "url" => words::field_kind_url(EN),
         "date" => words::field_kind_date(EN),
+        "sealed" => words::field_kind_sealed(EN),
+        "otp" => words::field_kind_otp(EN),
         _ => words::field_kind_text(EN),
     }
+}
+
+fn clipboard_clear(door: &dyn super::door::Door) -> wire::shell_effect::Kind {
+    wire::shell_effect::Kind::ClipboardCopy(wire::ShellClipboardCopy {
+        sealed: true,
+        owner_vault_id: door.vault_id(),
+        clear_owned: true,
+        ..wire::ShellClipboardCopy::default()
+    })
+}
+
+fn clipboard_copy(door: &dyn super::door::Door, text: &str) -> wire::shell_effect::Kind {
+    wire::shell_effect::Kind::ClipboardCopy(wire::ShellClipboardCopy {
+        text: text.to_owned(),
+        sealed: true,
+        lease_s: 30,
+        owner_vault_id: door.vault_id(),
+        ..wire::ShellClipboardCopy::default()
+    })
 }
 
 fn locker_band(sel: &mut Sel, active_tab: &str, allow_search: bool) -> wire::RoomBand {
@@ -163,21 +208,26 @@ fn locker_band(sel: &mut Sel, active_tab: &str, allow_search: bool) -> wire::Roo
         Handler::Open(TRASH.to_owned()),
     );
     more_trash.secondary = shared::trash_entry_meta(EN);
-    let more_items = vec![
+    let mut more_items = vec![
         blocks::menu_item(
             sel,
             "more/alerts",
             &words::more_alerts(EN),
             Handler::Open(ALERTS.to_owned()),
         ),
-        blocks::menu_item(
-            sel,
-            "more/export",
-            &words::more_export(EN),
-            Handler::Open(EXPORT.to_owned()),
-        ),
         more_trash,
     ];
+    if allow_search {
+        more_items.insert(
+            0,
+            blocks::menu_item(
+                sel,
+                "more/lock",
+                &words::lock_action(EN),
+                Handler::Tag("locker:lock".to_owned()),
+            ),
+        );
+    }
     let more_menu = blocks::menu(
         "band/more/menu",
         vec![blocks::menu_section("", more_items)],
@@ -204,7 +254,12 @@ fn handle_band_nav(tag: &str) -> Option<Outcome> {
     }
 }
 
-fn item_row(sel: &mut Sel, item: &reads::LockerItemSummary) -> wire::RoomBlock {
+fn item_row(
+    sel: &mut Sel,
+    item: &reads::LockerItemSummary,
+    selecting: bool,
+    selected: bool,
+) -> wire::RoomBlock {
     let id = &item.id;
     let starred = item.starred_at.is_some();
     let star_act = if starred {
@@ -225,7 +280,12 @@ fn item_row(sel: &mut Sel, item: &reads::LockerItemSummary) -> wire::RoomBlock {
         Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
     );
     trash_item.destructive = true;
-    // P4/N13: Locker items never offer Share.
+    let organize_item = blocks::menu_item(
+        sel,
+        &format!("row/{id}/menu/organize"),
+        &shared::organize(EN),
+        Handler::Open(super::organize::route(std::slice::from_ref(id))),
+    );
     let menu = blocks::menu(
         &format!("row/{id}/menu"),
         vec![blocks::menu_section(
@@ -259,25 +319,34 @@ fn item_row(sel: &mut Sel, item: &reads::LockerItemSummary) -> wire::RoomBlock {
                     },
                     Handler::Act(star_act),
                 ),
+                blocks::menu_item(
+                    sel,
+                    &format!("row/{id}/menu/select"),
+                    &words::menu_select(EN),
+                    Handler::SelectMode(true),
+                ),
+                organize_item,
                 trash_item,
             ],
         )],
         sel,
     );
-    let mut row = blocks::row(
-        sel,
-        &format!("row/{id}"),
-        &item.title,
-        Handler::Open(format!("locker/item/{id}")),
-    )
-    .meta(&type_label(&item.item_type))
-    .menu(menu)
-    .swipe(
-        sel,
-        &format!("row/{id}/swipe"),
-        &shared::trash_move(EN),
-        Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
-    );
+    let tap = if selecting {
+        Handler::Pick(id.clone())
+    } else {
+        Handler::Open(format!("locker/item/{id}"))
+    };
+    let mut row = blocks::row(sel, &format!("row/{id}"), &item.title, tap)
+        .meta(&type_label(&item.item_type))
+        .selected(selected);
+    if !selecting {
+        row = row.menu(menu).swipe(
+            sel,
+            &format!("row/{id}/swipe"),
+            &shared::trash_move(EN),
+            Handler::Act(Act::new("entity.trash", json!({ "ids": [id] }))),
+        );
+    }
     if item.compromised {
         row = row.chip(blocks::chip(
             &words::chip_compromised(EN),
@@ -287,8 +356,46 @@ fn item_row(sel: &mut Sel, item: &reads::LockerItemSummary) -> wire::RoomBlock {
     row.into_block()
 }
 
+fn selection_actions(sel: &mut Sel, ids: &[String], unstar: bool) -> Vec<wire::RoomMenuItem> {
+    if ids.is_empty() {
+        return Vec::new();
+    }
+    let mut trash = blocks::menu_item(
+        sel,
+        "selection/trash",
+        &shared::trash_move(EN),
+        Handler::Act(Act::new("entity.trash", json!({ "ids": ids }))),
+    );
+    trash.destructive = true;
+    vec![
+        blocks::menu_item(
+            sel,
+            "selection/organize",
+            &shared::organize(EN),
+            Handler::Open(super::organize::route(ids)),
+        ),
+        blocks::menu_item(
+            sel,
+            "selection/star",
+            &if unstar {
+                words::item_menu_unstar(EN)
+            } else {
+                words::item_menu_star(EN)
+            },
+            Handler::Act(Act::new(
+                if unstar {
+                    "flag.clear/starred"
+                } else {
+                    "flag.set/starred"
+                },
+                json!({ "flag": "starred", "ids": ids }),
+            )),
+        ),
+        trash,
+    ]
+}
+
 struct LockerItemsRoom {
-    unlocked: bool,
     filter_type: Option<String>,
     loaded: usize,
     unlock_failure: String,
@@ -297,7 +404,6 @@ struct LockerItemsRoom {
 impl LockerItemsRoom {
     fn locked() -> Self {
         Self {
-            unlocked: false,
             filter_type: None,
             loaded: 50,
             unlock_failure: String::new(),
@@ -315,7 +421,24 @@ impl RoomScreen for LockerItemsRoom {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
-        if !self.unlocked {
+        if !b.door.locker_unlocked() {
+            let persisted_failure = b
+                .door
+                .locker_failed_unlocks()
+                .ok()
+                .filter(|(count, _)| *count > 0)
+                .map(|(count, at)| {
+                    let at = at.unwrap_or_default();
+                    fill(
+                        &words::wall_failed(EN),
+                        &[("count", &count.to_string()), ("at", &at)],
+                    )
+                });
+            let failure = match (persisted_failure, self.unlock_failure.as_str()) {
+                (Some(persisted), "") => persisted,
+                (Some(persisted), latest) => format!("{persisted}\n{latest}"),
+                (None, latest) => latest.to_owned(),
+            };
             let unlock = blocks::action(
                 &mut b.sel,
                 "wall/unlock",
@@ -333,14 +456,14 @@ impl RoomScreen for LockerItemsRoom {
                     &home_words::locker_step_one_title(EN),
                     &home_words::locker_step_one_body(EN),
                     confirm,
-                    &self.unlock_failure,
+                    &failure,
                 )
             } else {
                 blocks::wall(
                     &words::wall_title(EN),
                     &words::wall_body(EN),
                     unlock,
-                    &self.unlock_failure,
+                    &failure,
                 )
             };
             return room(wire::RoomKind::AppPlace, LOCKER)
@@ -376,7 +499,7 @@ impl RoomScreen for LockerItemsRoom {
             }
         };
 
-        // K3: plaintext title search only; never search sealed values and never offer Ask row.
+        // Locker search reads only plaintext metadata and fields.
         let term = b.ui.search_term().trim().to_lowercase();
         let filtered: Vec<&reads::LockerItemSummary> = page
             .rows
@@ -393,6 +516,9 @@ impl RoomScreen for LockerItemsRoom {
 
         let filtered_empty_first =
             filtered.is_empty() && term.is_empty() && self.filter_type.is_none();
+        b.ui.list(filtered.iter().map(|item| item.id.clone()));
+        let selecting = b.ui.selecting();
+        let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
         let blocks_out = if filtered.is_empty() {
             vec![blocks::empty(
                 glyph("Lock", "app.locker"),
@@ -409,7 +535,7 @@ impl RoomScreen for LockerItemsRoom {
         } else {
             let rows: Vec<wire::RoomBlock> = filtered
                 .iter()
-                .map(|item| item_row(&mut b.sel, item))
+                .map(|item| item_row(&mut b.sel, item, selecting, b.ui.is_picked(&item.id)))
                 .collect();
             let mut section =
                 blocks::section(&mut b.sel, "section/items", &words::tab_items(EN)).blocks(rows);
@@ -447,6 +573,8 @@ impl RoomScreen for LockerItemsRoom {
             )],
             &mut b.sel,
         );
+        let selected_count = words::selected_count(EN, picked.len() as u64);
+        let selection = selection_actions(&mut b.sel, &picked, false);
 
         room(wire::RoomKind::AppPlace, LOCKER)
             .title(&words::title(EN))
@@ -466,18 +594,79 @@ impl RoomScreen for LockerItemsRoom {
                 Handler::Open(NEW_ITEM.to_owned()),
             )
             .search(&mut b.sel, b.ui, &words::search_placeholder(EN))
+            .selection(&mut b.sel, b.ui, &selected_count, selection)
             .band(locker_band(&mut b.sel, LOCKER, true))
             .ready(blocks_out)
             .build()
     }
 
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
         if let Some(outcome) = handle_band_nav(tag) {
             return outcome;
         }
+        if tag == "locker:lock" {
+            match e.door.locker_lock() {
+                Ok(()) => {
+                    let mut outcome = Outcome::replace(LOCKER);
+                    outcome.effect =
+                        Some(("locker:clipboard_clear".to_owned(), clipboard_clear(e.door)));
+                    return outcome;
+                }
+                Err(_) => return Outcome::refuse(&words::wall_unlock_failed(EN)),
+            }
+        }
         if tag == "locker:unlock" {
-            self.unlocked = true;
-            self.unlock_failure.clear();
+            if let Input::Effect(result) = input {
+                return match &result.outcome {
+                    Some(wire::shell_effect_result::Outcome::Owner(owner)) if owner.cancelled => {
+                        Outcome::default()
+                    }
+                    Some(wire::shell_effect_result::Outcome::Owner(owner)) if owner.no_passcode => {
+                        self.unlock_failure = words::wall_no_passcode(EN);
+                        Outcome::refuse(&self.unlock_failure)
+                    }
+                    Some(wire::shell_effect_result::Outcome::Owner(owner)) if owner.passed => {
+                        match e.door.locker_unlock() {
+                            Ok((cleared, _)) => {
+                                self.unlock_failure.clear();
+                                if cleared > 0 {
+                                    Outcome::say(&fill(
+                                        &words::wall_unlock_cleared(EN),
+                                        &[("count", &cleared.to_string())],
+                                    ))
+                                } else {
+                                    Outcome::default()
+                                }
+                            }
+                            Err(_) => Outcome::refuse(&words::wall_unlock_failed(EN)),
+                        }
+                    }
+                    Some(wire::shell_effect_result::Outcome::Failed(failed))
+                        if failed.cancelled =>
+                    {
+                        Outcome::default()
+                    }
+                    Some(wire::shell_effect_result::Outcome::Owner(_)) => {
+                        match e.door.locker_unlock_failed() {
+                            Ok(_) => {
+                                self.unlock_failure = words::wall_unlock_failed(EN);
+                                Outcome::refuse(&self.unlock_failure)
+                            }
+                            Err(_) => Outcome::refuse(&words::wall_unlock_failed(EN)),
+                        }
+                    }
+                    _ => Outcome::refuse(&words::wall_unlock_failed(EN)),
+                };
+            }
+            if matches!(input, Input::Tap) {
+                return Outcome::effect(
+                    "locker:unlock",
+                    wire::shell_effect::Kind::OwnerCheck(wire::ShellOwnerCheck {
+                        reason: words::wall_body(EN),
+                        ..wire::ShellOwnerCheck::default()
+                    }),
+                );
+            }
             return Outcome::default();
         }
         if tag == "type:all" {
@@ -525,6 +714,9 @@ impl RoomScreen for LockerStarredRoom {
                     .build();
             }
         };
+        b.ui.list(page.rows.iter().map(|item| item.id.clone()));
+        let selecting = b.ui.selecting();
+        let picked: Vec<String> = b.ui.picked().map(str::to_owned).collect();
         let blocks_out = if page.rows.is_empty() {
             vec![blocks::empty(
                 glyph("Star", "app.locker"),
@@ -536,7 +728,7 @@ impl RoomScreen for LockerStarredRoom {
             let rows: Vec<wire::RoomBlock> = page
                 .rows
                 .iter()
-                .map(|item| item_row(&mut b.sel, item))
+                .map(|item| item_row(&mut b.sel, item, selecting, b.ui.is_picked(&item.id)))
                 .collect();
             let mut section =
                 blocks::section(&mut b.sel, "section/starred", &words::tab_starred(EN))
@@ -546,10 +738,13 @@ impl RoomScreen for LockerStarredRoom {
             }
             vec![section.into_block()]
         };
+        let selected_count = words::selected_count(EN, picked.len() as u64);
+        let selection = selection_actions(&mut b.sel, &picked, true);
 
         room(wire::RoomKind::AppPlace, STARRED)
             .title(&words::tab_starred(EN))
             .secure()
+            .selection(&mut b.sel, b.ui, &selected_count, selection)
             .band(locker_band(&mut b.sel, STARRED, false))
             .ready(blocks_out)
             .build()
@@ -568,6 +763,20 @@ impl RoomScreen for LockerStarredRoom {
 
 struct LockerDetailRoom {
     id: String,
+    revealed: BTreeMap<String, Zeroizing<String>>,
+    plain_values: BTreeMap<String, String>,
+    revision_seq: Option<i64>,
+}
+
+impl LockerDetailRoom {
+    fn new(id: String) -> Self {
+        Self {
+            id,
+            revealed: BTreeMap::new(),
+            plain_values: BTreeMap::new(),
+            revision_seq: None,
+        }
+    }
 }
 
 impl RoomScreen for LockerDetailRoom {
@@ -598,6 +807,19 @@ impl RoomScreen for LockerDetailRoom {
             }
         };
 
+        let revisions = b
+            .run(
+                &entity_reads::REVISION_HEAD,
+                &Args::new().text("id", &self.id),
+            )
+            .map(|answer| answer.rows)
+            .unwrap_or_default();
+        let revision_seq = revisions.first().map(|head| head.seq);
+        if self.revision_seq != revision_seq {
+            self.revealed.clear();
+            self.revision_seq = revision_seq;
+        }
+
         let fields = b
             .run(
                 &reads::FIELDS_OF_ITEM,
@@ -605,6 +827,15 @@ impl RoomScreen for LockerDetailRoom {
             )
             .map(|a| a.rows)
             .unwrap_or_default();
+        self.plain_values = fields
+            .iter()
+            .filter_map(|field| {
+                field
+                    .value_text
+                    .as_ref()
+                    .map(|value| (field.id.clone(), value.clone()))
+            })
+            .collect();
         let passkeys = b
             .run(
                 &reads::PASSKEYS_OF_ITEM,
@@ -636,21 +867,42 @@ impl RoomScreen for LockerDetailRoom {
         for f in &fields {
             match f.kind.as_str() {
                 "sealed" | "otp" => {
-                    plain_and_sealed_facts.push(blocks::sealed_fact(
-                        &mut b.sel,
-                        &f.label,
-                        &format!("field/{}", f.id),
-                        Handler::Tag(format!("reveal:{}", f.id)),
-                    ));
+                    if let Some(value) = self.revealed.get(&f.id) {
+                        let mut fact =
+                            blocks::fact(&f.label, value.as_str(), wire::RoomFactKind::Secret);
+                        fact.sealed = false;
+                        let mut fact = blocks::fact_actions(
+                            &mut b.sel,
+                            fact,
+                            &format!("field/{}", f.id),
+                            None,
+                            Some(Handler::Tag(format!("copy:{}", f.id))),
+                        );
+                        fact.reveal_selector_id = b.sel.on(
+                            format!("field/{}/hide", f.id),
+                            Handler::Tag(format!("hide:{}", f.id)),
+                        );
+                        plain_and_sealed_facts.push(fact);
+                    } else {
+                        let mut fact = blocks::sealed_fact(
+                            &mut b.sel,
+                            &f.label,
+                            &format!("field/{}", f.id),
+                            Handler::Tag(format!("reveal:{}", f.id)),
+                        );
+                        fact.copy_selector_id = b.sel.on(
+                            format!("field/{}/copy", f.id),
+                            Handler::Tag(format!("copy:{}", f.id)),
+                        );
+                        plain_and_sealed_facts.push(fact);
+                    }
                 }
                 "file" => {
-                    // I7: sealed capture file never exposes plaintext filename or bytes here.
-                    file_facts.push(blocks::sealed_fact(
-                        &mut b.sel,
-                        &words::item_file_hidden(EN),
-                        &format!("file/{}", f.id),
-                        Handler::Tag(format!("reveal:{}", f.id)),
-                    ));
+                    // A sealed capture file has no plaintext name or bytes to show.
+                    let mut fact =
+                        blocks::fact(&words::item_file_hidden(EN), "", wire::RoomFactKind::Secret);
+                    fact.sealed = true;
+                    file_facts.push(fact);
                 }
                 "url" => {
                     let val = f.value_text.as_deref().unwrap_or_default();
@@ -658,7 +910,7 @@ impl RoomScreen for LockerDetailRoom {
                         &mut b.sel,
                         blocks::fact(&f.label, val, wire::RoomFactKind::Link),
                         &format!("field/{}", f.id),
-                        Some(Handler::Tag(format!("open_url:{}", f.id))),
+                        None,
                         Some(Handler::Tag(format!("copy:{}", f.id))),
                     ));
                 }
@@ -740,9 +992,15 @@ impl RoomScreen for LockerDetailRoom {
                         )),
                     );
                     remove.destructive = true;
+                    let rename = blocks::menu_item(
+                        &mut b.sel,
+                        &format!("pk/{}/rename", pk.id),
+                        &words::item_passkey_rename(EN),
+                        Handler::Open(format!("locker/item/{}/passkey/{}/rename", self.id, pk.id)),
+                    );
                     let menu = blocks::menu(
                         &format!("pk/{}/menu", pk.id),
-                        vec![blocks::menu_section("", vec![remove])],
+                        vec![blocks::menu_section("", vec![rename, remove])],
                         &mut b.sel,
                     );
                     blocks::still_row(&mut b.sel, &format!("pk/{}", pk.id), &pk.rp_id)
@@ -783,23 +1041,33 @@ impl RoomScreen for LockerDetailRoom {
             ));
         }
 
-        if let Ok(links) = b.run(&entity_reads::LINKED, &Args::new().text("id", &self.id))
-            && !links.rows.is_empty()
-        {
-            let rows = links
-                .rows
-                .iter()
-                .map(|other_id| {
-                    let label = b
-                        .run(&entity_reads::META_BY_ID, &Args::new().text("id", other_id))
-                        .ok()
-                        .and_then(|a| a.rows.into_iter().next())
-                        .map(|m| m.title)
-                        .unwrap_or_else(|| other_id.clone());
-                    blocks::still_row(&mut b.sel, &format!("link/{other_id}"), &label).build()
-                })
-                .collect();
-            blocks_out.push(blocks::linked(&words::linked_heading(EN), rows, None));
+        if let Ok(links) = b.run(&entity_reads::LINKED, &Args::new().text("id", &self.id)) {
+            let mut rows = Vec::new();
+            for other_id in &links.rows {
+                if let Ok(meta) =
+                    b.run(&entity_reads::META_BY_ID, &Args::new().text("id", other_id))
+                    && let Some(meta) = meta.rows.into_iter().next()
+                {
+                    rows.push(
+                        blocks::row(
+                            &mut b.sel,
+                            &format!("link/{}", meta.id),
+                            &meta.title,
+                            Handler::Tag(format!("open:{}:{}", meta.kind, meta.id)),
+                        )
+                        .menu(super::link_picker::unlink_menu(&mut b.sel, &meta.id))
+                        .build(),
+                    );
+                }
+            }
+            let add = blocks::action(
+                &mut b.sel,
+                "footer/linked/add",
+                &shared::link_add(EN),
+                "",
+                Handler::Tag("link:add".to_owned()),
+            );
+            blocks_out.push(blocks::linked(&words::linked_heading(EN), rows, Some(add)));
         }
 
         if let Ok(mentions) = b.run(
@@ -817,12 +1085,7 @@ impl RoomScreen for LockerDetailRoom {
             blocks_out.push(blocks::mentioned_in(&words::mentioned_heading(EN), rows));
         }
 
-        if let Ok(rev) = b.run(
-            &entity_reads::REVISION_HEAD,
-            &Args::new().text("id", &self.id),
-        ) && let Some(head) = rev.rows.first()
-            && head.count > 0
-        {
+        if let Some(head) = revisions.first().filter(|head| head.count > 0) {
             blocks_out.push(blocks::earlier_versions(
                 &mut b.sel,
                 &words::earlier_versions_summary(EN),
@@ -855,7 +1118,6 @@ impl RoomScreen for LockerDetailRoom {
             Handler::Act(Act::new("entity.trash", json!({ "ids": [self.id] }))),
         );
         trash_item.destructive = true;
-        // P4/N13: NO Share button in Locker.
         let menu = blocks::menu(
             "header/menu",
             vec![blocks::menu_section(
@@ -866,6 +1128,12 @@ impl RoomScreen for LockerDetailRoom {
                         "menu/edit",
                         &words::item_menu_edit(EN),
                         Handler::Open(format!("locker/item/{}/edit", self.id)),
+                    ),
+                    blocks::menu_item(
+                        &mut b.sel,
+                        "menu/fields",
+                        &words::item_field_manage(EN),
+                        Handler::Open(format!("locker/item/{}/fields", self.id)),
                     ),
                     blocks::menu_item(
                         &mut b.sel,
@@ -883,6 +1151,18 @@ impl RoomScreen for LockerDetailRoom {
                         },
                         Handler::Act(star_act),
                     ),
+                    blocks::menu_item(
+                        &mut b.sel,
+                        "menu/organize",
+                        &shared::organize(EN),
+                        Handler::Open(super::organize::route(std::slice::from_ref(&self.id))),
+                    ),
+                    blocks::menu_item(
+                        &mut b.sel,
+                        "menu/lock",
+                        &words::lock_action(EN),
+                        Handler::Tag("locker:lock".to_owned()),
+                    ),
                     trash_item,
                 ],
             )],
@@ -898,9 +1178,78 @@ impl RoomScreen for LockerDetailRoom {
             .build()
     }
 
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
-        if tag.starts_with("reveal:") {
-            return Outcome::say(&words::item_reveal_note(EN));
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if let Some(outcome) = super::link_picker::handle_unlink(e, tag, &self.id) {
+            return outcome;
+        }
+        if tag == "link:add" {
+            return Outcome::push(&format!("locker/item/{}/link", self.id));
+        }
+        if let Some((kind, id)) = tag
+            .strip_prefix("open:")
+            .and_then(|value| value.split_once(':'))
+        {
+            let route = match kind {
+                "person" => format!("person/{id}"),
+                "event" => format!("calendar/event/{id}"),
+                "task" => format!("reminders/task/{id}"),
+                "workout" => format!("health/workout/{id}"),
+                "note" => format!("notes/note/{id}"),
+                "document" => format!("docs/doc/{id}"),
+                "photo" => format!("photos/photo/{id}"),
+                "account" => format!("money/account/{id}"),
+                "transaction" => format!("money/txn/{id}"),
+                "locker_item" => format!("locker/item/{id}"),
+                _ => return Outcome::default(),
+            };
+            return Outcome::push(&route);
+        }
+        if tag == "locker:lock" {
+            if e.door.locker_lock().is_err() {
+                return Outcome::refuse(&words::wall_unlock_failed(EN));
+            }
+            let mut outcome = Outcome::replace(LOCKER);
+            outcome.effect = Some(("locker:clipboard_clear".to_owned(), clipboard_clear(e.door)));
+            return outcome;
+        }
+        if tag == "locker:copy" {
+            return match input {
+                Input::Effect(result) => match &result.outcome {
+                    Some(wire::shell_effect_result::Outcome::Done(_)) => {
+                        Outcome::say(&words::item_copied(EN))
+                    }
+                    _ => Outcome::refuse(&words::item_copy_failed(EN)),
+                },
+                _ => Outcome::default(),
+            };
+        }
+        if let Some(id) = tag.strip_prefix("reveal:") {
+            match e.door.locker_reveal_field(&self.id, id) {
+                Ok(value) => {
+                    self.revealed.insert(id.to_owned(), value);
+                    return Outcome::default();
+                }
+                Err(_) => return Outcome::refuse(&words::wall_unlock_failed(EN)),
+            }
+        }
+        if let Some(id) = tag.strip_prefix("hide:") {
+            self.revealed.remove(id);
+            return Outcome::default();
+        }
+        if let Some(id) = tag.strip_prefix("copy:") {
+            if let Some(value) = self.plain_values.get(id) {
+                if e.door
+                    .command_result("locker.mark_used", &json!({ "item_id": self.id }))
+                    .is_err()
+                {
+                    return Outcome::refuse(&words::item_copy_failed(EN));
+                }
+                return Outcome::effect("locker:copy", clipboard_copy(e.door, value));
+            }
+            return match e.door.locker_reveal_field(&self.id, id) {
+                Ok(value) => Outcome::effect("locker:copy", clipboard_copy(e.door, value.as_str())),
+                Err(_) => Outcome::refuse(&words::item_copy_failed(EN)),
+            };
         }
         Outcome::default()
     }
@@ -912,6 +1261,132 @@ struct LockerItemForm {
     loaded: bool,
     dirty: bool,
     expected_rev: Option<i64>,
+}
+
+struct PasskeyRenameForm {
+    item_id: String,
+    passkey_id: String,
+    dirty: bool,
+}
+
+impl PasskeyRenameForm {
+    fn new(item_id: String, passkey_id: String) -> Self {
+        Self {
+            item_id,
+            passkey_id,
+            dirty: false,
+        }
+    }
+}
+
+impl RoomScreen for PasskeyRenameForm {
+    fn key(&self) -> String {
+        format!(
+            "locker/item/{}/passkey/{}/rename",
+            self.item_id, self.passkey_id
+        )
+    }
+
+    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let passkey = b
+            .run(
+                &reads::PASSKEYS_OF_ITEM,
+                &Args::new().text("item_id", &self.item_id),
+            )
+            .ok()
+            .and_then(|answer| {
+                answer
+                    .rows
+                    .into_iter()
+                    .find(|row| row.id == self.passkey_id)
+            });
+        let Some(passkey) = passkey else {
+            return room(wire::RoomKind::Editor, &self.key())
+                .title(&words::item_passkey_rename(EN))
+                .secure()
+                .back(&mut b.sel, &words::title(EN))
+                .failed(&mut b.sel, &shared::read_failed(EN), &shared::kit_retry(EN))
+                .build();
+        };
+        let field = form::text(
+            &mut b.sel,
+            &mut b.ui.fields,
+            "display_name",
+            &words::item_passkey_name(EN),
+            wire::RoomTextKind::Line,
+            passkey.display_name.as_deref().unwrap_or_default(),
+            MAX_TEXT,
+        )
+        .focused()
+        .build();
+        let save = form::explicit(
+            &mut b.sel,
+            Explicit {
+                save_label: &shared::kit_save(EN),
+                save: Handler::Tag("passkey:save".to_owned()),
+                cancel_label: &shared::kit_cancel(EN),
+                cancel: Handler::Back,
+                save_enabled: true,
+                dirty: self.dirty,
+                drafted: false,
+            },
+        );
+        room(wire::RoomKind::Editor, &self.key())
+            .title(&words::item_passkey_rename(EN))
+            .secure()
+            .back(&mut b.sel, &words::title(EN))
+            .ready(vec![form::form(
+                vec![field],
+                Vec::new(),
+                Save::Explicit(save),
+            )])
+            .build()
+    }
+
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
+        if matches!(input, Input::Text(_)) {
+            self.dirty = true;
+            return Outcome::default();
+        }
+        if tag != "passkey:save" {
+            return Outcome::default();
+        }
+        let display_name =
+            e.ui.fields
+                .value("display_name")
+                .unwrap_or_default()
+                .trim()
+                .to_owned();
+        let passkey = match e.door.reader().and_then(|reader| {
+            reader
+                .run(
+                    &reads::PASSKEYS_OF_ITEM,
+                    &Args::new().text("item_id", &self.item_id),
+                )
+                .map_err(|error| super::door::Refused(error.to_string()))
+        }) {
+            Ok(answer) => answer
+                .rows
+                .into_iter()
+                .find(|row| row.id == self.passkey_id),
+            Err(refused) => return Outcome::refuse(&refused.0),
+        };
+        let Some(passkey) = passkey else {
+            return Outcome::refuse(&shared::read_failed(EN));
+        };
+        match e.door.act(&Act::new(
+            "locker.set_passkey",
+            json!({
+                "item_id": self.item_id,
+                "passkey_id": self.passkey_id,
+                "rp_id": passkey.rp_id,
+                "display_name": display_name,
+            }),
+        )) {
+            Ok(_) => Outcome::pop(),
+            Err(refused) => Outcome::refuse(&refused.0),
+        }
+    }
 }
 
 impl LockerItemForm {
@@ -988,7 +1463,7 @@ impl RoomScreen for LockerItemForm {
         .focused()
         .build();
 
-        // M9: Locker forms NEVER persist drafts on disk (`drafted: false`).
+        // Locker forms keep edits in memory until an explicit save.
         let save = form::explicit(
             &mut b.sel,
             Explicit {
@@ -1125,7 +1600,6 @@ impl RoomScreen for ChangeTypeRoom {
         let Some(new_type) = tag.strip_prefix("set_type:") else {
             return Outcome::default();
         };
-        // N4/V3: locker.edit_item with `type` preserves all extra fields on the item.
         match e.door.act(&Act::new(
             "locker.edit_item",
             json!({ "item_id": self.id, "type": new_type }),
@@ -1136,9 +1610,103 @@ impl RoomScreen for ChangeTypeRoom {
     }
 }
 
+struct LockerFieldsRoom {
+    item_id: String,
+}
+
+impl LockerFieldsRoom {
+    fn new(item_id: String) -> Self {
+        Self { item_id }
+    }
+}
+
+impl RoomScreen for LockerFieldsRoom {
+    fn key(&self) -> String {
+        format!("locker/item/{}/fields", self.item_id)
+    }
+
+    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let fields = match b.run(
+            &reads::FIELDS_OF_ITEM,
+            &Args::new().text("item_id", &self.item_id),
+        ) {
+            Ok(answer) => answer.rows,
+            Err(refused) => {
+                return room(wire::RoomKind::PushedPage, &self.key())
+                    .title(&words::item_fields_heading(EN))
+                    .secure()
+                    .back(&mut b.sel, &words::title(EN))
+                    .failed(&mut b.sel, &refused.0, &shared::kit_retry(EN))
+                    .build();
+            }
+        };
+        let rows: Vec<wire::RoomBlock> = fields
+            .iter()
+            .map(|field| {
+                let label = if field.kind == "sealed" || field.kind == "otp" {
+                    format!("{} · ••••••", field.label)
+                } else {
+                    field.label.clone()
+                };
+                let edit = blocks::menu_item(
+                    &mut b.sel,
+                    &format!("field/{}/edit", field.id),
+                    &words::item_field_edit(EN),
+                    Handler::Open(format!(
+                        "locker/item/{}/field/{}/edit",
+                        self.item_id, field.id
+                    )),
+                );
+                let mut remove = blocks::menu_item(
+                    &mut b.sel,
+                    &format!("field/{}/remove", field.id),
+                    &words::item_field_remove(EN),
+                    Handler::Act(Act::new(
+                        "locker.remove_field",
+                        json!({ "item_id": self.item_id, "field_id": field.id }),
+                    )),
+                );
+                remove.destructive = true;
+                let menu = blocks::menu(
+                    &format!("field/{}/menu", field.id),
+                    vec![blocks::menu_section("", vec![edit, remove])],
+                    &mut b.sel,
+                );
+                blocks::still_row(&mut b.sel, &format!("field/{}", field.id), &label)
+                    .meta(&field_kind_label(&field.kind))
+                    .menu(menu)
+                    .into_block()
+            })
+            .collect();
+        room(wire::RoomKind::PushedPage, &self.key())
+            .title(&words::item_fields_heading(EN))
+            .secure()
+            .back(&mut b.sel, &words::title(EN))
+            .ready(vec![
+                blocks::section(
+                    &mut b.sel,
+                    "section/fields",
+                    &words::item_fields_heading(EN),
+                )
+                .blocks(rows)
+                .into_block(),
+            ])
+            .build()
+    }
+
+    fn on(&mut self, _: &mut Event<'_>, _: &str, _: &Input) -> Outcome {
+        Outcome::default()
+    }
+}
+
 struct AddFieldForm {
     item_id: String,
+    field_id: Option<String>,
     kind: String,
+    original_kind: Option<String>,
+    label: String,
+    value: String,
+    loaded: bool,
     dirty: bool,
 }
 
@@ -1146,7 +1714,25 @@ impl AddFieldForm {
     fn new(item_id: String) -> Self {
         Self {
             item_id,
+            field_id: None,
             kind: "text".to_owned(),
+            original_kind: None,
+            label: String::new(),
+            value: String::new(),
+            loaded: true,
+            dirty: false,
+        }
+    }
+
+    fn edit(item_id: String, field_id: String) -> Self {
+        Self {
+            item_id,
+            field_id: Some(field_id),
+            kind: "text".to_owned(),
+            original_kind: None,
+            label: String::new(),
+            value: String::new(),
+            loaded: false,
             dirty: false,
         }
     }
@@ -1154,13 +1740,34 @@ impl AddFieldForm {
 
 impl RoomScreen for AddFieldForm {
     fn key(&self) -> String {
-        format!("locker/item/{}/field/new", self.item_id)
+        match &self.field_id {
+            Some(field_id) => format!("locker/item/{}/field/{field_id}/edit", self.item_id),
+            None => format!("locker/item/{}/field/new", self.item_id),
+        }
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
-        let kind_options: Vec<wire::RoomOption> = PLAIN_FIELD_KINDS
+        if !self.loaded {
+            if let Ok(answer) = b.run(
+                &reads::FIELDS_OF_ITEM,
+                &Args::new().text("item_id", &self.item_id),
+            ) && let Some(field) = answer
+                .rows
+                .into_iter()
+                .find(|field| Some(field.id.as_str()) == self.field_id.as_deref())
+            {
+                self.kind = field.kind;
+                self.original_kind = Some(self.kind.clone());
+                self.label = field.label;
+                if !matches!(self.kind.as_str(), "sealed" | "otp") {
+                    self.value = field.value_text.unwrap_or_default();
+                }
+            }
+            self.loaded = true;
+        }
+        let kind_options: Vec<wire::RoomOption> = FIELD_KINDS
             .iter()
-            .map(|k| blocks::option(k, &field_kind_label(k), *k == self.kind))
+            .map(|kind| blocks::option(kind, &field_kind_label(kind), *kind == self.kind))
             .collect();
         let kind_choice = blocks::choice_block(blocks::choice(
             &mut b.sel,
@@ -1177,20 +1784,40 @@ impl RoomScreen for AddFieldForm {
             "label",
             &words::item_field_label(EN),
             wire::RoomTextKind::Line,
-            "",
+            &self.label,
             MAX_TEXT,
         )
         .focused()
         .build();
-        let value = form::text(
-            &mut b.sel,
-            &mut b.ui.fields,
-            "value",
-            &words::item_field_value(EN),
-            wire::RoomTextKind::Line,
-            "",
-            MAX_TEXT,
-        )
+        let value_label =
+            if self.field_id.is_some() && matches!(self.kind.as_str(), "sealed" | "otp") {
+                words::item_field_secret_replacement(EN)
+            } else {
+                words::item_field_value(EN)
+            };
+        let value_selector = format!("field/value/{}", self.kind);
+        let value = if matches!(self.kind.as_str(), "sealed" | "otp") {
+            form::secret_entry(
+                &mut b.sel,
+                &mut b.ui.fields,
+                "value",
+                &value_selector,
+                &value_label,
+            )
+        } else {
+            form::text_with_selector(
+                &mut b.sel,
+                &mut b.ui.fields,
+                form::TextEntry {
+                    name: "value",
+                    selector: &value_selector,
+                    label: &value_label,
+                    kind: wire::RoomTextKind::Line,
+                    initial: &self.value,
+                    max_chars: centraid_vault::commands::locker::PLAIN_VALUE_BUDGET_BYTES,
+                },
+            )
+        }
         .build();
         let save = form::explicit(
             &mut b.sel,
@@ -1205,8 +1832,13 @@ impl RoomScreen for AddFieldForm {
             },
         );
         let form_block = form::form(vec![label, value], Vec::new(), Save::Explicit(save));
+        let title = if self.field_id.is_some() {
+            words::item_field_edit(EN)
+        } else {
+            words::item_field_add(EN)
+        };
         room(wire::RoomKind::Editor, &self.key())
-            .title(&words::item_field_add(EN))
+            .title(&title)
             .secure()
             .ready(vec![kind_choice, form_block])
             .build()
@@ -1214,8 +1846,11 @@ impl RoomScreen for AddFieldForm {
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
         if tag == "field:kind" {
-            if let Input::Option(k) = input {
-                self.kind = k.clone();
+            if let Input::Option(kind) = input {
+                if kind != &self.kind {
+                    e.ui.fields.reset("value", "");
+                }
+                self.kind = kind.clone();
                 self.dirty = true;
             }
             return Outcome::default();
@@ -1233,26 +1868,51 @@ impl RoomScreen for AddFieldForm {
                 .unwrap_or_default()
                 .trim()
                 .to_owned();
-        let value =
-            e.ui.fields
-                .value("value")
-                .unwrap_or_default()
-                .trim()
-                .to_owned();
+        let raw_value = e.ui.fields.value("value").unwrap_or_default();
+        let value = Zeroizing::new(if matches!(self.kind.as_str(), "sealed" | "otp") {
+            raw_value.to_owned()
+        } else {
+            raw_value.trim().to_owned()
+        });
         if label.is_empty() {
             return Outcome::refuse(&shared::write_refused(EN));
         }
-        let field_id = mint_uuid_v7(e.door.now_ms());
-        match e.door.act(&Act::new(
-            "locker.set_field",
-            json!({
-                "item_id": self.item_id,
-                "field_id": field_id,
-                "label": label,
-                "kind": self.kind,
-                "value": value,
-            }),
-        )) {
+        if !matches!(self.kind.as_str(), "sealed" | "otp")
+            && value.len() > centraid_vault::commands::locker::PLAIN_VALUE_BUDGET_BYTES
+        {
+            return Outcome::refuse(&shared::write_refused(EN));
+        }
+        let field_id = self
+            .field_id
+            .clone()
+            .unwrap_or_else(|| mint_uuid_v7(e.door.now_ms()));
+        let mut input = json!({
+            "item_id": self.item_id,
+            "field_id": field_id,
+            "label": label,
+            "kind": self.kind,
+        });
+        if value.is_empty() && matches!(self.kind.as_str(), "sealed" | "otp") {
+            if self.field_id.is_none()
+                || self
+                    .original_kind
+                    .as_deref()
+                    .is_none_or(|kind| kind != self.kind.as_str())
+            {
+                return Outcome::refuse(&shared::write_refused(EN));
+            }
+        } else if matches!(self.kind.as_str(), "sealed" | "otp") {
+            let (sealed, key_id) = match e.door.locker_seal_field(&field_id, &value) {
+                Ok(sealed) => sealed,
+                Err(_) => return Outcome::refuse(&shared::write_refused(EN)),
+            };
+            input["value"] = Value::String(sealed);
+            input["key_id"] = Value::String(key_id);
+            input["changed"] = Value::Bool(true);
+        } else {
+            input["value"] = Value::String(value.to_string());
+        }
+        match e.door.act(&Act::new("locker.set_field", input)) {
             Ok(_) => Outcome::pop(),
             Err(refused) => Outcome::refuse(&refused.0),
         }
@@ -1290,7 +1950,7 @@ impl RoomScreen for ExpiryAlertsRoom {
             let rows: Vec<wire::RoomBlock> = alerts
                 .iter()
                 .map(|a| {
-                    // S9/N19: Masked copy only — never name the item or field; Snooze only, never Done.
+                    // The alert stays masked and can only be snoozed.
                     let snooze_menu = blocks::menu(
                         &format!("alert/{}/menu", a.id),
                         vec![blocks::menu_section(
@@ -1410,42 +2070,6 @@ impl RoomScreen for EarlierVersionsRoom {
             .back(&mut b.sel, &words::title(EN))
             .ready(blocks_out)
             .build()
-    }
-}
-
-struct LockerExportConfirm;
-
-impl RoomScreen for LockerExportConfirm {
-    fn key(&self) -> String {
-        EXPORT.to_owned()
-    }
-
-    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
-        let confirm = blocks::confirm(
-            &mut b.sel,
-            Confirm {
-                class: wire::RoomConfirmClass::Owner,
-                title: &words::export_title(EN),
-                body: &words::export_body(EN),
-                warning: "",
-                confirm_label: &words::export_confirm(EN),
-                confirm: Handler::Tag("locker:export".to_owned()),
-                cancel_label: &shared::kit_cancel(EN),
-                cancel: Handler::Back,
-            },
-        );
-        room(wire::RoomKind::Sheet, EXPORT)
-            .title(&words::export_title(EN))
-            .secure()
-            .ready(vec![confirm])
-            .build()
-    }
-
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
-        if tag == "locker:export" {
-            return Outcome::say(&words::export_started(EN));
-        }
-        Outcome::default()
     }
 }
 

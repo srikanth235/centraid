@@ -19,4 +19,7 @@ room app_place key="health/workouts"
             item "Open" #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/open
             item "Edit" #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/edit
             item "Star" #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/star
+            item "Move or tag" #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/organize
+            item "Select" #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/select
             item "Move to trash" destructive #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/trash
+  selection

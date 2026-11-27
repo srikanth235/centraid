@@ -109,7 +109,7 @@ internal object Scenes {
         primary_label = "Pair",
         primary_enabled = true,
         secondary_label = "Cancel",
-    ).labelled()
+    ).labelled(PairLaptopState::class.java)
 
     val all: List<Scene> = listOf(
         Scene("home", "home") { RoomView(homeRoom, {}, {}) },

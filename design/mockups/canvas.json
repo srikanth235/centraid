@@ -273,6 +273,22 @@
       "x": 470,
       "y": 20880
     },
+    "AndroidScanCapture.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "3 · One-page scan on Android",
+      "w": 412,
+      "x": 3290,
+      "y": 22040
+    },
+    "AndroidScanCaptureDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "3 · One-page scan on Android · dark",
+      "w": 412,
+      "x": 3290,
+      "y": 22040
+    },
     "AndroidTrash.dc.html": {
       "h": 915,
       "page": "light",
@@ -920,6 +936,22 @@
       "w": 390,
       "x": 470,
       "y": 25960
+    },
+    "CalendarSelection.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Calendar list selection",
+      "w": 390,
+      "x": 940,
+      "y": 3480
+    },
+    "CalendarSelectionDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Calendar list selection · dark",
+      "w": 390,
+      "x": 940,
+      "y": 3480
     },
     "CalendarStopPhone.dc.html": {
       "h": 844,
@@ -1921,6 +1953,22 @@
       "x": 0,
       "y": 28200
     },
+    "HealthExport.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Export health data",
+      "w": 390,
+      "x": 940,
+      "y": 8120
+    },
+    "HealthExportDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Export health data · dark",
+      "w": 390,
+      "x": 940,
+      "y": 8120
+    },
     "HealthMetric.dc.html": {
       "h": 844,
       "page": "light",
@@ -1952,6 +2000,22 @@
       "w": 390,
       "x": 3810,
       "y": 24000
+    },
+    "HealthToday.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Health today and typical range",
+      "w": 390,
+      "x": 470,
+      "y": 8120
+    },
+    "HealthTodayDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Health today and typical range · dark",
+      "w": 390,
+      "x": 470,
+      "y": 8120
     },
     "HealthTurnOn.dc.html": {
       "h": 844,
@@ -1999,6 +2063,22 @@
       "title": "1 · One workout · dark",
       "w": 390,
       "x": 0,
+      "y": 16240
+    },
+    "HealthWorkoutsSelection.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Health workouts selection",
+      "w": 390,
+      "x": 470,
+      "y": 16240
+    },
+    "HealthWorkoutsSelectionDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Health workouts selection · dark",
+      "w": 390,
+      "x": 470,
       "y": 16240
     },
     "HomeBackupDayTwo.dc.html": {
@@ -2340,7 +2420,7 @@
     "LockerExport.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Export everything",
+      "title": "5 · Locker export (target)",
       "w": 390,
       "x": 1880,
       "y": 16240
@@ -2348,7 +2428,7 @@
     "LockerExportDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Export everything · dark",
+      "title": "5 · Locker export (target) · dark",
       "w": 390,
       "x": 1880,
       "y": 16240
@@ -2473,6 +2553,22 @@
       "x": 470,
       "y": 10440
     },
+    "MoneyCsvDateOrder.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Choose CSV date order",
+      "w": 390,
+      "x": 5640,
+      "y": 10440
+    },
+    "MoneyCsvDateOrderDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Choose CSV date order · dark",
+      "w": 390,
+      "x": 5640,
+      "y": 10440
+    },
     "MoneyDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -2511,6 +2607,70 @@
       "title": "Import statement · Done and status · dark",
       "w": 390,
       "x": 5170,
+      "y": 10440
+    },
+    "MoneyMatch.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Match lines",
+      "w": 390,
+      "x": 2350,
+      "y": 10440
+    },
+    "MoneyMatchCandidates.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Possible matches",
+      "w": 390,
+      "x": 2820,
+      "y": 10440
+    },
+    "MoneyMatchCandidatesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Possible matches · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 10440
+    },
+    "MoneyMatchConfirm.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Confirm a match",
+      "w": 390,
+      "x": 3290,
+      "y": 10440
+    },
+    "MoneyMatchConfirmDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Confirm a match · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 10440
+    },
+    "MoneyMatchDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Match lines · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 10440
+    },
+    "MoneyMatchHands.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Hand entries with matches",
+      "w": 390,
+      "x": 2740,
+      "y": 10440
+    },
+    "MoneyMatchHandsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Hand entries with matches · dark",
+      "w": 390,
+      "x": 2740,
       "y": 10440
     },
     "MoneyRecurring.dc.html": {
@@ -2992,6 +3152,22 @@
       "w": 390,
       "x": 940,
       "y": 36400
+    },
+    "OrganizePicker.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Move or tag selected items",
+      "w": 390,
+      "x": 1410,
+      "y": 3480
+    },
+    "OrganizePickerDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Move or tag selected items · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 3480
     },
     "PairCheck.dc.html": {
       "h": 844,
@@ -3761,6 +3937,22 @@
       "x": 940,
       "y": 5800
     },
+    "PhotoEditedCopy.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Add an edited copy",
+      "w": 390,
+      "x": 2350,
+      "y": 13920
+    },
+    "PhotoEditedCopyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Add an edited copy · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 13920
+    },
     "PhotoEditor.dc.html": {
       "h": 844,
       "page": "light",
@@ -4040,6 +4232,22 @@
       "w": 390,
       "x": 7050,
       "y": 3480
+    },
+    "RemindersInboxQuickAdd.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Reminders inbox and quick add",
+      "w": 390,
+      "x": 0,
+      "y": 27220
+    },
+    "RemindersInboxQuickAddDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Reminders inbox and quick add · dark",
+      "w": 390,
+      "x": 0,
+      "y": 27220
     },
     "RemindersRefused.dc.html": {
       "h": 844,
@@ -5387,6 +5595,7 @@
     "BackupRunning.dc.html",
     "Calendar.dc.html",
     "CalendarMonth.dc.html",
+    "CalendarSelection.dc.html",
     "Main.dc.html",
     "RemindersFilterMenu.dc.html",
     "Today.dc.html",
@@ -5412,6 +5621,7 @@
     "Docs.dc.html",
     "DocsFolder.dc.html",
     "Health.dc.html",
+    "HealthWorkoutsSelection.dc.html",
     "HealthMetric.dc.html",
     "HealthConnect.dc.html",
     "Money.dc.html",
@@ -5422,6 +5632,7 @@
     "MoneyRecurring.dc.html",
     "MoneyTarget.dc.html",
     "MoneyImport.dc.html",
+    "MoneyCsvDateOrder.dc.html",
     "MoneySearch.dc.html",
     "NotesHome.dc.html",
     "NoteEditor.dc.html",
@@ -5433,6 +5644,7 @@
     "LockerEditor.dc.html",
     "DocEditor.dc.html",
     "PhotoEditor.dc.html",
+    "PhotoEditedCopy.dc.html",
     "MoneyTransaction.dc.html",
     "AgendaEvent.dc.html",
     "AgendaEventCancel.dc.html",
@@ -5774,6 +5986,7 @@
     "LockerFirstCheckDark.dc.html",
     "LockerFirstItem.dc.html",
     "LockerFirstItemDark.dc.html",
+    "OrganizePicker.dc.html",
     "FirstHomeRefused.dc.html",
     "FirstHomeRefusedDark.dc.html",
     "PhotosRefused.dc.html",
@@ -5811,7 +6024,12 @@
     "RestorePhotos.dc.html",
     "RestorePhotosDark.dc.html",
     "RestorePhotoOpen.dc.html",
-    "RestorePhotoOpenDark.dc.html"
+    "RestorePhotoOpenDark.dc.html",
+    "MoneyMatch.dc.html",
+    "MoneyMatchHands.dc.html",
+    "MoneyMatchCandidates.dc.html",
+    "MoneyMatchConfirm.dc.html",
+    "HealthToday.dc.html"
   ],
   "pages": [
     {

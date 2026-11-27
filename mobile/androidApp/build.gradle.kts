@@ -68,6 +68,15 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0-alpha.0"
+        // The native core is built for the supported phone ABI; do not advertise
+        // JNA-only architectures that cannot load centraid_core_ffi.
+        ndk { abiFilters += "arm64-v8a" }
+    }
+
+    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures { compose = true }
@@ -115,6 +124,7 @@ androidComponents {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(project(":core"))
     // WHAT `:core`'s PUBLIC TYPES ARE MADE OF: the Wire messages it generates and
     // the coroutines its session speaks. Named here, not inherited.
@@ -126,6 +136,7 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.haze)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.work.runtime)
     // Locker's unlock (#1047, D-5): `BiometricPrompt` needs a FragmentActivity,

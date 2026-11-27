@@ -42,6 +42,7 @@ pub mod schema;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::Result;
 
+pub use fields::{PLAIN_VALUE_BUDGET_BYTES, SEALED_VALUE_BUDGET_BYTES};
 pub use schema::{
     BuiltIn, FIELD_KINDS, ITEM_TYPES, SEALED_PLACEHOLDER, built_in, built_ins, expiry_display,
     field_id_of, is_sealed_kind, normalise_date, secret_keys, secret_keys_of,

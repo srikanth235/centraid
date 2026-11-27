@@ -1,0 +1,28 @@
+{
+  "artifact": "Debug APK",
+  "path": "mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
+  "sha256": "7332b09a7c621ba9bf79bf81124fc3a3f5095e5d43705199e4b14b34f670f572",
+  "bytes": 197609639,
+  "min_sdk": 24,
+  "target_sdk": 36,
+  "compile_sdk": 36,
+  "supported_abis": ["arm64-v8a"],
+  "native_api_level": 24,
+  "core_library": "mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so",
+  "core_sha256": "4521b246fdb5227b2c2f3320dd67f4e39e7160bb029f612420014469cf8d93ca",
+  "embedded_core_sha256": "4521b246fdb5227b2c2f3320dd67f4e39e7160bb029f612420014469cf8d93ca",
+  "core_exports": [
+    "centraid_call",
+    "centraid_close",
+    "centraid_free",
+    "centraid_next_event",
+    "centraid_open"
+  ],
+  "native_needed_libraries": ["libdl.so", "libm.so", "libc.so"],
+  "core_library_desugaring": {
+    "artifact": "com.android.tools:desugar_jdk_libs",
+    "version": "2.1.5",
+    "verified_j_dollar_time_classes_in_dex": true
+  },
+  "device_run": false
+}

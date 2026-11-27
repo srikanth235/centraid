@@ -100,7 +100,7 @@ catalog! {
     plain version_restored = ("Version restored", "Version restored");
     plain shared = ("Ready to share", "Ready to share");
     plain import_note = ("Choose Markdown files to import.", "Choose Markdown files to import.");
-    plain export_note = ("Confirm it's you to export notes.", "Confirm it's you to export notes.");
+    plain import_failed = ("This file could not be imported.", "This file could not be imported.");
 
     plain trash_notebook_title = ("Move notebook to trash?", "Move notebook to trash?");
     counted trash_notebook_body = ("“{title}” and its 1 note move to trash. Restore brings them back.", "“{title}” and its {n} notes move to trash. Restore brings them back.");
