@@ -117,11 +117,8 @@ struct RustScreenView: View {
                 send: { store.send(instance, .pairLaptop($0)) },
                 onDone: pop
             )
-        case .counter(let state)?:
-            ProofScreenView(
-                state: state,
-                send: { store.send(instance, .counter($0)) }
-            )
+        case .counter?:
+            ProofScreenView(store: store, instance: instance)
         default:
             BarePaper()
                 .onAppear {

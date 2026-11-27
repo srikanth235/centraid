@@ -750,7 +750,7 @@ final class ScreenStore: ObservableObject {
         vault.originalsWithheld
     }
 
-    static func searchChromeLabels(_ chrome: Centraid_Core_V1_HomeSearchChrome) -> (scope: String, close: String, loading: Bool) {
+    static func searchChromeLabels(_ chrome: Centraid_Core_V1_HomeSearchChrome) -> (scope: String, close: String, loading: String) {
         (chrome.scopeLabel, chrome.closeLabel, chrome.loading)
     }
 

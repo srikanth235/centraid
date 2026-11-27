@@ -125,33 +125,17 @@ enum ShelfCopyExport {
     ) async -> (originals: [LocatedOriginal], missing: Int) {
         var seen = Set<String>()
         let ids = photoIds.filter { !$0.isEmpty && seen.insert($0).inserted }
-        var known: [(id: String, content: String, isVideo: Bool)] = []
-        for id in ids {
-            var request = Centraid_Core_V1_Request()
-            request.load = .with {
-                $0.app = "photos"
-                $0.query = "photo"
-                $0.params = ["id": .with { $0.text = id }]
-            }
-            guard
-                let response = try? await core.call(request),
-                case .load(let load)? = response.kind,
-                load.answer.photosPhoto.hasPhoto
-            else { continue }
-            let cell = load.answer.photosPhoto.photo.cell
-            if !cell.contentID.isEmpty { known.append((id, cell.contentID, cell.form == "video")) }
-        }
         var found: [LocatedOriginal] = []
         // `ContentUrlRequest`'s own ceiling (`MAX_CONTENT_URLS`), asked in slices.
-        for start in stride(from: 0, to: known.count, by: 100) {
-            let slice = Array(known[start..<min(start + 100, known.count)])
+        for start in stride(from: 0, to: ids.count, by: 100) {
+            let slice = Array(ids[start..<min(start + 100, ids.count)])
             var request = Centraid_Core_V1_Request()
             request.contentUrls = .with {
-                $0.refs = slice.map { item in
+                $0.refs = slice.map { id in
                     .with {
-                        $0.contentID = item.content
+                        $0.contentID = id
                         $0.ownerType = "photo"
-                        $0.ownerID = item.id
+                        $0.ownerID = id
                     }
                 }
             }
@@ -159,18 +143,16 @@ enum ShelfCopyExport {
                 let response = try? await core.call(request),
                 case .contentUrls(let answer)? = response.kind
             else { continue }
-            // ONE ANSWER PER REF, IN ORDER (`ContentUrls`' own rule), so the zip
-            // is by position and a short answer pairs nothing wrongly.
-            for (index, item) in slice.enumerated() where index < answer.urls.count {
-                let url = answer.urls[index]
-                guard url.contentID == item.content else { continue }
+            for url in answer.urls {
+                let mediaType = url.mediaType.isEmpty ? "image/jpeg" : url.mediaType
+                let isVideo = mediaType.hasPrefix("video/")
                 if url.hasPath, !url.path.isEmpty {
-                    found.append(LocatedOriginal(path: url.path, mediaType: url.mediaType, isVideo: item.isVideo))
+                    found.append(LocatedOriginal(path: url.path, mediaType: mediaType, isVideo: isVideo))
                 } else if url.source == .osLibrary, !url.osRef.isEmpty,
                     // THE ORIGINAL LIVES IN THE PHOTO LIBRARY, not the store: write it out as a file.
                     let file = await PhoneLibrary.exportOriginal(ref: url.osRef)
                 {
-                    found.append(LocatedOriginal(path: file.path, mediaType: url.mediaType, isVideo: item.isVideo))
+                    found.append(LocatedOriginal(path: file.path, mediaType: mediaType, isVideo: isVideo))
                 }
             }
         }
