@@ -47,7 +47,7 @@
 pub(crate) mod act;
 pub mod api;
 /// AN APP'S OWN QUERY, RUN IN THE CORE (#1046): the page door an app crate
-/// reads through, and Agenda's answers as `agenda.proto` spells them.
+/// reads through for chat and app queries.
 pub mod app_query;
 /// THE ON-DEVICE CHAT'S DOOR: sessions in memory, the reads each tool runs
 /// through the query path, and `Request::Assist`'s arm. The plane itself is

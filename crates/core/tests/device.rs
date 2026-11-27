@@ -349,7 +349,7 @@ fn each_inbox_item_is_filed_through_the_mapping_with_its_arrival() {
         "text/calendar",
         "party.ics",
         7,
-        b"BEGIN:VCALENDAR",
+        b"BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:Party\r\nDTSTART:20260615T180000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
     );
     share(
         inbox,
@@ -383,10 +383,7 @@ fn each_inbox_item_is_filed_through_the_mapping_with_its_arrival() {
                     "a spreadsheet of money or Locker items needs its column mapping".into()
                 )
             ),
-            (
-                "an-ics",
-                Fate::Kept("events come in with the Calendar milestone".into())
-            ),
+            ("an-ics", Fate::Filed(Route::Ics)),
             ("a-link", Fate::Filed(Route::Note)),
         ]
     );
@@ -400,7 +397,8 @@ fn each_inbox_item_is_filed_through_the_mapping_with_its_arrival() {
             "document.add",
             "person.import_vcf",
             "person.import_csv",
-            "note.import"
+            "event.propose",
+            "note.import",
         ]
     );
     let arrivals: Vec<_> = commands
@@ -409,7 +407,7 @@ fn each_inbox_item_is_filed_through_the_mapping_with_its_arrival() {
         .collect();
     assert_eq!(
         arrivals,
-        ["share", "share", "share", "vcard", "csv", "share"]
+        ["share", "share", "share", "vcard", "csv", "ics", "share"]
     );
     assert_eq!(
         commands[1].1["id"], U2,
@@ -431,7 +429,7 @@ fn each_inbox_item_is_filed_through_the_mapping_with_its_arrival() {
         inbox.join("a-bank").exists(),
         "an item the mapping cannot file stays"
     );
-    assert!(inbox.join("an-ics").exists());
+    assert!(!inbox.join("an-ics").exists());
 }
 
 #[test]

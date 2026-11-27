@@ -7,14 +7,17 @@
 //! handler map the build made.
 
 pub mod blocks;
+pub mod calendar;
 pub mod door;
 pub mod field;
 pub mod form;
 pub mod frame;
+pub mod home;
 pub mod host;
 pub mod money;
 pub mod notify_words;
 pub mod people;
+pub mod reminders;
 pub mod rooms;
 pub mod screen;
 pub mod selector;

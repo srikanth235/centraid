@@ -1,6 +1,6 @@
 //! HOME'S OWN SENTENCES (#1135): the springboard, its tiles and day-one page,
 //! the vault switcher, the band and the search, plus the tile sentences the app
-//! string modules here do not have (Agenda's, Docs', Notes', People's, Health's). A tile's
+//! string modules here do not have (Calendar's, Docs', Notes', People's, Health's). A tile's
 //! sentence an app module already has (Locker's, Money's, Photos') is read from
 //! there, not restated.
 
@@ -67,10 +67,10 @@ catalog! {
     plain app_reminders = ("Reminders", "Reminders");
 
     // ---- the tiles ----
-    plain tile_agenda_count = ("upcoming events", "upcoming events");
-    plain tile_agenda_finished_today = ("No more events today", "No more events today");
-    plain tile_agenda_foot_more = ("Calendar · {n} more", "Calendar · {n} more");
-    plain tile_agenda_none_today = ("No events today", "No events today");
+    plain tile_calendar_count = ("upcoming events", "upcoming events");
+    plain tile_calendar_finished_today = ("No more events today", "No more events today");
+    plain tile_calendar_foot_more = ("Calendar · {n} more", "Calendar · {n} more");
+    plain tile_calendar_none_today = ("No events today", "No events today");
     plain tile_docs_count_one = ("document", "document");
     plain tile_docs_count_many = ("documents", "documents");
     plain tile_reminders_due = ("due", "due");

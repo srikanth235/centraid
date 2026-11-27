@@ -32,7 +32,7 @@
 //!
 //! # CIVIL TIME IN THE ZONE THE DEVICE STATES
 //!
-//! A shell's shared layer has no calendar (`agenda.proto`'s header), so every
+//! A shell's shared layer has no calendar, so every
 //! local reading — an occurrence's wall clock and days, today, now — is
 //! computed here, in the request's `tz`, by `crates/apps/calendar`'s `local`
 //! module. [`zone_of`] is the rule: the stated IANA name, else the vault's own
@@ -121,7 +121,7 @@ pub(crate) fn zone_of(vault: &Vault, stated: &str) -> Result<FireZone> {
     };
     FireZone::resolve(stated, vault_zone.as_deref()).map_err(|unset| CoreError::InvalidRequest {
         detail: match unset {
-            ZoneUnset::Missing => "an agenda query states no `tz` and this vault's settings \
+            ZoneUnset::Missing => "a query states no `tz` and this vault's settings \
                                    name no zone; the device's own zone is the answer, and \
                                    00:00Z is somebody else's midnight"
                 .to_owned(),
@@ -445,8 +445,3 @@ fn cell_of(value: Value) -> Cell {
         Value::Blob(bytes) => Cell::Blob(bytes),
     }
 }
-
-// ---------------------------------------------------------------------------
-// The conversion: `crates/apps/calendar`'s rows as `agenda.proto` spells them.
-// ONE place, so a field that moved is one edit.
-// ---------------------------------------------------------------------------

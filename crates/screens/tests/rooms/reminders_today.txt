@@ -1,0 +1,41 @@
+room app_place key="reminders"
+  header title="Reminders"
+    key add sym="Plus" "New reminder" #key/add
+  band home=#band/home search=#band/search more=#band/more
+    tab "Reminders" sym="Check" selected #tab/reminders
+    menu #band/more/menu
+      section
+        item "Phone reminders" #more/following
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    choice chips "Reminders" #choice/smart
+      option "Today" id="today" selected
+      option "Scheduled" id="scheduled"
+      option "All" id="all"
+      option "Starred" id="starred"
+      option "Completed" id="completed"
+    section #section/tasks "Today"
+      row #task/01900000-0000-7000-8000-000000000203 "Renew passport" meta="2026-06-10" chips="Overdue":warning mark=check:off#task/01900000-0000-7000-8000-000000000203/check swipe="Move to trash" #task/01900000-0000-7000-8000-000000000203/swipe
+        menu #task/01900000-0000-7000-8000-000000000203/menu
+          section
+            item "Open" #task/01900000-0000-7000-8000-000000000203/menu/open
+            item "Done" #task/01900000-0000-7000-8000-000000000203/menu/done
+            item "Star" #task/01900000-0000-7000-8000-000000000203/menu/star
+            item "Snooze" #task/01900000-0000-7000-8000-000000000203/menu/snooze
+            item "Move to trash" destructive #task/01900000-0000-7000-8000-000000000203/menu/trash
+      row #task/01900000-0000-7000-8000-000000000202 "Send invoice" meta="2026-06-15" chips="Starred":accent mark=check:off#task/01900000-0000-7000-8000-000000000202/check swipe="Move to trash" #task/01900000-0000-7000-8000-000000000202/swipe
+        menu #task/01900000-0000-7000-8000-000000000202/menu
+          section
+            item "Open" #task/01900000-0000-7000-8000-000000000202/menu/open
+            item "Done" #task/01900000-0000-7000-8000-000000000202/menu/done
+            item "Unstar" #task/01900000-0000-7000-8000-000000000202/menu/star
+            item "Snooze" #task/01900000-0000-7000-8000-000000000202/menu/snooze
+            item "Move to trash" destructive #task/01900000-0000-7000-8000-000000000202/menu/trash
+    section #section/my-lists "My Lists"
+      trailing "New list" sym="Plus" #lists/add
+      row #list/01900000-0000-7000-8000-000000000201 "Work" mark=glyph:List swipe="Move to trash" #list/01900000-0000-7000-8000-000000000201/swipe
+        menu #list/01900000-0000-7000-8000-000000000201/menu
+          section
+            item "Move to trash" destructive #list/01900000-0000-7000-8000-000000000201/trash
+  search placeholder="Search Reminders" #search

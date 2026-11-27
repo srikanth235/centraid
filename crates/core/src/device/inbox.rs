@@ -9,7 +9,8 @@
 //! | A PDF or any other file | a document (`document.add`) | `share` |
 //! | `.vcf` | people (`person.import_vcf`) | `vcard` |
 //! | `.csv` that names people's columns | people (`person.import_csv`) | `csv` |
-//! | `.csv` of anything else, `.ics` | kept in the inbox: Money's column mapping and the events importer are the apps' own milestones | |
+//! | `.ics` | events (`event.propose`) | `ics` |
+//! | `.csv` of anything else | kept in the inbox: Money's column mapping needs its account and column layout | |
 //!
 //! Idempotence has two layers. A photo or document is filed under the item's own uuid as its
 //! entity id when the extension minted a UUIDv7 (the vault refuses a second row under one id, and
@@ -67,6 +68,7 @@ pub enum Route {
     Document,
     Vcard,
     CsvPeople,
+    Ics,
     /// Left in the inbox, and why.
     Later(&'static str),
 }
@@ -168,7 +170,7 @@ pub fn route(manifest: &Manifest, head: &[u8]) -> Route {
         return Route::Vcard;
     }
     if ext == "ics" || mime.contains("calendar") {
-        return Route::Later("events come in with the Calendar milestone");
+        return Route::Ics;
     }
     if ext == "csv" || mime.contains("csv") || mime.contains("comma-separated") {
         let header = String::from_utf8_lossy(head)
@@ -353,9 +355,280 @@ fn file_item(item: &Item, route: Route, filer: &dyn Filer) -> Result<(), String>
                 &key,
             )?;
         }
+        Route::Ics => {
+            let text = std::fs::read_to_string(&payload).map_err(|e| e.to_string())?;
+            let events = parse_ics_events(&text);
+            if events.is_empty() {
+                return Err("no events found in calendar file".to_owned());
+            }
+            for (idx, mut input) in events.into_iter().enumerate() {
+                if let Some(obj) = input.as_object_mut() {
+                    obj.insert("arrived_via".to_owned(), Value::String("ics".to_owned()));
+                    obj.insert("arrived_label".to_owned(), Value::String(named.clone()));
+                }
+                filer.command("event.propose", &input, &format!("{key}:{idx}"))?;
+            }
+        }
         Route::Later(_) => {}
     }
     Ok(())
+}
+
+fn unfold_ics(text: &str) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for raw in text.lines() {
+        let line = raw.strip_suffix('\r').unwrap_or(raw);
+        if let Some(rest) = line.strip_prefix(' ').or_else(|| line.strip_prefix('\t')) {
+            if let Some(last) = lines.last_mut() {
+                last.push_str(rest);
+            }
+        } else {
+            lines.push(line.to_owned());
+        }
+    }
+    lines
+}
+
+fn unescape_ics_text(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('n' | 'N') => out.push('\n'),
+                Some('\\') => out.push('\\'),
+                Some(';') => out.push(';'),
+                Some(',') => out.push(','),
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn parse_ics_moment(params: &str, value: &str) -> Option<(String, &'static str, Option<String>)> {
+    let v = value.trim();
+    let tzid = params.split(';').find_map(|p| {
+        let (k, val) = p.split_once('=')?;
+        k.eq_ignore_ascii_case("TZID")
+            .then(|| val.trim().to_owned())
+    });
+    if v.len() == 8 && v.bytes().all(|b| b.is_ascii_digit()) {
+        let day = format!("{}-{}-{}", &v[0..4], &v[4..6], &v[6..8]);
+        return Some((day, "all-day", None));
+    }
+    if v.len() >= 15 && v.as_bytes()[8] == b'T' {
+        let y = &v[0..4];
+        let m = &v[4..6];
+        let d = &v[6..8];
+        let hh = &v[9..11];
+        let mm = &v[11..13];
+        let ss = &v[13..15];
+        if v.ends_with('Z') {
+            return Some((
+                format!("{y}-{m}-{d}T{hh}:{mm}:{ss}.000Z"),
+                "zoned",
+                Some("UTC".to_owned()),
+            ));
+        }
+        if let Some(zone) = tzid {
+            return Some((format!("{y}-{m}-{d}T{hh}:{mm}"), "zoned", Some(zone)));
+        }
+        return Some((format!("{y}-{m}-{d}T{hh}:{mm}"), "floating", None));
+    }
+    None
+}
+
+fn parse_trigger_minutes(value: &str) -> Option<i64> {
+    let v = value.trim();
+    let rest = v.strip_prefix("-P").or_else(|| v.strip_prefix("P"))?;
+    let mut mins: i64 = 0;
+    let mut num = String::new();
+    let mut in_time = false;
+    for ch in rest.chars() {
+        if ch == 'T' {
+            in_time = true;
+            continue;
+        }
+        if ch.is_ascii_digit() {
+            num.push(ch);
+            continue;
+        }
+        let n: i64 = num.parse().ok()?;
+        num.clear();
+        match (in_time, ch) {
+            (false, 'W') => mins += n * 7 * 24 * 60,
+            (false, 'D') => mins += n * 24 * 60,
+            (true, 'H') => mins += n * 60,
+            (true, 'M') => mins += n,
+            (true, 'S') => mins += n / 60,
+            _ => return None,
+        }
+    }
+    Some(mins.clamp(0, 525_600))
+}
+
+fn day_before(iso_day: &str) -> Option<String> {
+    let iso = format!("{iso_day}T00:00:00.000Z");
+    let ms = centraid_vault::time::recurrence::parse_instant_ms(&iso)?;
+    Some(centraid_vault::clock::format_iso_ms(ms - 86_400_000)[..10].to_owned())
+}
+
+#[must_use]
+pub fn parse_ics_events(text: &str) -> Vec<Value> {
+    let mut events = Vec::new();
+    let mut in_event = false;
+    let mut in_alarm = false;
+    let mut title = String::new();
+    let mut starts: Option<(String, &'static str, Option<String>)> = None;
+    let mut ends: Option<(String, &'static str, Option<String>)> = None;
+    let mut location = String::new();
+    let mut description = String::new();
+    let mut url = String::new();
+    let mut rule = String::new();
+    let mut guests: Vec<Value> = Vec::new();
+    let mut reminders: Vec<i64> = Vec::new();
+
+    for line in unfold_ics(text) {
+        if line.eq_ignore_ascii_case("BEGIN:VEVENT") {
+            in_event = true;
+            in_alarm = false;
+            title.clear();
+            starts = None;
+            ends = None;
+            location.clear();
+            description.clear();
+            url.clear();
+            rule.clear();
+            guests.clear();
+            reminders.clear();
+            continue;
+        }
+        if line.eq_ignore_ascii_case("END:VEVENT") {
+            if in_event && let Some((start_val, timing, zone)) = starts.take() {
+                let mut obj = serde_json::Map::new();
+                let clean_title = if title.trim().is_empty() {
+                    "Untitled".to_owned()
+                } else {
+                    title.trim().to_owned()
+                };
+                obj.insert("title".to_owned(), Value::String(clean_title));
+                obj.insert("starts".to_owned(), Value::String(start_val.clone()));
+                obj.insert("timing".to_owned(), Value::String(timing.to_owned()));
+                if let Some(z) = zone {
+                    obj.insert("zone".to_owned(), Value::String(z));
+                }
+                if let Some((end_val, end_timing, _)) = ends.take() {
+                    if timing == "all-day" && end_timing == "all-day" {
+                        if let Some(inclusive) = day_before(&end_val)
+                            && inclusive >= start_val
+                        {
+                            obj.insert("ends".to_owned(), Value::String(inclusive));
+                        }
+                    } else if end_val >= start_val {
+                        obj.insert("ends".to_owned(), Value::String(end_val));
+                    }
+                }
+                if !location.trim().is_empty() {
+                    obj.insert(
+                        "location".to_owned(),
+                        Value::String(location.trim().to_owned()),
+                    );
+                }
+                if !description.trim().is_empty() {
+                    obj.insert(
+                        "description".to_owned(),
+                        Value::String(description.trim().to_owned()),
+                    );
+                }
+                if !url.trim().is_empty() {
+                    obj.insert("url".to_owned(), Value::String(url.trim().to_owned()));
+                }
+                if !rule.trim().is_empty() {
+                    obj.insert("rule".to_owned(), Value::String(rule.trim().to_owned()));
+                }
+                if !guests.is_empty() {
+                    obj.insert(
+                        "guests".to_owned(),
+                        Value::Array(std::mem::take(&mut guests)),
+                    );
+                }
+                if !reminders.is_empty() {
+                    reminders.sort_unstable();
+                    reminders.dedup();
+                    obj.insert(
+                        "reminders".to_owned(),
+                        Value::Array(reminders.iter().map(|m| json!(*m)).collect()),
+                    );
+                }
+                events.push(Value::Object(obj));
+            }
+            in_event = false;
+            in_alarm = false;
+            continue;
+        }
+        if !in_event {
+            continue;
+        }
+        if line.eq_ignore_ascii_case("BEGIN:VALARM") {
+            in_alarm = true;
+            continue;
+        }
+        if line.eq_ignore_ascii_case("END:VALARM") {
+            in_alarm = false;
+            continue;
+        }
+        let Some((head, value)) = line.split_once(':') else {
+            continue;
+        };
+        let (prop, params) = head.split_once(';').unwrap_or((head, ""));
+        if in_alarm {
+            if prop.eq_ignore_ascii_case("TRIGGER")
+                && let Some(mins) = parse_trigger_minutes(value)
+            {
+                reminders.push(mins);
+            }
+            continue;
+        }
+        match prop.to_ascii_uppercase().as_str() {
+            "SUMMARY" => title = unescape_ics_text(value),
+            "DTSTART" => starts = parse_ics_moment(params, value),
+            "DTEND" => ends = parse_ics_moment(params, value),
+            "LOCATION" => location = unescape_ics_text(value),
+            "DESCRIPTION" => description = unescape_ics_text(value),
+            "URL" => url = value.trim().to_owned(),
+            "RRULE" => rule = value.trim().to_owned(),
+            "ATTENDEE" => {
+                let raw_addr = value.trim();
+                let addr = raw_addr
+                    .get(..7)
+                    .filter(|h| h.eq_ignore_ascii_case("mailto:"))
+                    .map_or(raw_addr, |_| &raw_addr[7..])
+                    .trim();
+                if !addr.is_empty() {
+                    let cn = params.split(';').find_map(|p| {
+                        let (k, val) = p.split_once('=')?;
+                        k.eq_ignore_ascii_case("CN")
+                            .then(|| val.trim().trim_matches('"').to_owned())
+                    });
+                    let mut g = serde_json::Map::new();
+                    g.insert("address".to_owned(), Value::String(addr.to_owned()));
+                    if let Some(name) = cn.filter(|n| !n.is_empty()) {
+                        g.insert("name".to_owned(), Value::String(name));
+                    }
+                    guests.push(Value::Object(g));
+                }
+            }
+            _ => {}
+        }
+    }
+    events
 }
 
 /// File every item in `inbox` and delete what was filed.

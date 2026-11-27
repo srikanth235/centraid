@@ -121,6 +121,7 @@ impl crate::handle::HandleState {
                                 Route::Photo => "photo",
                                 Route::Document => "document",
                                 Route::Vcard | Route::CsvPeople => "people",
+                                Route::Ics => "event",
                                 Route::Later(_) => "",
                             }
                             .to_owned(),

@@ -531,8 +531,6 @@ fn every_index_has_a_reader() {
         "person_date.person_date_one_of_a_single_kind",
         "photo.photo_by_burst",
         "photo.photo_by_taken",
-        "task.task_by_done",
-        "task.task_by_series",
     ]
     .into_iter()
     .map(str::to_owned)

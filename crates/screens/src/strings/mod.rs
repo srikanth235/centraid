@@ -16,9 +16,9 @@
 //!
 //! ## One module per app, one file per screen that needs its own
 //!
-//! `strings::agenda` is the app's shared sentences, `strings::shared` the kit's
+//! `strings::calendar` is the app's shared sentences, `strings::shared` the kit's
 //! (civil words, trash, autosave, search). A screen with sentences of its own
-//! puts them in a file next to its machine's name (`strings::agenda_home`), so
+//! puts them in a file next to its machine's name, so
 //! two lanes never append to the same file. A sentence with a hole in it
 //! (`{name}`) is filled with [`fill`]; one with a count is `counted`.
 //!
@@ -125,6 +125,7 @@ macro_rules! catalog {
 pub mod backup;
 pub mod backup_check;
 pub mod backup_home;
+pub mod calendar;
 pub mod custody;
 pub mod home;
 pub mod money;
@@ -133,6 +134,7 @@ pub mod passes;
 pub mod people;
 pub mod permission;
 pub mod quantity;
+pub mod reminders;
 pub mod room;
 pub mod settings;
 pub mod shared;

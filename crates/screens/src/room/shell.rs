@@ -8,7 +8,7 @@ use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
 
 use super::blocks::{self, glyph};
-use super::frame::{self, room};
+use super::frame::room;
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::Handler;
 use crate::backup::{line, reading};
@@ -26,15 +26,22 @@ pub const APPEARANCE_KEY: &str = "settings.appearance";
 pub const UNITS_KEY: &str = "settings.units";
 pub const DETAILS_KEY: &str = "settings.details";
 
-/// The rooms the shell frame holds.
 #[must_use]
 pub fn registry() -> Registry {
     Registry::new()
-        .exact(HOME, || Box::new(Home))
         .exact(SETTINGS, || Box::new(Settings))
         .exact(BACKUP, || Box::new(Backup))
+        .merge(super::home::registry())
         .merge(super::people::registry())
         .merge(super::money::registry())
+        .merge(super::calendar::registry())
+        .merge(super::reminders::registry())
+}
+
+pub(super) fn backup_line_status(door: &dyn super::door::Door) -> String {
+    the_line(door)
+        .map(|(line, ..)| line.status)
+        .unwrap_or_default()
 }
 
 fn stored(build: &Build<'_>, key: &str, default: &str) -> String {
@@ -83,84 +90,6 @@ fn tone_of(tone: i32) -> wire::RoomTone {
         Ok(wire::backup_line::Tone::Urgent) => wire::RoomTone::Warning,
         Ok(wire::backup_line::Tone::Attention) => wire::RoomTone::Seam,
         _ => wire::RoomTone::Neutral,
-    }
-}
-
-struct Home;
-
-impl RoomScreen for Home {
-    fn key(&self) -> String {
-        HOME.to_owned()
-    }
-
-    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
-        b.watch(&BACKUP_TABLES);
-        let status = the_line(b.door)
-            .map(|(line, ..)| line.status)
-            .unwrap_or_default();
-        let tiles = blocks::tiles(vec![
-            blocks::tile(
-                &mut b.sel,
-                "tile/people",
-                &words::home_people_tile(EN),
-                "",
-                glyph("Users", ""),
-                Handler::Open(super::people::PEOPLE.to_owned()),
-            ),
-            blocks::tile(
-                &mut b.sel,
-                "tile/money",
-                &words::home_money_tile(EN),
-                "",
-                glyph("Coin", ""),
-                Handler::Open(super::money::MONEY.to_owned()),
-            ),
-            blocks::tile(
-                &mut b.sel,
-                "tile/backup",
-                &words::home_backup_tile(EN),
-                &status,
-                glyph("Backup", ""),
-                Handler::Open(BACKUP.to_owned()),
-            ),
-            blocks::tile(
-                &mut b.sel,
-                "tile/settings",
-                &words::home_settings_tile(EN),
-                "",
-                glyph("Settings", ""),
-                Handler::Open(SETTINGS.to_owned()),
-            ),
-        ]);
-        let tabs = vec![
-            frame::tab(
-                &mut b.sel,
-                "tab/home",
-                &home_words::band_home(EN),
-                "Home",
-                true,
-            ),
-            frame::tab(
-                &mut b.sel,
-                "tab/backup",
-                &home_words::band_backup(EN),
-                "Backup",
-                false,
-            ),
-        ];
-        let band = frame::band(tabs, None, None, &mut b.sel);
-        room(wire::RoomKind::Home, HOME)
-            .title(&words::home_title(EN))
-            .band(band)
-            .ready(vec![tiles])
-            .build()
-    }
-
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
-        match tag {
-            "tab/backup" => Outcome::push(BACKUP),
-            _ => Outcome::default(),
-        }
     }
 }
 

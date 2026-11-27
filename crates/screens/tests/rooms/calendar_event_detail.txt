@@ -1,0 +1,25 @@
+room pushed_page key="calendar/event/01900000-0000-7000-8000-000000000102"
+  header title="Morning standup"
+    back "Calendar" #back
+    key menu sym="MoreHoriz" "Details" #key/menu
+      menu #event/menu
+        section
+          item "Edit" #menu/edit
+          item "Star" #menu/star
+          item "Snooze" #menu/snooze
+          item "Split series" #menu/split
+          item "Cancel event" #menu/cancel
+          item "Move to trash" destructive #menu/trash
+  ready
+    hero "Morning standup" noun="Event" mark=glyph:Calendar
+      line "2026-06-15T09:00 – 2026-06-15T09:30"
+    facts
+      fact "When" "2026-06-15T09:00 – 2026-06-15T09:30" kind=date
+      fact "Calendar" "Family" kind=text
+      fact "Location" "Kitchen" kind=address
+      fact "Repeats" "FREQ=WEEKLY" kind=text
+    section #section/guests "Guests"
+      row #guest/3b193eee-1ed0-7778-89a4-8160fa14b09a "01900000-0000-7000-8000-000000000301" meta="accepted"
+    section #section/alerts "Alerts"
+      trailing "Snooze" sym="Bell" #alert/snooze
+      row #alert/3803fd15-bc5e-7905-887e-71d1ea18d326 "15 min before"

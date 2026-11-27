@@ -367,7 +367,7 @@ impl AlertBoard {
     }
 
     /// THE MEMBER SAID "Allow notifications" on a screen that explained why (Backup's sheet): the
-    /// service's next sync starts the system prompt, through the same one path as the agenda's. A
+    /// service's next sync starts the system prompt, through the same one path as Calendar's. A
     /// producer's notices alone never ask; only this does.
     pub fn ask(&self, ctx: &crate::screen::Ctx) {
         self.request_ask();

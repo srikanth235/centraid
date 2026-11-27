@@ -1,0 +1,28 @@
+room pushed_page key="reminders/task/01900000-0000-7000-8000-000000000202"
+  header title="Send invoice"
+    back "Work" #back
+    key menu sym="MoreHoriz" "Details" #key/menu
+      menu #task/menu
+        section
+          item "Edit" #menu/edit
+          item "Unstar" #menu/star
+          item "Snooze" #menu/snooze
+          item "Move to trash" destructive #menu/trash
+  ready
+    hero "Send invoice" noun="Task" mark=glyph:Check chips="Starred":accent
+      line "2026-06-15"
+      primary "Done" sym="Check" #hero/done
+    facts
+      fact "Status" "Open" kind=text
+      fact "Due" "2026-06-15" kind=date
+      fact "Priority" "High" kind=text
+      fact "List" "Work" kind=text
+    section #section/subtasks "Subtasks"
+      trailing "Add subtask" sym="Plus" #subtasks/add
+      row #sub/01900000-0000-7000-8000-000000000204 "Attach receipt" mark=check:off#sub/01900000-0000-7000-8000-000000000204/check swipe="Move to trash" #sub/01900000-0000-7000-8000-000000000204/swipe
+        menu #sub/01900000-0000-7000-8000-000000000204/menu
+          section
+            item "Open" #sub/01900000-0000-7000-8000-000000000204/menu/open
+            item "Done" #sub/01900000-0000-7000-8000-000000000204/menu/done
+            item "Star" #sub/01900000-0000-7000-8000-000000000204/menu/star
+            item "Move to trash" destructive #sub/01900000-0000-7000-8000-000000000204/menu/trash

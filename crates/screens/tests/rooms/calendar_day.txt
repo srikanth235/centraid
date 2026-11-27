@@ -1,0 +1,36 @@
+room app_place key="calendar"
+  header title="Calendar"
+    key add sym="Plus" "New event" #key/add
+    filter clear=#filter/clear
+      menu #header/filter
+        section "View"
+          item "Needs reply" #filter/needs-reply/item
+          item "Day" checked #view/day
+          item "Week" #view/week
+          item "Month" #view/month
+          item "List" #view/list
+          item "Year" #view/year
+  band home=#band/home search=#band/search more=#band/more
+    tab "Calendar" sym="Calendar" selected #tab/calendar
+    tab "Calendars" sym="List" #tab/calendars
+    menu #band/more/menu
+      section
+        item "Phone calendar" #more/following
+        item "Import .ics" #more/import-ics
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    choice segmented "View" #choice/view
+      option "Day" id="day" selected
+      option "Week" id="week"
+      option "Month" id="month"
+      option "List" id="list"
+    section #section/overdue "Overdue"
+      row #overdue/01900000-0000-7000-8000-000000000203 "Renew passport" meta="2026-06-10" chips="Overdue":warning
+    calendar_grid day anchor="2026-06-15" now=600 prev=#cal/prev next=#cal/next today=#cal/today create=#cal/grid
+      day "2026-06-15" label="15 Jun 2026" today selected
+        item #cal/2026-06-15/event/01900000-0000-7000-8000-000000000103 "Design review" time="14:00" needs_reply
+        item #cal/2026-06-15/event/01900000-0000-7000-8000-000000000102 "Morning standup" time="09:00"
+        item #cal/2026-06-15/task/01900000-0000-7000-8000-000000000202 "Send invoice" time="All day" all_day
+        item #cal/2026-06-15/person-date/9f951893-d319-7d26-86b9-2aeede84ab73 "Priya Nair's birthday" time="All day" all_day
+  search placeholder="Search Calendar" #search

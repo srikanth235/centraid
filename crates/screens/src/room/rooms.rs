@@ -243,8 +243,11 @@ impl Rooms {
     fn pop(&mut self, door: &dyn Door, tab: &str) -> Result<Shown, Refusal> {
         let stack = self.stacks.get_mut(tab).expect("popped tab exists");
         if stack.len() > 1 {
-            stack.pop();
+            let popped_status = stack.pop().and_then(|entry| entry.status);
             if let Some(entry) = stack.last_mut() {
+                if popped_status.is_some() {
+                    entry.status = popped_status;
+                }
                 entry.restore = entry.covered.take();
                 if let Some(place) = entry.restore.clone() {
                     entry.ui.restore(&place);

@@ -21,10 +21,15 @@ use crate::strings::{Locale, room as words};
 /// The tab a request with none names.
 pub const DEFAULT_TAB: &str = "home";
 
+enum UndoRecord {
+    Pair { act: Act, input: serde_json::Value },
+    Restore(Vec<(String, i64)>),
+}
+
 pub struct RoomRuntime {
     rooms: Mutex<Rooms>,
     keys: AtomicU64,
-    last: Mutex<Option<(Act, serde_json::Value)>>,
+    last: Mutex<Option<UndoRecord>>,
 }
 
 impl RoomRuntime {
@@ -47,6 +52,41 @@ fn decl_of(name: &str) -> Option<&'static ActionDecl> {
     ACTIONS.iter().find(|decl| decl.name() == name)
 }
 
+fn target_ids(input: &serde_json::Value, output: &serde_json::Value) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut push = |id: &str| {
+        if !id.is_empty() && !ids.iter().any(|existing| existing == id) {
+            ids.push(id.to_owned());
+        }
+    };
+    for source in [input, output] {
+        for field in ["id", "entity_id"] {
+            if let Some(id) = source.get(field).and_then(serde_json::Value::as_str) {
+                push(id);
+            }
+        }
+        if let Some(list) = source.get("ids").and_then(serde_json::Value::as_array) {
+            for item in list {
+                if let Some(id) = item.as_str() {
+                    push(id);
+                }
+            }
+        }
+    }
+    ids
+}
+
+fn latest_revision(ctx: &dyn RoomCtx, entity_id: &str) -> Option<i64> {
+    let reader = ctx.reader().ok()?;
+    let answer = reader
+        .run(
+            &centraid_domain::apps::entity::REVISION_HEAD,
+            &centraid_domain::read::Args::new().text("id", entity_id),
+        )
+        .ok()?;
+    answer.rows.first().map(|row| row.seq)
+}
+
 impl CtxDoor<'_> {
     fn key(&self) -> String {
         format!(
@@ -56,13 +96,13 @@ impl CtxDoor<'_> {
         )
     }
 
-    fn run(
+    fn run_command(
         &self,
-        decl: &ActionDecl,
+        command: &str,
         input: &serde_json::Value,
-    ) -> std::result::Result<(), Refused> {
-        match self.ctx.command(decl.command, input, &self.key()) {
-            Ok(outcome) if outcome.status == CommandStatus::Executed => Ok(()),
+    ) -> std::result::Result<serde_json::Value, Refused> {
+        match self.ctx.command(command, input, &self.key()) {
+            Ok(outcome) if outcome.status == CommandStatus::Executed => Ok(outcome.output),
             Ok(outcome) => Err(Refused(
                 outcome
                     .reason
@@ -76,23 +116,62 @@ impl CtxDoor<'_> {
 impl Door for CtxDoor<'_> {
     fn act(&self, act: &Act) -> std::result::Result<Done, Refused> {
         let decl = decl_of(&act.name).ok_or_else(|| Refused(words::act_refused(Locale::En)))?;
-        self.run(decl, &act.input)?;
-        let paired = matches!(decl.inverse, Inverse::Pair(_));
+        let before: Vec<(String, i64)> = if matches!(decl.inverse, Inverse::Restore) {
+            target_ids(&act.input, &serde_json::Value::Null)
+                .into_iter()
+                .map(|id| {
+                    let seq = latest_revision(self.ctx, &id).unwrap_or(0);
+                    (id, seq)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let output = self.run_command(decl.command, &act.input)?;
+        let record = match decl.inverse {
+            Inverse::Pair(inverse_name) => {
+                let mut input = act.input.clone();
+                if inverse_name == "entity.trash"
+                    && input.get("id").is_none()
+                    && input.get("ids").is_none()
+                    && let Some(id) = output.get("id").and_then(serde_json::Value::as_str)
+                {
+                    input = serde_json::json!({ "ids": [id] });
+                }
+                Some(UndoRecord::Pair {
+                    act: act.clone(),
+                    input,
+                })
+            }
+            Inverse::Restore => {
+                let mut pairs = Vec::new();
+                for id in target_ids(&act.input, &output) {
+                    let prev = before
+                        .iter()
+                        .find(|(b, _)| b == &id)
+                        .map_or(0, |(_, seq)| *seq);
+                    if let Some(after) = latest_revision(self.ctx, &id)
+                        && after > prev
+                    {
+                        pairs.push((id, after));
+                    }
+                }
+                (!pairs.is_empty()).then_some(UndoRecord::Restore(pairs))
+            }
+            Inverse::None => None,
+        };
+        let undo = record.is_some();
         *self
             .runtime
             .last
             .lock()
-            .unwrap_or_else(PoisonError::into_inner) =
-            paired.then(|| (act.clone(), act.input.clone()));
+            .unwrap_or_else(PoisonError::into_inner) = record;
         let sentence = match decl.verb {
             "trash" => words::act_trashed(Locale::En),
             "restore" => words::act_restored(Locale::En),
             _ => words::act_done(Locale::En),
         };
-        Ok(Done {
-            sentence,
-            undo: paired,
-        })
+        Ok(Done { sentence, undo })
     }
 
     fn undo(&self) -> std::result::Result<Done, Refused> {
@@ -102,16 +181,33 @@ impl Door for CtxDoor<'_> {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        let Some((act, input)) = last else {
+        let Some(record) = last else {
             return Err(Refused(words::act_refused(Locale::En)));
         };
-        let inverse = decl_of(&act.name)
-            .and_then(|decl| match decl.inverse {
-                Inverse::Pair(name) => decl_of(name),
-                _ => None,
-            })
-            .ok_or_else(|| Refused(words::act_refused(Locale::En)))?;
-        self.run(inverse, &input)?;
+        match record {
+            UndoRecord::Pair { act, input } => {
+                let inverse = decl_of(&act.name)
+                    .and_then(|decl| match decl.inverse {
+                        Inverse::Pair(name) => decl_of(name),
+                        _ => None,
+                    })
+                    .ok_or_else(|| Refused(words::act_refused(Locale::En)))?;
+                self.run_command(inverse.command, &input)?;
+            }
+            UndoRecord::Restore(pairs) => {
+                for (id, seq) in &pairs {
+                    if latest_revision(self.ctx, id) != Some(*seq) {
+                        return Err(Refused(words::act_changed_since(Locale::En)));
+                    }
+                }
+                for (id, seq) in pairs.into_iter().rev() {
+                    self.run_command(
+                        "history.restore_version",
+                        &serde_json::json!({ "id": id, "seq": seq }),
+                    )?;
+                }
+            }
+        }
         Ok(Done {
             sentence: words::act_undone(Locale::En),
             undo: false,

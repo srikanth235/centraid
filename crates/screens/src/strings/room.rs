@@ -7,6 +7,7 @@ catalog! {
     plain act_done = ("Done", "Done");
     plain act_undone = ("Undone", "Undone");
     plain act_refused = ("That didn't work. Try again.", "That didn't work. Try again.");
+    plain act_changed_since = ("This can no longer be undone: it has changed since.", "This can no longer be undone: it has changed since.");
     plain notify_snooze = ("Snooze", "Snooze");
     plain notify_done = ("Done", "Done");
     plain notify_channel = ("Reminders and events", "Reminders and events");
@@ -29,8 +30,19 @@ catalog! {
     plain home_title = ("Centraid", "Centraid");
     plain home_people_tile = ("People", "People");
     plain home_money_tile = ("Money", "Money");
+    plain home_calendar_tile = ("Calendar", "Calendar");
+    plain home_reminders_tile = ("Reminders", "Reminders");
+    plain home_notes_tile = ("Notes", "Notes");
+    plain home_docs_tile = ("Docs", "Docs");
+    plain home_photos_tile = ("Photos", "Photos");
+    plain home_health_tile = ("Health", "Health");
+    plain home_locker_tile = ("Locker", "Locker");
     plain home_settings_tile = ("Settings", "Settings");
     plain home_backup_tile = ("Backup", "Backup");
+    plain home_placeholder_title = ("Coming in this release", "Coming in this release");
+    plain home_placeholder_body = ("This app's room lands next.", "This app's room lands next.");
+    plain home_chat_title = ("Chat", "Chat");
+    plain home_chat_body = ("Ask about anything in this vault.", "Ask about anything in this vault.");
     plain backup_title = ("Backup", "Backup");
     plain backup_back_up_now = ("Back up now", "Back up now");
     plain backup_waiting = ("Waiting", "Waiting");

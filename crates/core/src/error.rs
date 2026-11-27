@@ -95,7 +95,7 @@ pub enum CoreError {
     ///
     /// A loader walks its joins to a declared fan-out and expands a series to a
     /// declared instance cap, and stops here rather than answering what it
-    /// had: a short agenda that reads as a whole one is the truncation flag
+    /// had: a short calendar list that reads as a whole one is the truncation flag
     /// again (D-1020-D3-12). `query` is the statement that reached it and `cap`
     /// the rows it reached, so the log names the bound and not a guess at it.
     #[error("`{query}` reached its stated ceiling of {cap} rows; ask for a narrower range")]
