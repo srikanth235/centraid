@@ -350,6 +350,194 @@ pub const CONTAINERS_BY_KIND: Read<ContainerRow> = read(
     ContainerRow::of,
 );
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowedStoreRow {
+    pub id: String,
+    pub system: String,
+    pub r#ref: String,
+    pub label: String,
+    pub device_id: Option<String>,
+    pub fills: Option<String>,
+    pub fills_kind: Option<String>,
+    pub cursor: Option<String>,
+    pub created_at: String,
+    pub retired_at: Option<String>,
+}
+
+impl FollowedStoreRow {
+    fn of(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get("id")?,
+            system: row.get("system")?,
+            r#ref: row.get("ref")?,
+            label: row.get("label")?,
+            device_id: row.get("device_id")?,
+            fills: row.get("fills")?,
+            fills_kind: row.get("fills_kind")?,
+            cursor: row.get("cursor")?,
+            created_at: row.get("created_at")?,
+            retired_at: row.get("retired_at")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhoneDifferenceRow {
+    pub id: String,
+    pub origin_id: String,
+    pub system: String,
+    pub external_id: String,
+    pub stated: String,
+    pub stated_title: Option<String>,
+    pub seen_at: String,
+    pub origin_label: String,
+}
+
+impl PhoneDifferenceRow {
+    fn of(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get("id")?,
+            origin_id: row.get("origin_id")?,
+            system: row.get("system")?,
+            external_id: row.get("external_id")?,
+            stated: row.get("stated")?,
+            stated_title: row.get("stated_title")?,
+            seen_at: row.get("seen_at")?,
+            origin_label: row.get("origin_label")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EarlierVersionRow {
+    pub seq: i64,
+    pub at: String,
+    pub actor: String,
+    pub origin_id: Option<String>,
+    pub cause: String,
+    pub state: String,
+    pub body: Option<String>,
+    pub autosave: bool,
+}
+
+impl EarlierVersionRow {
+    fn of(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            seq: row.get("seq")?,
+            at: row.get("at")?,
+            actor: row.get("actor")?,
+            origin_id: row.get("origin_id")?,
+            cause: row.get("cause")?,
+            state: row.get("state")?,
+            body: row.get("body")?,
+            autosave: row.get::<_, i64>("autosave")? != 0,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OriginCursorRow {
+    pub id: String,
+    pub system: String,
+    pub r#ref: String,
+    pub label: String,
+    pub device_id: Option<String>,
+    pub fills: Option<String>,
+    pub cursor: Option<String>,
+    pub retired_at: Option<String>,
+}
+
+impl OriginCursorRow {
+    fn of(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get("id")?,
+            system: row.get("system")?,
+            r#ref: row.get("ref")?,
+            label: row.get("label")?,
+            device_id: row.get("device_id")?,
+            fills: row.get("fills")?,
+            cursor: row.get("cursor")?,
+            retired_at: row.get("retired_at")?,
+        })
+    }
+}
+
+pub const FILES_FOLLOWED: Read<FollowedStoreRow> = read(
+    ReadDecl {
+        name: "entity.files_followed",
+        shape: Shape::BoundedChild,
+        sql: "SELECT id, system, ref, label, device_id, fills, fills_kind, cursor, created_at, retired_at \
+              FROM origin WHERE system = 'files' ORDER BY ref ASC LIMIT 50",
+        params: &[],
+        reads: &["origin"],
+        across: &[],
+        bound: 50,
+        cursor: &[],
+    },
+    FollowedStoreRow::of,
+);
+
+pub const FOLLOWED_STORES: Read<FollowedStoreRow> = read(
+    ReadDecl {
+        name: "entity.followed_stores",
+        shape: Shape::BoundedChild,
+        sql: "SELECT id, system, ref, label, device_id, fills, fills_kind, cursor, created_at, retired_at \
+              FROM origin WHERE system = :system ORDER BY ref ASC LIMIT 50",
+        params: &[param("system", ParamTy::Text)],
+        reads: &["origin"],
+        across: &[],
+        bound: 50,
+        cursor: &[],
+    },
+    FollowedStoreRow::of,
+);
+
+pub const PHONE_DIFFERENCES: Read<PhoneDifferenceRow> = read(
+    ReadDecl {
+        name: "entity.phone_differences",
+        shape: Shape::BoundedChild,
+        sql: "SELECT s.id, s.origin_id, s.system, s.external_id, s.stated, s.stated_title, s.seen_at, o.label AS origin_label \
+              FROM source s JOIN origin o ON o.id = s.origin_id \
+              WHERE s.entity_id = :id LIMIT 20",
+        params: &[param("id", ParamTy::Id)],
+        reads: &["source", "origin"],
+        across: &[],
+        bound: 20,
+        cursor: &[],
+    },
+    PhoneDifferenceRow::of,
+);
+
+pub const EARLIER_VERSIONS: Read<EarlierVersionRow> = read(
+    ReadDecl {
+        name: "entity.earlier_versions",
+        shape: Shape::BoundedChild,
+        sql: "SELECT seq, at, actor, origin_id, cause, state, body, autosave \
+              FROM revision WHERE entity_id = :id ORDER BY seq DESC LIMIT 50",
+        params: &[param("id", ParamTy::Id)],
+        reads: &["revision"],
+        across: &[],
+        bound: 50,
+        cursor: &[],
+    },
+    EarlierVersionRow::of,
+);
+
+pub const ORIGIN_CURSOR: Read<OriginCursorRow> = read(
+    ReadDecl {
+        name: "entity.origin_cursor",
+        shape: Shape::ByKey,
+        sql: "SELECT id, system, ref, label, device_id, fills, cursor, retired_at \
+              FROM origin WHERE system = :system AND ref = :ref",
+        params: &[param("system", ParamTy::Text), param("ref", ParamTy::Text)],
+        reads: &["origin"],
+        across: &[],
+        bound: 1,
+        cursor: &[],
+    },
+    OriginCursorRow::of,
+);
+
 pub const READS: &[ReadDecl] = &[
     STARRED.decl,
     IN_HOME.decl,
@@ -364,4 +552,9 @@ pub const READS: &[ReadDecl] = &[
     MENTIONED_IN.decl,
     BY_KIND_RECENT.decl,
     CONTAINERS_BY_KIND.decl,
+    FILES_FOLLOWED.decl,
+    FOLLOWED_STORES.decl,
+    PHONE_DIFFERENCES.decl,
+    EARLIER_VERSIONS.decl,
+    ORIGIN_CURSOR.decl,
 ];

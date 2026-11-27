@@ -1,0 +1,23 @@
+room pushed_page key="locker/item/019a1111-1111-7111-8111-111111111111" secure
+  header title="GitHub"
+    back "Locker" #back
+    key menu sym="MoreHoriz" "Details" #key/menu
+      menu #header/menu
+        section
+          item "Edit" #menu/edit
+          item "Change type" #menu/type
+          item "Star" #menu/star
+          item "Move to trash" destructive #menu/trash
+  ready
+    hero "GitHub" noun="Login" mark=glyph:Lock
+      line "Never used"
+    section #section/fields "Fields"
+      trailing "Add field" sym="Add" #fields/add
+      facts
+        fact "Username" "srikanth" kind=text copy=#field/019a1111-1111-7111-8111-111111111111:username/copy
+        fact "Passport renewal" "2027-01-15" kind=date
+        fact "Password" kind=secret sealed reveal=#field/019a1111-1111-7111-8111-111111111111:password/reveal
+    section #section/files "Private files"
+      facts
+        fact "Protected file" kind=secret sealed reveal=#file/019a1111-1111-7111-8111-333333333333/reveal
+    earlier_versions "Earlier versions" count=1 #earlier

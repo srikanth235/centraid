@@ -21,6 +21,7 @@ room system_place key="settings"
       prose "Off shows only that a reminder or an event is due."
     section #section/backup "Backup"
       row #row/backup "Backup" meta="Backed up 5 minutes ago."
+      row #row/recovery-key "Recovery key" meta="Show recovery key"
     section #section/about "About"
       facts
         fact "Version" "Centraid" kind=text

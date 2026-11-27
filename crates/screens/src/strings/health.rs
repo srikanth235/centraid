@@ -1,1 +1,101 @@
-catalog! {}
+catalog! {
+    plain title = ("Health", "Health");
+    plain tab_summary = ("Summary", "Summary");
+    plain tab_workouts = ("Workouts", "Workouts");
+    plain tab_vitals = ("Vitals", "Vitals");
+    plain more_following = ("Phone health", "Phone health");
+    plain more_workout_kinds = ("Workout kinds", "Workout kinds");
+    plain more_export = ("Export", "Export");
+    plain follow_health_note = ("Follow your phone's health store from this phone.", "Follow your phone's health store from this phone.");
+    plain export_note = ("Confirm it's you to export your health records.", "Confirm it's you to export your health records.");
+
+    plain summary_heading = ("Today", "Today");
+    plain summary_empty_title = ("No figures for this day", "No figures for this day");
+    plain summary_empty_body = ("Log today's figures or follow your phone's health store.", "Log today's figures or follow your phone's health store.");
+    plain summary_edit_action = ("Edit figures", "Edit figures");
+    plain summary_chart_summary = ("{metric} over the last 14 days", "{metric} over the last 14 days");
+    plain summary_chart_empty = ("No {metric} figures yet.", "No {metric} figures yet.");
+    plain prev_day = ("Previous day", "Previous day");
+    plain next_day = ("Next day", "Next day");
+
+    plain metric_steps = ("Steps", "Steps");
+    plain metric_sleep = ("Sleep", "Sleep");
+    plain metric_energy = ("Active energy", "Active energy");
+    plain metric_exercise = ("Exercise", "Exercise");
+    plain metric_resting_hr = ("Resting heart rate", "Resting heart rate");
+    plain metric_lowest_hr = ("Lowest heart rate", "Lowest heart rate");
+    plain metric_highest_hr = ("Highest heart rate", "Highest heart rate");
+    plain metric_weight = ("Weight", "Weight");
+    plain metric_bp = ("Blood pressure", "Blood pressure");
+    plain metric_glucose = ("Blood glucose", "Blood glucose");
+    plain metric_temp = ("Body temperature", "Body temperature");
+
+    plain phone_says = ("Phone says", "Phone says");
+    plain take_phone_value = ("Use phone value", "Use phone value");
+    plain override_cleared = ("Restored phone figure", "Restored phone figure");
+    plain day_figures_title = ("Edit day figures", "Edit day figures");
+    plain day_figures_saved = ("Figures saved", "Figures saved");
+    plain day_figures_nothing = ("No figures changed.", "No figures changed.");
+    plain invalid_number = ("Enter a valid number.", "Enter a valid number.");
+
+    plain workouts_title = ("Workouts", "Workouts");
+    plain workouts_empty_title = ("No workouts yet", "No workouts yet");
+    plain workouts_empty_body = ("Log a workout or follow your phone's health store.", "Log a workout or follow your phone's health store.");
+    plain workout_add = ("Log workout", "Log workout");
+    plain workout_edit = ("Edit workout", "Edit workout");
+    plain workout_saved = ("Workout saved", "Workout saved");
+    plain workout_type_label = ("Type", "Type");
+    plain workout_title_label = ("Title", "Title");
+    plain workout_starts_label = ("Starts", "Starts");
+    plain workout_duration_label = ("Duration (minutes)", "Duration (minutes)");
+    plain workout_distance_label = ("Distance", "Distance");
+    plain workout_energy_label = ("Active energy (kcal)", "Active energy (kcal)");
+    plain workout_heart_label = ("Heart rate (bpm)", "Heart rate (bpm)");
+    plain workout_climb_label = ("Climb", "Climb");
+    plain workout_notes_label = ("Notes", "Notes");
+    plain workout_recorded_by = ("Recorded by", "Recorded by");
+    plain workout_menu_edit = ("Edit", "Edit");
+    plain workout_menu_star = ("Star", "Star");
+    plain workout_menu_unstar = ("Unstar", "Unstar");
+    plain workout_details = ("Details", "Details");
+    plain workout_starts_required = ("Enter when the workout started.", "Enter when the workout started.");
+
+    plain vitals_title = ("Vitals", "Vitals");
+    plain vitals_empty_title = ("No readings yet", "No readings yet");
+    plain vitals_empty_body = ("Add a weight, blood pressure, glucose, or temperature reading.", "Add a weight, blood pressure, glucose, or temperature reading.");
+    plain vitals_chart_summary = ("{metric} readings", "{metric} readings");
+    plain vitals_chart_empty = ("No {metric} readings yet.", "No {metric} readings yet.");
+    plain reading_add = ("Add reading", "Add reading");
+    plain reading_edit = ("Edit reading", "Edit reading");
+    plain reading_saved = ("Reading saved", "Reading saved");
+    plain reading_metric_label = ("Metric", "Metric");
+    plain reading_value_label = ("Value", "Value");
+    plain reading_value2_label = ("Diastolic", "Diastolic");
+    plain reading_at_label = ("Taken at", "Taken at");
+    plain reading_context_label = ("Context", "Context");
+    plain reading_bp_needs_both = ("Blood pressure needs both systolic and diastolic values.", "Blood pressure needs both systolic and diastolic values.");
+
+    plain kinds_title = ("Workout kinds", "Workout kinds");
+    plain kinds_empty_title = ("No workout kinds", "No workout kinds");
+    plain kinds_empty_body = ("Workout kinds appear as you log workouts.", "Workout kinds appear as you log workouts.");
+    counted kind_workouts = ("{n} workout", "{n} workouts");
+    plain kind_rename = ("Rename", "Rename");
+    plain kind_rename_title = ("Rename workout kind", "Rename workout kind");
+    plain kind_name_label = ("Name", "Name");
+    plain kind_renamed = ("Workout kind renamed", "Workout kind renamed");
+    plain kind_merge = ("Merge into…", "Merge into…");
+    plain kind_merge_pick_title = ("Merge into", "Merge into");
+    plain kind_merge_title = ("Merge workout kinds?", "Merge workout kinds?");
+    plain kind_merge_body = ("Every workout under {from} moves to {into}. This cannot be undone.", "Every workout under {from} moves to {into}. This cannot be undone.");
+    plain kind_merge_confirm = ("Merge", "Merge");
+    plain kind_merged = ("Workout kinds merged", "Workout kinds merged");
+
+    plain trash_purge_body = ("It leaves this vault for good. This cannot be undone.", "It leaves this vault for good. This cannot be undone.");
+    plain discard_title = ("Discard changes?", "Discard changes?");
+    plain discard_body = ("Your unsaved edits will be lost.", "Your unsaved edits will be lost.");
+    plain discard_confirm = ("Discard", "Discard");
+    plain earlier_versions_summary = ("Earlier versions", "Earlier versions");
+    plain linked_heading = ("Linked", "Linked");
+    plain attachments_heading = ("Attachments", "Attachments");
+    plain mentioned_heading = ("Mentioned in", "Mentioned in");
+}

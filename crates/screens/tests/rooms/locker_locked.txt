@@ -1,0 +1,13 @@
+room app_place key="locker" secure
+  header title="Locker" subtitle="Locked"
+  band home=#band/home more=#band/more
+    tab "Items" sym="Lock" selected #tab/items
+    tab "Starred" sym="Star" #tab/starred
+    menu #band/more/menu
+      section
+        item "Expiry alerts" #more/alerts
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    wall "Locker is locked" body="Confirm it's you to view your saved items."
+      unlock "Unlock Locker" sym="Lock" #wall/unlock

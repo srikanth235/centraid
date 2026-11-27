@@ -7,16 +7,22 @@
 use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
 
-use super::blocks::{self, glyph};
+use super::blocks::{self, Confirm, glyph};
+use super::form::{self, Explicit, Save};
 use super::frame::room;
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::Handler;
 use crate::backup::{line, reading};
-use crate::strings::{Locale, home as home_words, room as words, settings as settings_words};
+use crate::strings::{
+    Locale, backup as backup_words, home as home_words, pairing as pairing_words, room as words,
+    settings as settings_words, shared,
+};
 
 pub const HOME: &str = "home";
 pub const SETTINGS: &str = "settings";
+pub const SETTINGS_RECOVERY_KEY: &str = "settings/recovery-key";
 pub const BACKUP: &str = "backup";
+pub const BACKUP_PAIR: &str = "backup/pair";
 
 const EN: Locale = Locale::En;
 
@@ -30,7 +36,9 @@ pub const DETAILS_KEY: &str = "settings.details";
 pub fn registry() -> Registry {
     Registry::new()
         .exact(SETTINGS, || Box::new(Settings))
+        .exact(SETTINGS_RECOVERY_KEY, || Box::new(RecoveryKeyConfirm))
         .exact(BACKUP, || Box::new(Backup))
+        .exact(BACKUP_PAIR, || Box::new(BackupPair))
         .merge(super::people::registry())
         .merge(super::money::registry())
         .merge(super::calendar::registry())
@@ -177,6 +185,14 @@ impl RoomScreen for Settings {
         )
         .meta(&backup_meta)
         .into_block();
+        let recovery_key_row = blocks::row(
+            &mut b.sel,
+            "row/recovery-key",
+            &settings_words::settings_recovery_key(EN),
+            Handler::Open(SETTINGS_RECOVERY_KEY.to_owned()),
+        )
+        .meta(&settings_words::settings_show_recovery_key(EN))
+        .into_block();
         let version = blocks::facts(vec![blocks::fact(
             &settings_words::settings_version(EN),
             &words::settings_version_value(EN),
@@ -214,6 +230,7 @@ impl RoomScreen for Settings {
                 &settings_words::settings_backup(EN),
             )
             .block(backup_row)
+            .block(recovery_key_row)
             .into_block(),
             blocks::section(
                 &mut b.sel,
@@ -279,11 +296,21 @@ impl RoomScreen for Backup {
         if tone_of(the_line.tone) != wire::RoomTone::Neutral {
             status_row = status_row.chip(blocks::chip(&the_line.status, tone_of(the_line.tone)));
         }
-        let mut blocks_out = vec![
+        let mut line_section =
             blocks::section(&mut b.sel, "section/line", &words::backup_title(EN))
-                .block(status_row.into_block())
+                .block(status_row.into_block());
+        if !reading.frozen && !reading.destinations.is_empty() {
+            line_section = line_section.block(
+                blocks::row(
+                    &mut b.sel,
+                    "row/backup-now",
+                    &words::backup_back_up_now(EN),
+                    Handler::Tag("backup:now".to_owned()),
+                )
                 .into_block(),
-        ];
+            );
+        }
+        let mut blocks_out = vec![line_section.into_block()];
         let waiting: Vec<wire::RoomBlock> = the_line
             .waiting
             .iter()
@@ -305,10 +332,16 @@ impl RoomScreen for Backup {
                 glyph("Backup", ""),
                 &words::backup_no_devices(EN),
                 &words::backup_no_devices_body(EN),
-                None,
+                Some(blocks::action(
+                    &mut b.sel,
+                    "action/pair",
+                    &backup_words::backup_add_destination(EN),
+                    "Add",
+                    Handler::Open(BACKUP_PAIR.to_owned()),
+                )),
             ));
         } else {
-            let devices: Vec<wire::RoomBlock> = reading
+            let mut devices: Vec<wire::RoomBlock> = reading
                 .destinations
                 .iter()
                 .map(|device| {
@@ -331,6 +364,15 @@ impl RoomScreen for Backup {
                     .into_block()
                 })
                 .collect();
+            devices.push(
+                blocks::row(
+                    &mut b.sel,
+                    "row/pair",
+                    &backup_words::backup_add_destination(EN),
+                    Handler::Open(BACKUP_PAIR.to_owned()),
+                )
+                .into_block(),
+            );
             blocks_out.push(
                 blocks::section(&mut b.sel, "section/devices", &words::backup_devices(EN))
                     .blocks(devices)
@@ -340,7 +382,116 @@ impl RoomScreen for Backup {
         frame.ready(blocks_out).build()
     }
 
-    fn on(&mut self, _: &mut Event<'_>, _: &str, _: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        if tag == "backup:now" {
+            let req = wire::Request {
+                kind: Some(wire::request::Kind::Drain(wire::DrainRequest::default())),
+            };
+            return match e.door.call(&req) {
+                Ok(_) => Outcome::say(&words::backup_started(EN)),
+                Err(_) => Outcome::refuse(&words::backup_refused(EN)),
+            };
+        }
+        Outcome::default()
+    }
+}
+
+struct RecoveryKeyConfirm;
+
+impl RoomScreen for RecoveryKeyConfirm {
+    fn key(&self) -> String {
+        SETTINGS_RECOVERY_KEY.to_owned()
+    }
+
+    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let confirm = blocks::confirm(
+            &mut b.sel,
+            Confirm {
+                class: wire::RoomConfirmClass::Owner,
+                title: &settings_words::settings_recovery_key(EN),
+                body: &shared::owner_reason_reveal(EN),
+                warning: "",
+                confirm_label: &settings_words::settings_show_recovery_key(EN),
+                confirm: Handler::Tag("recovery:owner".to_owned()),
+                cancel_label: &shared::kit_cancel(EN),
+                cancel: Handler::Back,
+            },
+        );
+        room(wire::RoomKind::Sheet, SETTINGS_RECOVERY_KEY)
+            .title(&settings_words::settings_recovery_key(EN))
+            .ready(vec![confirm])
+            .build()
+    }
+
+    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        if tag == "recovery:owner" {
+            return Outcome::say(&shared::owner_reason_reveal(EN));
+        }
+        Outcome::default()
+    }
+}
+
+struct BackupPair;
+
+impl RoomScreen for BackupPair {
+    fn key(&self) -> String {
+        BACKUP_PAIR.to_owned()
+    }
+
+    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        let payload = form::text(
+            &mut b.sel,
+            &mut b.ui.fields,
+            "payload",
+            &pairing_words::paste_label(EN),
+            wire::RoomTextKind::Line,
+            "",
+            4096,
+        )
+        .focused()
+        .build();
+        let dirty = !b.ui.fields.value("payload").unwrap_or_default().is_empty();
+        let save = form::explicit(
+            &mut b.sel,
+            Explicit {
+                save_label: &pairing_words::primary(EN),
+                save: Handler::Tag("pair:submit".to_owned()),
+                cancel_label: &shared::kit_cancel(EN),
+                cancel: Handler::Back,
+                save_enabled: true,
+                dirty,
+                drafted: false,
+            },
+        );
+        let form_block = form::form(vec![payload], Vec::new(), Save::Explicit(save));
+        room(wire::RoomKind::SystemPlace, BACKUP_PAIR)
+            .title(&pairing_words::title(EN))
+            .back(&mut b.sel, &words::backup_title(EN))
+            .ready(vec![form_block])
+            .build()
+    }
+
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        if tag == "pair:submit" {
+            let payload =
+                e.ui.fields
+                    .value("payload")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+            if payload.is_empty() {
+                return Outcome::refuse(&words::backup_refused(EN));
+            }
+            let req = wire::Request {
+                kind: Some(wire::request::Kind::PairPhone(wire::PairRequest {
+                    payload,
+                })),
+            };
+            return match e.door.call(&req) {
+                Ok(_) => Outcome::pop(),
+                Err(refused) => Outcome::refuse(&refused.0),
+            };
+        }
         Outcome::default()
     }
 }

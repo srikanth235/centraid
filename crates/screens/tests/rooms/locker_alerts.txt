@@ -1,0 +1,9 @@
+room pushed_page key="locker/alerts" secure
+  header title="Expiry alerts"
+    back "Locker" #back
+  ready
+    section #section/alerts "Expiry alerts"
+      row #alert/b23c92fc-ae97-7b23-8e66-e3730b6ddbb5 "An item in Locker expires soon"
+        menu #alert/b23c92fc-ae97-7b23-8e66-e3730b6ddbb5/menu
+          section
+            item "Snooze 1 hour" #alert/b23c92fc-ae97-7b23-8e66-e3730b6ddbb5/snooze

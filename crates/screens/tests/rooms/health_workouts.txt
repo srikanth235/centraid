@@ -1,0 +1,22 @@
+room app_place key="health/workouts"
+  header title="Workouts"
+    key add sym="Add" "Log workout" #key/add
+  band home=#band/home more=#band/more
+    tab "Summary" sym="Heart" #tab/summary
+    tab "Workouts" sym="Activity" selected #tab/workouts
+    tab "Vitals" sym="Pulse" #tab/vitals
+    menu #band/more/menu
+      section
+        item "Phone health" #more/following
+        item "Workout kinds" #more/kinds
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    section #section/workouts "Workouts"
+      row #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472 "Morning loop" meta="Run · 2026-11-26 · 30 min · 3.1 mi" swipe="Move to trash" #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/swipe
+        menu #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu
+          section
+            item "Open" #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/open
+            item "Edit" #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/edit
+            item "Star" #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/star
+            item "Move to trash" destructive #row/0c13813e-b98f-7b5f-8124-4aaeeff9b472/menu/trash

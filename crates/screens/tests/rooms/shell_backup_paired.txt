@@ -3,5 +3,7 @@ room system_place key="backup"
   ready
     section #section/line "Backup"
       row #row/line "Backed up 5 minutes ago." meta="All 1,240 photos and files"
+      row #row/backup-now "Back up now"
     section #section/devices "Backup devices"
       row #row/device/g1 "Kitchen laptop" meta="Last backed up 5 minutes ago"
+      row #row/pair "Add backup device"

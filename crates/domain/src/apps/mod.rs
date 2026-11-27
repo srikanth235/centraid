@@ -8,6 +8,7 @@ use crate::kind::KindDecl;
 use crate::read::ReadDecl;
 
 pub mod calendar;
+pub mod chat;
 pub mod docs;
 pub mod entity;
 pub mod health;
@@ -130,6 +131,7 @@ pub(crate) use trash;
 pub const READS: &[ReadDecl] = crate::concat_slices!(
     ReadDecl, entity::STARRED_DECL;
     calendar::READS,
+    chat::READS,
     docs::READS,
     entity::READS,
     health::READS,
