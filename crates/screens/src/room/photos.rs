@@ -187,14 +187,8 @@ fn short_day(iso: &str) -> &str {
 }
 
 fn format_bytes(bytes: i64) -> String {
-    let b = bytes.max(0) as u64;
-    if b < 1024 {
-        format!("{b} B")
-    } else if b < 1024 * 1024 {
-        format!("{:.1} KB", b as f64 / 1024.0)
-    } else {
-        format!("{:.1} MB", b as f64 / (1024.0 * 1024.0))
-    }
+    crate::kit::quantity::Quantity::bytes(bytes.max(0))
+        .words(EN, crate::kit::quantity::UnitsPref::Metric)
 }
 
 fn format_duration(seconds: Option<f64>) -> String {

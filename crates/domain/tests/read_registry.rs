@@ -520,17 +520,12 @@ fn every_index_has_a_reader() {
         }
     }
     let unread = world.vault.unread_indexes(&plans).expect("unread indexes");
-    // Exact ratchet: unique constraint plus indexes awaiting M3-M5 app room reads.
+    // Exact ratchet: unique constraint plus remaining unread indexes.
     let awaiting: Vec<String> = [
-        "entity.entity_pinned",
         "locker_item_field.locker_item_field_by_url",
-        "measurement.measurement_by_metric",
         "message.message_by_notice",
-        "note.note_by_journal",
         "person.person_by_cadence",
         "person_date.person_date_one_of_a_single_kind",
-        "photo.photo_by_burst",
-        "photo.photo_by_taken",
     ]
     .into_iter()
     .map(str::to_owned)

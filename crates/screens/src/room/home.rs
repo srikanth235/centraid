@@ -43,56 +43,7 @@ const SEARCH_CONTAINER_KINDS: &[&str] = &[
 
 #[must_use]
 pub fn registry() -> Registry {
-    Registry::new()
-        .exact(HOME, || Box::new(Home))
-        .exact(CHAT, || {
-            Box::new(PlaceholderRoom {
-                key: CHAT,
-                title: words::home_chat_title(EN),
-                body: words::home_chat_body(EN),
-                icon: "NewChat",
-            })
-        })
-        .exact(NOTES, || {
-            Box::new(PlaceholderRoom {
-                key: NOTES,
-                title: words::home_notes_tile(EN),
-                body: words::home_placeholder_body(EN),
-                icon: "Journal",
-            })
-        })
-        .exact(DOCS, || {
-            Box::new(PlaceholderRoom {
-                key: DOCS,
-                title: words::home_docs_tile(EN),
-                body: words::home_placeholder_body(EN),
-                icon: "FileText",
-            })
-        })
-        .exact(PHOTOS, || {
-            Box::new(PlaceholderRoom {
-                key: PHOTOS,
-                title: words::home_photos_tile(EN),
-                body: words::home_placeholder_body(EN),
-                icon: "Image",
-            })
-        })
-        .exact(HEALTH, || {
-            Box::new(PlaceholderRoom {
-                key: HEALTH,
-                title: words::home_health_tile(EN),
-                body: words::home_placeholder_body(EN),
-                icon: "Heart",
-            })
-        })
-        .exact(LOCKER, || {
-            Box::new(PlaceholderRoom {
-                key: LOCKER,
-                title: words::home_locker_tile(EN),
-                body: words::home_placeholder_body(EN),
-                icon: "Lock",
-            })
-        })
+    Registry::new().exact(HOME, || Box::new(Home))
 }
 
 fn epoch_ms_to_ymd(ms: i64) -> (i32, u32, u32) {
@@ -568,32 +519,5 @@ impl RoomScreen for Home {
             "tab:tab/chat" | "tab/chat" => Outcome::push(CHAT),
             _ => Outcome::default(),
         }
-    }
-}
-
-struct PlaceholderRoom {
-    key: &'static str,
-    title: String,
-    body: String,
-    icon: &'static str,
-}
-
-impl RoomScreen for PlaceholderRoom {
-    fn key(&self) -> String {
-        self.key.to_owned()
-    }
-
-    fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
-        let block = blocks::empty(
-            glyph(self.icon, ""),
-            &words::home_placeholder_title(EN),
-            &self.body,
-            None,
-        );
-        room(wire::RoomKind::PushedPage, self.key)
-            .title(&self.title)
-            .back(&mut b.sel, &home_words::band_home(EN))
-            .ready(vec![block])
-            .build()
     }
 }

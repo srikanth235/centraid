@@ -14,7 +14,7 @@ room pushed_page key="docs/doc/01900000-0000-7000-8000-000000002030"
     section #section/details "Details"
       facts
         fact "Type" "text/plain" kind=text
-        fact "Size" "1.2 KB" kind=text
+        fact "Size" "1 KB" kind=text
         fact "Updated" "2026-11-26" kind=date
         fact "Added" "2026-11-26" kind=date
     prose "Monthly rent due on the first. Renewal in May."

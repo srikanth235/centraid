@@ -100,7 +100,10 @@ impl HandleState {
         let Some(service) = self.notify.get() else {
             return;
         };
-        if matches!(table, "event" | "task" | "entity" | "vault") {
+        if matches!(
+            table,
+            "event" | "task" | "entity" | "vault" | "measurement" | "workout" | "reading"
+        ) {
             self.widget_refresh(service);
         }
         if !watches(table) {

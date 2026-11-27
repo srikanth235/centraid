@@ -18,7 +18,7 @@ room app_place key="docs"
         item "Trash" secondary="30 days, then erased" #more/trash
   ready
     section #section/documents "Documents"
-      row #doc/01900000-0000-7000-8000-000000002030 "Lease Summary" meta="2026-11-26 · 1.2 KB" mark=glyph:FileText swipe="Move to trash" #doc/01900000-0000-7000-8000-000000002030/swipe
+      row #doc/01900000-0000-7000-8000-000000002030 "Lease Summary" meta="2026-11-26 · 1 KB" mark=glyph:FileText swipe="Move to trash" #doc/01900000-0000-7000-8000-000000002030/swipe
         menu #doc/01900000-0000-7000-8000-000000002030/menu
           section
             item "Open" #doc/01900000-0000-7000-8000-000000002030/menu/open
