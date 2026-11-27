@@ -2,6 +2,9 @@ package dev.centraid.android.room
 
 import centraid.core.v1.DeviceGet
 import centraid.core.v1.DeviceRequest
+import centraid.core.v1.ContentRef
+import centraid.core.v1.ContentSource
+import centraid.core.v1.ContentUrlRequest
 import centraid.core.v1.Event
 import centraid.core.v1.Envelope
 import centraid.core.v1.Request
@@ -29,6 +32,8 @@ import dev.centraid.core.CoreOutcome
 import dev.centraid.core.ShellEffectAnswers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.ZoneId
+import java.io.File
 import java.util.LinkedHashSet
 import java.util.concurrent.atomic.AtomicLong
 
@@ -51,6 +57,9 @@ internal class RoomClient internal constructor(
         this(null, callCore, scope)
     private val sendLock = Mutex()
     private val effectClaimLock = Any()
+    private val photoResolutionLock = Any()
+    private val activePhotoResolutionScopes = mutableMapOf<String, PhotoResolutionState>()
+    private var nextPhotoScopeRevision = 0L
     private val claimedRoomEffects = LinkedHashSet<Pair<Long, Long>>()
     private val claimedGlobalControls = LinkedHashSet<Long>()
     /** Invalidates a pending native owner prompt before its cancelled callback can reach Core. */
@@ -149,6 +158,82 @@ internal class RoomClient internal constructor(
 
     suspend fun canvas(instance: Long, event: RoomCanvasEvent): CoreOutcome<Unit> =
         send(instance, RoomEvent(canvas = event))
+
+    /** Resolve photo owner refs to existing, explicitly embeddable Store image paths. */
+    suspend fun resolvePhotoPaths(scopeKey: String, refs: List<String>): Map<String, String> {
+        val revision = synchronized(photoResolutionLock) {
+            val state = activePhotoResolutionScopes[scopeKey] ?: return emptyMap()
+            ++state.requestRevision
+            state.scopeRevision to state.requestRevision
+        }
+        val paths = linkedMapOf<String, String>()
+        for (batch in refs.asSequence().filter(String::isNotBlank).distinct().chunked(MAX_CONTENT_URLS)) {
+            currentCoroutineContext().ensureActive()
+            val response = when (
+                val outcome = callCore(
+                    Envelope(
+                        request_id = 0,
+                        request = Request(
+                            content_urls = ContentUrlRequest(
+                                refs = batch.map { ref ->
+                                    ContentRef(content_id = ref, owner_type = "photo", owner_id = ref)
+                                },
+                            ),
+                        ),
+                    ),
+                )
+            ) {
+                is CoreOutcome.Answered -> outcome.value.response?.content_urls
+                is CoreOutcome.Failed -> null
+            } ?: break
+
+            currentCoroutineContext().ensureActive()
+            if (!isCurrentPhotoResolution(scopeKey, revision.first, revision.second)) return emptyMap()
+            val asked = batch.toHashSet()
+            response.urls.forEach { url ->
+                if (url.content_id !in asked || !url.embeddable ||
+                    url.source != ContentSource.CONTENT_SOURCE_STORE || !url.media_type.startsWith("image/")
+                ) {
+                    return@forEach
+                }
+                val path = url.path.orEmpty()
+                if (path.isNotEmpty()) {
+                    val file = File(path)
+                    if (file.isAbsolute && file.isFile) paths[url.content_id] = file.absolutePath
+                }
+            }
+        }
+        return if (isCurrentPhotoResolution(scopeKey, revision.first, revision.second)) paths else emptyMap()
+    }
+
+    fun activatePhotoResolutionScope(scopeKey: String) {
+        synchronized(photoResolutionLock) {
+            val state = activePhotoResolutionScopes[scopeKey]
+            if (state == null) activePhotoResolutionScopes[scopeKey] = PhotoResolutionState(++nextPhotoScopeRevision)
+            else state.activeOwners++
+        }
+    }
+
+    fun clearPhotoResolutionScope(scopeKey: String) {
+        synchronized(photoResolutionLock) {
+            val state = activePhotoResolutionScopes[scopeKey] ?: return
+            state.activeOwners--
+            if (state.activeOwners <= 0) {
+                activePhotoResolutionScopes.remove(scopeKey)
+            }
+        }
+    }
+
+    private fun isCurrentPhotoResolution(scopeKey: String, scopeRevision: Long, requestRevision: Long): Boolean =
+        synchronized(photoResolutionLock) {
+            val state = activePhotoResolutionScopes[scopeKey]
+            state != null && state.scopeRevision == scopeRevision && state.requestRevision == requestRevision
+        }
+
+    private class PhotoResolutionState(val scopeRevision: Long) {
+        var requestRevision: Long = 0L
+        var activeOwners: Int = 1
+    }
 
     suspend fun background() {
         sendLock.withLock {
@@ -424,6 +509,7 @@ internal class RoomClient internal constructor(
         const val APPEARANCE_SYSTEM: String = "system"
         const val APPEARANCE_LIGHT: String = "light"
         const val APPEARANCE_DARK: String = "dark"
+        const val MAX_CONTENT_URLS = 100
         private const val MAX_CLAIMED_ROOM_EFFECTS = 2_048
     }
 }

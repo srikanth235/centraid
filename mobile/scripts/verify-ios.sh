@@ -96,14 +96,18 @@ TEST_RUNNER_CENTRAID_UI_PROOF_DIR="$artifacts/screenshots/pages" \
 # expected screenshot attachments were not actually written, rather than treating an empty
 # output directory as visual proof.
 mkdir -p "$artifacts/screenshots"
+export_status=0
 xcrun xcresulttool export attachments \
   --path "$artifacts/CentraidUITests.xcresult" \
-  --output-path "$artifacts/screenshots"
+  --output-path "$artifacts/screenshots" || export_status=$?
 if ! find "$artifacts/screenshots" -type f -name '*.png' -print -quit | grep -q .; then
   echo "error: CentraidUITests produced no screenshot PNG attachments" >&2
-  exit 1
+  if [ "$export_status" -eq 0 ]; then export_status=1; fi
 fi
-if [ "$ui_status" -ne 0 ]; then exit "$ui_status"; fi
+# Keep the dedicated Reduce Motion run below even when the normal UI audit or
+# screenshot export fails. Record export failure as part of the normal UI run's
+# status so the final status precedence remains UI run, then Reduce Motion.
+if [ "$ui_status" -eq 0 ] && [ "$export_status" -ne 0 ]; then ui_status=$export_status; fi
 # REDUCE MOTION HAS NO LAUNCH ARGUMENT (#1202, S4), nor does Bold Text: they are the
 # system's own settings, so they are written into this simulator's accessibility
 # preferences and it is restarted, and the one UI test that wants them says so by
@@ -130,4 +134,5 @@ TEST_RUNNER_CENTRAID_UI_PROOF_DIR="$artifacts/screenshots/pages" \
   -only-testing:CentraidUITests/AccessibilityAuditTests/testRootsUnderReducedMotion test \
   2>&1 | tee "$artifacts/centraid-system-settings-tests.log" || status=$?
 restore_accessibility
+if [ "$ui_status" -ne 0 ]; then exit "$ui_status"; fi
 exit "$status"

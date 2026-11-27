@@ -570,7 +570,7 @@ fn photo_picker_saves_an_edited_copy_with_source_moment_place_and_cancel_safety(
         wire::room::State::Ready(ready) => ready,
         other => panic!("Photos library is ready: {other:?}"),
     };
-    let edited_id = ready
+    let photo_ids = ready
         .blocks
         .iter()
         .filter_map(|block| match block.kind.as_ref() {
@@ -579,14 +579,45 @@ fn photo_picker_saves_an_edited_copy_with_source_moment_place_and_cancel_safety(
         })
         .flat_map(|grid| grid.sections.iter())
         .flat_map(|section| section.tiles.iter())
-        .find(|tile| {
-            tile.thumb
-                .as_ref()
-                .is_some_and(|thumb| thumb.r#ref == expected_blob)
+        .filter_map(|tile| tile.thumb.as_ref().map(|thumb| thumb.r#ref.clone()))
+        .collect::<Vec<_>>();
+    let content = handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::ContentUrls(wire::ContentUrlRequest {
+                refs: photo_ids
+                    .iter()
+                    .map(|id| wire::ContentRef {
+                        content_id: id.clone(),
+                        owner_type: "photo".to_owned(),
+                        owner_id: id.clone(),
+                    })
+                    .collect(),
+            })),
         })
-        .and_then(|tile| tile.selector_id.strip_prefix("tile/").map(str::to_owned))
-        .expect("the new image is an independent library photo");
+        .expect("the photo locations resolve");
+    let wire::response::Kind::ContentUrls(content) = content.kind.expect("content URLs") else {
+        panic!("content URL response");
+    };
+    let location = content
+        .urls
+        .iter()
+        .find(|location| {
+            location.path.as_ref().is_some_and(|path| {
+                std::fs::read(path).is_ok_and(|bytes| bytes == b"member finished image bytes")
+            })
+        })
+        .expect("the independent photo has the picked bytes");
+    let edited_id = location.content_id.clone();
     assert_ne!(edited_id, PHOTO_SOURCE);
+    assert_ne!(expected_blob, SOURCE_BLOB);
+    assert_eq!(location.content_id, edited_id);
+    assert_eq!(location.source, wire::ContentSource::Store as i32);
+    assert_eq!(location.media_type, "image/png");
+    assert!(location.embeddable);
+    let bytes = std::fs::read(location.path.as_ref().expect("edited photo path"))
+        .expect("the edited photo bytes are present");
+    assert_eq!(bytes, b"member finished image bytes");
+
     let edited = open_photo(&handle, &format!("photos/photo/{edited_id}"), false);
     let details = send(&handle, edited.instance, tap("viewer/media"));
     let rendered = snapshot::render(details.room.as_ref().unwrap());

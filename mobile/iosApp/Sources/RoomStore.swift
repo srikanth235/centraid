@@ -98,6 +98,7 @@ final class RoomStore: ObservableObject {
     var onAppearanceChanged: ((ColorScheme?) -> Void)?
 
     private let core: any ScreenCore
+    let photoContentScope = UUID()
     private let shellEffectPerformer: ShellEffectPerformer?
     private let nativeFollowReader: NativeFollowReader?
     private var claimedEffectIDs: Set<UInt64> = []
@@ -322,6 +323,52 @@ final class RoomStore: ObservableObject {
               answer.found
         else { return nil }
         return answer.value
+    }
+
+    func photoContentPaths(_ references: [String], instance: UInt64) async -> [String: String] {
+        let refs = Array(Set(references.filter(Self.isOpaquePhotoReference))).sorted()
+        guard !refs.isEmpty else { return [:] }
+        guard isActivePhotoRoom(instance) else { return [:] }
+
+        var paths: [String: String] = [:]
+        for start in stride(from: 0, to: refs.count, by: 100) {
+            guard !Task.isCancelled, isActivePhotoRoom(instance) else { return [:] }
+            let slice = Array(refs[start..<min(start + 100, refs.count)])
+            var request = Centraid_Core_V1_Request()
+            request.contentUrls = .with {
+                $0.refs = slice.map { id in
+                    .with {
+                        $0.contentID = id
+                        $0.ownerType = "photo"
+                        $0.ownerID = id
+                    }
+                }
+            }
+            guard
+                let response = try? await core.call(request),
+                case .contentUrls(let answer)? = response.kind
+            else { continue }
+            guard !Task.isCancelled, isActivePhotoRoom(instance) else { return [:] }
+            for url in answer.urls where url.source == .store && url.embeddable && url.mediaType.hasPrefix("image/") {
+                guard slice.contains(url.contentID), url.hasPath, !url.path.isEmpty,
+                      FileManager.default.fileExists(atPath: url.path)
+                else { continue }
+                paths[url.contentID] = url.path
+            }
+        }
+        return Task.isCancelled || !isActivePhotoRoom(instance) ? [:] : paths
+    }
+
+    private func isActivePhotoRoom(_ instance: UInt64) -> Bool {
+        topRoom?.instance == instance || sheet?.instance == instance || stage?.instance == instance
+    }
+
+    static func isOpaquePhotoReference(_ value: String) -> Bool {
+        guard !value.isEmpty else { return false }
+        if value.hasPrefix("/") || FileManager.default.fileExists(atPath: value) { return false }
+        if value.contains("://") { return false }
+        return !["file:", "http:", "https:", "content:", "ph:", "assets-library:"]
+            .contains { value.lowercased().hasPrefix($0) }
     }
 
     @discardableResult

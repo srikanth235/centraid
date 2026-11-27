@@ -24,6 +24,7 @@ const DOC_FOLDER_ID: &str = "01900000-0000-7000-8000-000000002040";
 const DOC_HOMED_CAPTURE_ID: &str = "01900000-0000-7000-8000-000000002050";
 
 const PHOTO_LIB_ID: &str = "01900000-0000-7000-8000-000000003010";
+const PHOTO_STORED_ID: &str = "01900000-0000-7000-8000-000000003011";
 const PHOTO_VIDEO_ID: &str = "01900000-0000-7000-8000-000000003020";
 const PHOTO_HOMED_CAPTURE_ID: &str = "01900000-0000-7000-8000-000000003030";
 const ALBUM_ID: &str = "01900000-0000-7000-8000-000000003040";
@@ -35,6 +36,13 @@ const BLOB_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 const BLOB_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const BLOB_C: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 const BLOB_D: &str = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+const SMALL_PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x60, 0x60, 0x60, 0xf8,
+    0x0f, 0x00, 0x01, 0x04, 0x01, 0x00, 0x5f, 0xe5, 0xc3, 0x4b, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+];
 
 fn phone(dir: &std::path::Path) -> Handle {
     let seed = centraid_identity::RecoveryPhrase::parse(WORDS)
@@ -125,6 +133,56 @@ fn cmd(handle: &Handle, name: &str, input: serde_json::Value, key: &str) {
         "{name}: {:?}",
         outcome.reason
     );
+}
+
+fn ready_blocks(room: &wire::Room) -> &[wire::RoomBlock] {
+    match room.state.as_ref() {
+        Some(wire::room::State::Ready(ready)) => &ready.blocks,
+        other => panic!("room should be ready: {other:?}"),
+    }
+}
+
+fn stage_bytes(handle: &Handle, media_type: &str, bytes: &[u8]) -> wire::StageHandle {
+    let frame = |kind| {
+        let answer = handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Stage(wire::StageRequest {
+                    kind: Some(kind),
+                })),
+            })
+            .expect("stage frame");
+        let wire::response::Kind::Stage(stage) = answer.kind.expect("stage answer") else {
+            panic!("stage response");
+        };
+        stage.kind.expect("stage kind")
+    };
+    let wire::stage_response::Kind::Begun(begun) =
+        frame(wire::stage_request::Kind::Begin(wire::StageBegin {
+            media_type: media_type.to_owned(),
+            byte_size: bytes.len() as u64,
+            source: wire::StageSource::Owned as i32,
+            ..Default::default()
+        }))
+    else {
+        panic!("stage begin");
+    };
+    let wire::stage_response::Kind::Chunked(_) =
+        frame(wire::stage_request::Kind::Chunk(wire::StageChunk {
+            staging_id: begun.staging_id.clone(),
+            seq: 0,
+            payload: bytes.to_vec(),
+        }))
+    else {
+        panic!("stage chunk");
+    };
+    let wire::stage_response::Kind::Handle(staged) =
+        frame(wire::stage_request::Kind::End(wire::StageEnd {
+            staging_id: begun.staging_id,
+        }))
+    else {
+        panic!("stage end");
+    };
+    staged
 }
 
 fn seed_all(handle: &Handle) {
@@ -693,4 +751,101 @@ fn photos_s12_zoom_viewer_slideshow_albums_places_and_unbacked_warning() {
         "#1209 unbacked-up warning shown:\n{pc_text}"
     );
     snapshot::assert_room("photos_trash_purge_confirm", &pc_room);
+}
+
+#[test]
+fn photo_grid_and_viewer_refs_resolve_through_content_urls() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let handle = phone(dir.path());
+    handle
+        .open_own_bytes(dir.path().join("vault.bytes"))
+        .expect("the byte store opens");
+    seed_all(&handle);
+
+    let staged = stage_bytes(&handle, "image/png", SMALL_PNG);
+    cmd(
+        &handle,
+        "photo.add",
+        json!({
+            "id": PHOTO_STORED_ID,
+            "title": "Stored preview",
+            "blob": staged.content_hash,
+            "size": staged.byte_size,
+            "media_type": "image/png",
+            "form": "photo"
+        }),
+        "seed-photo-with-bytes",
+    );
+
+    let library = open(&handle, "photos", "home", true);
+    let library_room = library.room.expect("photo library");
+    let grid = ready_blocks(&library_room)
+        .iter()
+        .find_map(|block| match block.kind.as_ref() {
+            Some(wire::room_block::Kind::PhotoGrid(grid)) => Some(grid),
+            _ => None,
+        })
+        .expect("photo grid");
+    let tile = grid
+        .sections
+        .iter()
+        .flat_map(|section| &section.tiles)
+        .find(|tile| {
+            tile.thumb
+                .as_ref()
+                .is_some_and(|thumb| thumb.r#ref == PHOTO_STORED_ID)
+        })
+        .expect("stored photo tile");
+    assert_eq!(tile.thumb.as_ref().unwrap().r#ref, PHOTO_STORED_ID);
+
+    let viewer = open(
+        &handle,
+        &format!("photos/photo/{PHOTO_STORED_ID}"),
+        "home",
+        false,
+    );
+    let viewer_grid = ready_blocks(viewer.room.as_ref().unwrap())
+        .iter()
+        .find_map(|block| match block.kind.as_ref() {
+            Some(wire::room_block::Kind::PhotoGrid(grid)) => Some(grid),
+            _ => None,
+        })
+        .expect("photo viewer grid");
+    assert_eq!(
+        viewer_grid
+            .viewer
+            .as_ref()
+            .unwrap()
+            .current
+            .as_ref()
+            .unwrap()
+            .thumb
+            .as_ref()
+            .unwrap()
+            .r#ref,
+        PHOTO_STORED_ID
+    );
+
+    let answer = handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::ContentUrls(wire::ContentUrlRequest {
+                refs: vec![wire::ContentRef {
+                    content_id: PHOTO_STORED_ID.to_owned(),
+                    owner_type: "photo".to_owned(),
+                    owner_id: PHOTO_STORED_ID.to_owned(),
+                }],
+            })),
+        })
+        .expect("content location");
+    let wire::response::Kind::ContentUrls(urls) = answer.kind.expect("content urls") else {
+        panic!("content URLs response");
+    };
+    let url = urls.urls.first().expect("one content location");
+    assert_eq!(url.content_id, PHOTO_STORED_ID);
+    assert_eq!(url.source, wire::ContentSource::Store as i32);
+    assert_eq!(url.media_type, "image/png");
+    assert!(url.embeddable);
+    let path = url.path.as_ref().expect("local image path");
+    assert!(std::path::Path::new(path).is_file());
+    assert_eq!(std::fs::read(path).expect("stored PNG bytes"), SMALL_PNG);
 }

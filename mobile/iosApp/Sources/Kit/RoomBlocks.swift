@@ -5,13 +5,15 @@ struct RoomCallbacks {
     let change: (String, UInt64, Centraid_Core_V1_RoomChange.OneOf_Value) -> Void
     let scrolled: (String, UInt32) -> Void
     let canvas: (Centraid_Core_V1_RoomCanvasEvent) -> Void
+    let photoPaths: (@MainActor ([String]) async -> [String: String])?
+    let photoScope: String
 }
 
 enum RoomToneStyle {
     static func color(_ tone: Centraid_Core_V1_RoomTone, scheme: ColorScheme, accent: AppAccent, neutral: Color = Surface.ink) -> Color {
         switch tone {
         case .seam: return Theme.color("seam", scheme)
-        case .net: return StateColor.red.text
+        case .net: return StateColor.green.text
         case .warning: return StateColor.amber.text
         case .accent: return accent.text
         case .neutral, .unspecified, .UNRECOGNIZED: return neutral
@@ -21,7 +23,7 @@ enum RoomToneStyle {
     static func badgeState(_ tone: Centraid_Core_V1_RoomTone) -> StateColor? {
         switch tone {
         case .seam, .warning: return .amber
-        case .net: return .red
+        case .net: return .green
         case .neutral, .accent, .unspecified, .UNRECOGNIZED: return nil
         }
     }

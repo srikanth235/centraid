@@ -1,14 +1,9 @@
-Host FFI library rebuilt from fixed Core source
+Host FFI rebuilt with the Photos owner-ref source changes committed alongside this receipt.
 
-Source: `50510fd0befe4002643d5553d76af652e7064551`
-Command: `. /tmp/centraid-env.sh && flock /tmp/centraid-cargo.lock cargo build -p centraid-core-ffi`
-Result: successful host build. Library: `target/debug/libcentraid_core_ffi.so`; SHA-256 `9fc58e9695514b2c4251e8cba3f5abf492a10a2bd9522a763a4a99eb2edd0ef8`.
+Command: cargo xtask gate --profile mobile-jvm (includes cargo build -p centraid-core-ffi).
+Result: PASS. Library: target/debug/libcentraid_core_ffi.so
+SHA-256: 4da92af2ba99d0d33cc81e3fddee58c4693860b04d664d7035cb579310fc20e4
 
-Log: `/tmp/centraid-android-host-build.log`.
-
-Captured command output:
-
-   Compiling centraid-core v1.0.0-alpha.0 (/workspace/centraid/crates/core)
-   Compiling centraid-screens v1.0.0-alpha.0 (/workspace/centraid/crates/screens)
-   Compiling centraid-core-ffi v1.0.0-alpha.0 (/workspace/centraid/crates/core-ffi)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 26.46s
+Fresh ABI run: gradle -p mobile :core:jvmTest --rerun-tasks --no-build-cache --no-daemon
+Result: 40 tests, 0 failures/errors/skips across 10 JUnit suites. Every Gradle task was executed; no test-cache pass is claimed.
+Log: /tmp/centraid-jvm-photo-final-rerun.txt

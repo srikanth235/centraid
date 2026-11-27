@@ -62,7 +62,8 @@ jobs:
         working-directory: mobile/iosApp
         run: |
           set -euo pipefail
-          export IPHONEOS_DEPLOYMENT_TARGET="$(cat ../ios-deployment-target)"
+          IPHONEOS_DEPLOYMENT_TARGET="$(cat ../ios-deployment-target)"
+          export IPHONEOS_DEPLOYMENT_TARGET
           mkdir -p ../../target/ios-verification
           xcodebuild -project Centraid.xcodeproj -scheme Centraid \
             -destination 'generic/platform=iOS' \

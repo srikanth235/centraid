@@ -1,0 +1,17 @@
+Android Photos content URL resolver focused verification
+
+Android now resolves opaque photo owner refs through Core's existing `ContentUrl` API in batches of at most 100. Requests carry `ContentRef(content_id=ref, owner_type="photo", owner_id=ref)`. The canvas preserves local file paths and URI refs, asks Core only for other refs from the currently composed photo grid/viewer, and draws returned paths only when Core marks an existing local Store image embeddable. OS-library-only, absent, non-image, non-embeddable, missing-file, or unrequested results remain placeholders. No original OS-library content is copied or decoded by this resolver.
+
+Resolution state is scoped by RoomClient identity, Room instance, and Room key. Per-scope revisions reject delayed replies after room/vault changes or newer requests. Composed scopes are independently registered and cleared when their RoomHost disposes.
+
+The positive case decodes the generated PNG through Android `BitmapFactory` before checking resolver behavior. The class uses Robolectric SDK 34 so Android bitmap decoding runs against the test runtime. The PNG fixture was replaced with a CRC-valid 1×1 RGBA image.
+
+Verification command:
+
+```sh
+. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:compileDebugKotlin :androidApp:testDebugUnitTest --tests dev.centraid.android.room.RoomClientPhotoContentTest --no-build-cache --no-daemon
+```
+
+Result: `BUILD SUCCESSFUL`; `RoomClientPhotoContentTest` passed 5/5 with 0 failures/errors. Coverage includes valid PNG decoding, schema-valid `photo:seeded-front`, local path/URI filtering, 100-ref batching, accepting only existing embeddable Store image paths, rejection of absent/non-Store/non-image/unrequested results, stale old-scope rejection, and two simultaneously composed scopes surviving disposal of one. Log: `/tmp/centraid-android-photo-resolver-final.log`.
+
+This is source-level Kotlin/Robolectric verification. No device run, APK build, Rust/Core rebuild, or OS-library image decoding was performed in this check.

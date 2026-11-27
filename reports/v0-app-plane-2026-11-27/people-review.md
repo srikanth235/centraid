@@ -10,6 +10,10 @@ The [durable Room fixture manifest](room-fixtures.json) lists 20 fixtures, inclu
 
 The People Phone Says fixture now performs a first registered contacts pass, a member `entity.retitle`, and a second contacts pass with a different title. Before writing the fixture, the test requires a real `RoomSays` block with source `Phone`, label `Name`, stated value `Jordan Phone Updated`, member value `Jordan Member Title`, and a nonempty take selector. This proves the captured block came from a real difference rather than an unchanged imported value.
 
+## Native simulator evidence
+
+The hosted macOS run [46071464163](https://github.com/srikanth235/centraid/actions/runs/46071464163) captured the actual People root in [light](snapshots/ios/light/people_root.png) and [dark](snapshots/ios/dark/people_root.png) at source `096e04cb2354aef9b4ab42002e240bb1e02306ec`. Both original PNGs were downloaded, hash-verified and visually reviewed; the [native provenance](snapshots/ios/provenance.json) records the immutable source and artifact. Header accents match the app. The 174 unit tests passed; the UI suite remains red with 55 audit failures. These two native root images supplement the promise-specific Compose previews below; they do not establish every promise on iOS or any physical-device flow.
+
 ## P1–P10 review
 
 | Promise | What a People member can do in this build | Room preview | Test evidence and result | Limits of this evidence |

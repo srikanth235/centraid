@@ -1,20 +1,18 @@
-Hosted iOS verification — partial result, not a passing job
+Hosted iOS verification — latest result is partial; workflow job failed
 
-Run: https://github.com/srikanth235/centraid/actions/runs/46059161071
-Source: 50510fd0befe4002643d5553d76af652e7064551
-iOS job: 140708923072
+Run: https://github.com/srikanth235/centraid/actions/runs/46071464163
+Source: `096e04cb2354aef9b4ab42002e240bb1e02306ec`
+iOS job: `140749131892`
 
-Both real llama-enabled Rust simulator/device targets passed. Swift app/test compilation passed. XCTest executed 174 unit tests, 0 failures. The unsigned generic iPhone app build passed independently after the UI step failed. No physical iPhone was exercised.
+Both llama-enabled Rust targets (simulator and device) passed. Swift app and test compilation passed. XCTest unit tests: 174 passed, 0 failures. The unsigned generic iPhone build passed. This verifies compilation only; no physical iPhone was installed or exercised.
 
-UI suite: 8 tests, 1 expected skip, 87 failures. The full tour opened the app rooms and recorded all ten required native screenshot attachments, so the previous unsupported-navigation failure is corrected. Reported failures include missing input/filter labels, Dynamic Type metadata, contrast, Calendar clipping, two reading-order expectations that omitted the selected-place wording, and one Home audit-service timeout. The separate Reduce Motion pass did not run because the normal UI suite failed.
+UI tests: 8 tests, 1 expected skip, 55 failures. The three focus-order checks passed. The dark/light accessibility audits reported contrast, Dynamic Type and text-clipping issues. The largest-text audit could not hit the Backup tab. The separate Reduce Motion test was skipped by the UI bundle because it is run by the separate `verify-ios.sh` pass; that pass did not run after the UI failure in this source revision. The hosted job is failed and no all-green iOS claim is made. See the [verbatim failing assertion lines](ios-audit-096.txt).
 
-Recorded attachments (both light and dark): calendar_grid, note_editor, people_root, money_root, photo_grid. Attachment creation is confirmed in the native job log; visual review is pending.
+The UI tour generated the five required screenshot types in light and dark appearance: `calendar_grid`, `note_editor`, `people_root`, `money_root`, and `photo_grid`. All ten PNGs in the small review archive were checked for PNG signature, dimensions and SHA-256. Visual review found the Calendar screen is an hourly grid; Notes is a blank new editor rather than an existing note; the source-096 Photos capture shows two solid app-tint placeholder tiles, not actual thumbnails. A later source change resolves opaque photo owner refs through existing `ContentUrls` for both native grids/viewers and makes Rust emit `photo.id`, with no schema or wire change. It handles existing embeddable Store image paths; OS-library-only previews remain placeholders. This change has no matching Core/native rebuild yet and is not in the captured iOS run. See [Photos resolver evidence](android-photo-content.txt). The Money capture shows a positive income amount in red; a subsequent source correction is not covered by this run. People and Money otherwise show rendered room states. The PNGs are copied to [light](../snapshots/ios/light/) and [dark](../snapshots/ios/dark/) report folders; their [provenance](../snapshots/ios/provenance.json) records each attachment, dimension and hash. Screenshots are capture evidence, not proof of a real share-extension import or physical-device behavior.
 
-Artifact: ios-verification, ID 15232355859, 832551836 bytes.
-Server-reported archive digest: sha256:b131c06733a28757267182c0d5da8990c7bcbb8472ddb2d5b256a1e819b45caf. This digest was not verified by a local download: the connector limit is 512 MiB and the command sandbox proxy refuses the redirected Azure host. The next workflow also publishes a smaller ios-review archive while retaining the complete raw result archive.
+Small review artifact: run `46071464163`, artifact `15236093703`, 14,785,933 bytes.
+Downloaded archive: `/tmp/centraid-ios-review-46071464163.zip`
+SHA-256: `0f12fbad4ea8ce1e4450e2286f6fc1596ce7828328e2c5e3f9a4ed358fa3a869`
+Extracted evidence: `/tmp/centraid-ios-review-46071464163/` (runner-local evidence; archive includes 68 rendered page PNGs plus the ten required screenshot PNGs).
 
-Actual unit log: Executed 174 tests, with 0 failures.
-Actual UI log: Executed 8 tests, with 1 test skipped and 87 failures.
-Actual device log: ** BUILD SUCCEEDED ** at 2026-11-27T21:12:07Z.
-
-Shared native UI repairs are prepared for the next Mac run; these source edits are not yet SDK-verified. Existing audit baselines/exemptions are unchanged. The design rule holding navigation labels at a fixed size is preserved.
+Physical owner authentication, OS permission prompts and followed-store reads, picker/share/save behavior, clipboard expiry, and background transitions remain unverified. M1, M3 and M4 remain unticked pending owner review. See [attempt history](ios-runner-attempts.txt) and the [iOS handoff](../ios-handoff.md).

@@ -883,7 +883,7 @@ private fun formatReadoutLabel(point: RoomChartPoint): String = when {
 private fun resolveRuleColor(tone: RoomTone): Color = when (tone) {
     RoomTone.ROOM_TONE_ACCENT -> appAccent().text
     RoomTone.ROOM_TONE_WARNING, RoomTone.ROOM_TONE_SEAM -> StateColor.Amber.text
-    RoomTone.ROOM_TONE_NET -> StateColor.Red.text
+    RoomTone.ROOM_TONE_NET -> StateColor.Green.text
     else -> Surface.meta
 }
 

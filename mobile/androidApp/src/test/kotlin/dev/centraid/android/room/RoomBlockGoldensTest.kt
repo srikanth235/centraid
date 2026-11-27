@@ -196,7 +196,7 @@ class RoomBlockGoldensTest {
                         selector_id = "row/txn",
                         title = "Groceries",
                         meta = "Today · Everyday",
-                        trailing = "-$42.50",
+                        trailing = "$42.50",
                         trailing_tone = RoomTone.ROOM_TONE_NET,
                         chips = listOf(RoomChip(label = "Pending", tone = RoomTone.ROOM_TONE_WARNING)),
                         mark = RoomMark(glyph = RoomGlyph(icon = "CreditCard")),

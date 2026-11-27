@@ -23,11 +23,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,6 +76,22 @@ import java.io.File
 
 private val GRID_GAP = 2.dp
 
+internal data class RoomPhotoContentResolver(
+    val scopeKey: String,
+    val resolve: suspend (List<String>) -> Map<String, String>,
+)
+
+internal val LocalRoomPhotoContentResolver = staticCompositionLocalOf {
+    RoomPhotoContentResolver("", { emptyMap() })
+}
+
+private val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*://")
+
+internal fun shouldResolvePhotoReference(ref: String): Boolean =
+    ref.isNotBlank() && !File(ref).isAbsolute && !File(ref).isFile &&
+        !URI_SCHEME.containsMatchIn(ref) &&
+        !ref.startsWith("file:", ignoreCase = true) && !ref.startsWith("content:", ignoreCase = true)
+
 @Composable
 internal fun PhotoGridCanvas(
     grid: RoomPhotoGrid,
@@ -82,10 +100,29 @@ internal fun PhotoGridCanvas(
     onCanvas: (RoomCanvasEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val resolver = LocalRoomPhotoContentResolver.current
     val viewer = grid.viewer
+    val refs = remember(grid) {
+        buildList {
+            grid.sections.forEach { section ->
+                section.tiles.mapNotNullTo(this) { tile -> tile.thumb?.ref?.takeIf(String::isNotEmpty) }
+            }
+            viewer?.current?.thumb?.ref?.takeIf(String::isNotEmpty)?.let(::add)
+        }.distinct()
+    }
+    val resolvableRefs = remember(refs) { refs.filter(::shouldResolvePhotoReference) }
+    var resolvedPaths by remember(resolver.scopeKey) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(resolver.scopeKey, resolvableRefs) {
+        resolvedPaths = emptyMap()
+        if (resolver.scopeKey.isNotEmpty() && resolvableRefs.isNotEmpty()) {
+            resolvedPaths = resolver.resolve(resolvableRefs)
+        }
+    }
+
     if (viewer != null) {
         PhotoViewerCanvas(
             viewer = viewer,
+            resolvedPaths = resolvedPaths,
             onTap = onTap,
             onChange = onChange,
             onCanvas = onCanvas,
@@ -111,6 +148,7 @@ internal fun PhotoGridCanvas(
                 section = section,
                 sectionIndex = sIdx,
                 targetRowHeight = targetRowHeight,
+                resolvedPaths = resolvedPaths,
                 onTap = onTap,
             )
         }
@@ -181,6 +219,7 @@ private fun PhotoGridSectionView(
     section: RoomPhotoSection,
     sectionIndex: Int,
     targetRowHeight: Dp,
+    resolvedPaths: Map<String, String>,
     onTap: (String) -> Unit,
 ) {
     Column(
@@ -221,6 +260,7 @@ private fun PhotoGridSectionView(
                         row.cells.forEach { cell ->
                             PhotoTileCell(
                                 tile = cell.tile,
+                                resolvedPaths = resolvedPaths,
                                 onTap = onTap,
                                 modifier = Modifier
                                     .width(cell.widthDp.dp)
@@ -237,13 +277,19 @@ private fun PhotoGridSectionView(
 @Composable
 private fun PhotoTileCell(
     tile: RoomPhotoTile,
+    resolvedPaths: Map<String, String>,
     onTap: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val accent = appAccent("photos")
     val tint = resolveCanvasHueColor(tile.thumb?.hue_key.orEmpty(), Surface.fill)
     val ref = tile.thumb?.ref.orEmpty()
-    val hasLocalFile = remember(ref) { ref.isNotEmpty() && File(ref).isFile }
+    val imagePath = remember(ref, resolvedPaths[ref]) {
+        when {
+            ref.isNotEmpty() && File(ref).isFile -> ref
+            else -> resolvedPaths[ref]?.takeIf { File(it).isFile }
+        }
+    }
     val scrim = centraidColor("stage").copy(alpha = 0.72f)
     val spoken = tile.a11y_label.ifEmpty { tile.thumb?.alt.orEmpty() }
 
@@ -259,8 +305,8 @@ private fun PhotoTileCell(
             },
         contentAlignment = Alignment.Center,
     ) {
-        if (hasLocalFile) {
-            ContentImage(ref)
+        if (imagePath != null) {
+            ContentImage(imagePath)
         } else {
             val icon = when (tile.kind) {
                 RoomPhotoTileKind.ROOM_PHOTO_TILE_KIND_VIDEO -> "Play"
@@ -319,6 +365,7 @@ private fun PhotoTileCell(
 @Composable
 private fun PhotoViewerCanvas(
     viewer: RoomPhotoViewer,
+    resolvedPaths: Map<String, String>,
     onTap: (String) -> Unit,
     onChange: (RoomChange) -> Unit,
     onCanvas: (RoomCanvasEvent) -> Unit,
@@ -346,7 +393,12 @@ private fun PhotoViewerCanvas(
     val current = viewer.current
     val ratio = ((current?.aspect_milli?.takeIf { it > 0 } ?: 1333) / 1000f).coerceIn(0.6f, 2.2f)
     val ref = current?.thumb?.ref.orEmpty()
-    val hasFile = remember(ref) { ref.isNotEmpty() && File(ref).isFile }
+    val imagePath = remember(ref, resolvedPaths[ref]) {
+        when {
+            ref.isNotEmpty() && File(ref).isFile -> ref
+            else -> resolvedPaths[ref]?.takeIf { File(it).isFile }
+        }
+    }
     val mediaTint = resolveCanvasHueColor(current?.thumb?.hue_key.orEmpty(), Surface.fill)
 
     Column(
@@ -521,8 +573,8 @@ private fun PhotoViewerCanvas(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (hasFile) {
-                    ContentImage(ref)
+                if (imagePath != null) {
+                    ContentImage(imagePath)
                 } else {
                     val icon = when (current?.kind) {
                         RoomMediaKind.ROOM_MEDIA_KIND_VIDEO -> "Play"

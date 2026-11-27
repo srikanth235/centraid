@@ -1,4 +1,5 @@
 import CoreGraphics
+import UIKit
 import XCTest
 @testable import CentraidApp
 
@@ -90,5 +91,144 @@ final class PhotoGridTests: XCTestCase {
         XCTAssertNil(PhotoGridMath.slideshowNextIndex(current: 0, count: 1))
         XCTAssertEqual(PhotoGridMath.slideshowNextIndex(current: 0, count: 3), 1)
         XCTAssertEqual(PhotoGridMath.slideshowNextIndex(current: 2, count: 3), 0)
+    }
+
+    @MainActor
+    func testPhotoContentPathsResolveOpaqueRefsAndRejectLateRoomReplies() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let image = folder.appendingPathComponent("preview.png")
+        let imageData = try XCTUnwrap(
+            Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==")
+        )
+        XCTAssertNotNil(UIImage(data: imageData))
+        try imageData.write(to: image)
+
+        XCTAssertTrue(RoomStore.isOpaquePhotoReference("photo:seeded-front"))
+        XCTAssertTrue(RoomStore.isOpaquePhotoReference(String(repeating: "a", count: 64)))
+        XCTAssertFalse(RoomStore.isOpaquePhotoReference("file://\(image.path)"))
+        XCTAssertFalse(RoomStore.isOpaquePhotoReference("https://example.test/image.jpg"))
+        XCTAssertFalse(RoomStore.isOpaquePhotoReference(""))
+
+        let core = PhotoContentPathTestCore(path: image.path)
+        let store = RoomStore(core: core)
+        store.apply(photoRoom(instance: 41))
+        let resolved = await store.photoContentPaths(
+            ["photo:seeded-front", String(repeating: "a", count: 64), "file://\(image.path)"],
+            instance: 41
+        )
+        XCTAssertEqual(resolved["photo:seeded-front"], image.path)
+        XCTAssertEqual(resolved[String(repeating: "a", count: 64)], image.path)
+        let request = await core.lastContentRequest()
+        XCTAssertEqual(request?.refs.map(\.contentID), [String(repeating: "a", count: 64), "photo:seeded-front"])
+        XCTAssertEqual(request?.refs.map(\.ownerType), ["photo", "photo"])
+        XCTAssertEqual(request?.refs.map(\.ownerID), [String(repeating: "a", count: 64), "photo:seeded-front"])
+
+        let libraryOnlyCore = PhotoContentPathTestCore(
+            path: image.path,
+            source: .osLibrary,
+            embeddable: false
+        )
+        let libraryOnlyStore = RoomStore(core: libraryOnlyCore)
+        libraryOnlyStore.apply(photoRoom(instance: 45))
+        let libraryOnly = await libraryOnlyStore.photoContentPaths(["photo:seeded-front"], instance: 45)
+        XCTAssertTrue(libraryOnly.isEmpty)
+
+        let delayedCore = PhotoContentPathTestCore(path: image.path, delayed: true)
+        let delayedStore = RoomStore(core: delayedCore)
+        delayedStore.apply(photoRoom(instance: 51))
+        var requests = delayedCore.requests.makeAsyncIterator()
+        let lookup = Task {
+            await delayedStore.photoContentPaths(["photo:seeded-front"], instance: 51)
+        }
+        let pendingRequest = await requests.next()
+        guard let pendingRequest, case .contentUrls(_) = pendingRequest.kind else {
+            return XCTFail("photo resolution should use ContentUrls")
+        }
+        delayedStore.apply(photoRoom(instance: 52))
+        await delayedCore.releaseContentRequest()
+        let latePaths = await lookup.value
+        XCTAssertTrue(latePaths.isEmpty)
+    }
+
+    @MainActor
+    private func photoRoom(instance: UInt64) -> Centraid_Core_V1_RoomShown {
+        var shown = Centraid_Core_V1_RoomShown()
+        shown.tab = RustScreens.homeTab
+        shown.instance = instance
+        shown.depth = 1
+        shown.transition = .replace
+        shown.room.key = "photos"
+        shown.room.state = .ready(.init())
+        return shown
+    }
+}
+
+private actor PhotoContentPathTestCore: ScreenCore {
+    nonisolated let updates = AsyncStream<Centraid_Core_V1_ScreenUpdate> { $0.finish() }
+    nonisolated let requests: AsyncStream<Centraid_Core_V1_Request>
+    private nonisolated let requestSink: AsyncStream<Centraid_Core_V1_Request>.Continuation
+    private let path: String
+    private let delayed: Bool
+    private let source: Centraid_Core_V1_ContentSource
+    private let embeddable: Bool
+    private var lastRequest: Centraid_Core_V1_ContentUrlRequest?
+    private var pending: CheckedContinuation<Centraid_Core_V1_Response, Never>?
+
+    init(
+        path: String,
+        delayed: Bool = false,
+        source: Centraid_Core_V1_ContentSource = .store,
+        embeddable: Bool = true
+    ) {
+        self.path = path
+        self.delayed = delayed
+        self.source = source
+        self.embeddable = embeddable
+        let stream = AsyncStream<Centraid_Core_V1_Request>.makeStream()
+        requests = stream.stream
+        requestSink = stream.continuation
+    }
+
+    func call(_ request: Centraid_Core_V1_Request) async throws -> Centraid_Core_V1_Response {
+        requestSink.yield(request)
+        guard case .contentUrls(let ask)? = request.kind else { return Centraid_Core_V1_Response() }
+        lastRequest = ask
+        if delayed {
+            return await withCheckedContinuation { pending = $0 }
+        }
+        return response(for: ask)
+    }
+
+    func call(
+        _ request: Centraid_Core_V1_Request,
+        lane: Core.Lane
+    ) async throws -> Centraid_Core_V1_Response {
+        try await call(request)
+    }
+
+    func lastContentRequest() -> Centraid_Core_V1_ContentUrlRequest? { lastRequest }
+
+    func releaseContentRequest() {
+        guard let pending, let lastRequest else { return }
+        self.pending = nil
+        pending.resume(returning: response(for: lastRequest))
+    }
+
+    private func response(for ask: Centraid_Core_V1_ContentUrlRequest) -> Centraid_Core_V1_Response {
+        var answer = Centraid_Core_V1_ContentUrls()
+        answer.urls = ask.refs.map { ref in
+            var url = Centraid_Core_V1_ContentUrl()
+            url.contentID = ref.contentID
+            url.path = path
+            url.mediaType = "image/png"
+            url.embeddable = embeddable
+            url.source = source
+            return url
+        }
+        var response = Centraid_Core_V1_Response()
+        response.kind = .contentUrls(answer)
+        return response
     }
 }

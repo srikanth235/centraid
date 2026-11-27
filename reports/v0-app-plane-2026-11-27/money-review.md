@@ -8,6 +8,12 @@ Room captures are protobuf `Room` responses from the real Rust Core runtime afte
 
 The [durable Room fixture manifest](room-fixtures.json) currently lists 20 fixtures, including 13 Money fixtures. The latest capture used `CENTRAID_REVIEW_CAPTURE=1`; the suite asserts the unanswered date-order question has no preview, the two-row selection state is visible, the second statement import reports `unchanged == 1`, and the statement detail contains both split parts. Compose/Robolectric rendered all 20 fixtures in light and dark mode (40 previews).
 
+## Native simulator evidence
+
+The hosted macOS run [46071464163](https://github.com/srikanth235/centraid/actions/runs/46071464163) captured the actual Money root in [light](snapshots/ios/light/money_root.png) and [dark](snapshots/ios/dark/money_root.png) at source `096e04cb2354aef9b4ab42002e240bb1e02306ec`. Both original PNGs were downloaded, hash-verified and visually reviewed; the [native provenance](snapshots/ios/provenance.json) records the immutable source and artifact. Header accents match the app. The 174 unit tests passed; the UI suite remains red with 55 audit failures. These two native root images supplement the promise-specific Compose previews below; they do not establish every promise on iOS or any physical-device flow.
+
+The native capture also exposes an incorrect red positive amount; its adapter repair follows the tested source and needs its own native verification.
+
 ## P1–P10 review
 
 | Promise | What a Money member can do in this build | Room preview | Test evidence and result | Limits of this evidence |
@@ -50,6 +56,6 @@ For each light preview, the dark counterpart is available at `snapshots/dark/<sa
 - `cargo test -p centraid-screens --test room_people_import -- --nocapture` — 1 passed; actual staged vCard bytes appear in a count preview before explicit confirmation, then import with Undo.
 - `cargo test -p centraid-screens --test room_day_one -- --nocapture` — 11 passed, 0 failed after updating the reviewed current snapshots.
 - `cargo test -p centraid-screens --test room_notes_docs_photos -- --nocapture` — 3 passed, 0 failed after updating the reviewed current snapshots.
-- Android Compose/Robolectric rendered 20 light and 20 dark previews. An Android API 24 arm64 cross-build and debug APK assembly completed; no device run is claimed. No iOS simulator/device, hardware owner authentication, OS save sheet, clipboard, or share sheet approval is claimed.
+- Android Compose/Robolectric rendered 20 light and 20 dark previews. An Android API 24 arm64 cross-build and debug APK assembly completed; no device run is claimed. Native simulator root captures are linked above; no physical-device, hardware owner authentication, OS save sheet, clipboard, or share sheet approval is claimed.
 
 The full screen test output is available at [validation/screens.txt](validation/screens.txt); focused Money results are [validation/money-current.txt](validation/money-current.txt), the latest artifact capture is [validation/room-fixture-capture.txt](validation/room-fixture-capture.txt), and screens Clippy is [validation/money-clippy.txt](validation/money-clippy.txt). The full vault output is at [validation/vault.txt](validation/vault.txt). The test commands were serialized with the repository's Cargo lock. No owner approval or #1214 progress checkbox is claimed by this packet.

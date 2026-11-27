@@ -1,0 +1,91 @@
+{
+  "source_commit": "096e04cb2354aef9b4ab42002e240bb1e02306ec",
+  "run_url": "https://github.com/srikanth235/centraid/actions/runs/46071464163",
+  "job_id": 140749131892,
+  "artifact_id": 15236093703,
+  "artifact_zip_bytes": 14785933,
+  "artifact_zip_sha256": "0f12fbad4ea8ce1e4450e2286f6fc1596ce7828328e2c5e3f9a4ed358fa3a869",
+  "review": "All ten original PNGs inspected. People purple and Money indigo header accents correct in both appearances. Money positive amount is red: adapter repair follows this tested commit. Calendar captures the day/hour grid, Notes a blank new editor with keyboard, Photos two tint placeholders, not decoded photo previews. These images do not establish completed OS effects or physical-device behavior.",
+  "captures": [
+    {
+      "path": "dark/calendar_grid.png",
+      "bytes": 205605,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "208207a37760e6161d3ff22cf6683984a8d99b0328ac56ab6bdbe517d991d198",
+      "attachment": "Centraid-dark-calendar_grid_0_4949D99A-A289-4F4F-8CEC-ACDEAF477F19.png"
+    },
+    {
+      "path": "dark/money_root.png",
+      "bytes": 151609,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "808d5cc43c63f14930265ada575500b9f2a50eee37615678bc0d17f2b60210a0",
+      "attachment": "Centraid-dark-money_root_0_8D89A106-13F7-4F40-B2BD-1BD6F43F7B93.png"
+    },
+    {
+      "path": "dark/note_editor.png",
+      "bytes": 139395,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "9fae72caba4c6ec979c5d16cdd2d4db04dd044ea55f0972fac8989a635e16c39",
+      "attachment": "Centraid-dark-note_editor_0_A455E628-5F7D-4519-B6FD-11979002E862.png"
+    },
+    {
+      "path": "dark/people_root.png",
+      "bytes": 153123,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "c3ad154c7e6e27a6b9f21bf398809973f43e70127242f4667d5fd139d749dafd",
+      "attachment": "Centraid-dark-people_root_0_25CCD834-8BF5-4DC0-9C67-A6EA42A91A62.png"
+    },
+    {
+      "path": "dark/photo_grid.png",
+      "bytes": 142511,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "2c717b198a5473ed3213d3ad02349ee636c1e9605f2e39db00bbd1a5b78aa9a1",
+      "attachment": "Centraid-dark-photo_grid_0_B6675DD4-4EF3-4679-99BC-6D8A714DB977.png"
+    },
+    {
+      "path": "light/calendar_grid.png",
+      "bytes": 234373,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "265a9bcf34249e50fe7add432aeebe935bf79c88cc5c941302b36e0a52f98113",
+      "attachment": "Centraid-light-calendar_grid_0_827D8269-66A0-4097-BBEC-B03957001396.png"
+    },
+    {
+      "path": "light/money_root.png",
+      "bytes": 185072,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "cb8763cb4c3bbc9c7f7af245401342145c9d5f67ac2d28eec2b98d578ec71c33",
+      "attachment": "Centraid-light-money_root_0_42C2D74A-15BB-449B-848A-63AD5A135942.png"
+    },
+    {
+      "path": "light/note_editor.png",
+      "bytes": 152075,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "8c842f712c0f019aa03085b64d6a5e146c82892a360719b20e09d84ac206f737",
+      "attachment": "Centraid-light-note_editor_0_2DC4917F-EDB3-437E-9D24-4D71C15C38F2.png"
+    },
+    {
+      "path": "light/people_root.png",
+      "bytes": 192697,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "f7f0f344ed839aa478d74936cf78447b30e235cbdf90ef8ec3bdca9ed6a3e576",
+      "attachment": "Centraid-light-people_root_0_9BDC93E2-D1DF-4382-ABDA-39D250E2CD34.png"
+    },
+    {
+      "path": "light/photo_grid.png",
+      "bytes": 178575,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "8b1618b35f9eb0e47d628872c993b9707417c4ab871ad9cb194d7b21d529f121",
+      "attachment": "Centraid-light-photo_grid_0_C7EAAA83-2BD8-4C63-A718-61F88EA3FBC0.png"
+    }
+  ]
+}

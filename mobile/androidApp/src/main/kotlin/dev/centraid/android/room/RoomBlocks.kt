@@ -162,7 +162,7 @@ internal fun RoomHairline(startIndent: Dp = 0.dp) {
 @Composable
 internal fun roomToneColor(tone: RoomTone): Color = when (tone) {
     RoomTone.ROOM_TONE_SEAM, RoomTone.ROOM_TONE_WARNING -> StateColor.Amber.text
-    RoomTone.ROOM_TONE_NET -> StateColor.Red.text
+    RoomTone.ROOM_TONE_NET -> StateColor.Green.text
     RoomTone.ROOM_TONE_ACCENT -> appAccent().text
     else -> Surface.ink
 }

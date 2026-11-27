@@ -1,36 +1,33 @@
-Real Kotlin/JNA Core tests after the foreground-vault room-routing fix
-
-Source: `50510fd0befe4002643d5553d76af652e7064551`
-The host `libcentraid_core_ffi.so` was rebuilt first; see `jvm-native-library.txt` for its SHA-256.
-Command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && flock /tmp/centraid-cargo.lock /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :core:jvmTest --no-daemon`
-Result: `BUILD SUCCESSFUL`; 40 tests across 10 suites, 0 failures, 0 errors, 0 skips. This exercises the real Linux FFI library from Kotlin/JNA.
-
-Log: `/tmp/centraid-android-core-jvmtest.log`.
-
-Captured command output:
-
 Picked up JAVA_TOOL_OPTIONS: -Duser.home=/tmp/centraid-robolectric-home
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
 Daemon will be stopped at the end of the build 
-
+mobile: the Android target is OFF. Pass -Pcentraid.android=true with ANDROID_HOME set to build :androidApp (mobile/README.md).
 > Task :core:abiFixture
 CENTRAID_VAULT=/workspace/centraid/mobile/core/build/abi-fixture/spike-vault.db
 CENTRAID_REQUEST=/workspace/centraid/mobile/core/build/abi-fixture/request.bin
 
 > Task :core:kmpPartiallyResolvedDependenciesChecker
 > Task :core:checkKotlinGradlePluginConfigurationErrors SKIPPED
-> Task :core:generateCommonMainProtos UP-TO-DATE
-> Task :core:compileKotlinJvm UP-TO-DATE
-> Task :core:compileJvmMainJava NO-SOURCE
+> Task :core:generateCommonMainProtos
 > Task :core:jvmProcessResources NO-SOURCE
 > Task :core:processJvmMainResources SKIPPED
-> Task :core:jvmMainClasses UP-TO-DATE
-> Task :core:jvmJar UP-TO-DATE
-> Task :core:compileTestKotlinJvm UP-TO-DATE
-> Task :core:compileJvmTestJava NO-SOURCE
 > Task :core:jvmTestProcessResources NO-SOURCE
 > Task :core:processJvmTestResources SKIPPED
-> Task :core:jvmTestClasses UP-TO-DATE
+> Task :core:compileKotlinJvm
+w: file:///workspace/centraid/mobile/core/build/generated/source/wire/centraid/core/v1/RestoreRequest.kt:280:60 Unnecessary non-null assertion (!!) on a non-null receiver of type 'MutableList<Int>'.
+w: file:///workspace/centraid/mobile/core/build/generated/source/wire/centraid/core/v1/ScreenUpdate.kt:191:59 Unnecessary non-null assertion (!!) on a non-null receiver of type 'MutableList<Long>'.
+
+> Task :core:compileJvmMainJava NO-SOURCE
+> Task :core:jvmMainClasses
+> Task :core:jvmJar
+
+> Task :core:compileTestKotlinJvm
+w: file:///workspace/centraid/mobile/core/src/jvmTest/kotlin/dev/centraid/core/ScreensRoundTripSpec.kt:53:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Room'.
+w: file:///workspace/centraid/mobile/core/src/jvmTest/kotlin/dev/centraid/core/ScreensRoundTripSpec.kt:54:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Room'.
+w: file:///workspace/centraid/mobile/core/src/jvmTest/kotlin/dev/centraid/core/ShellEffectAnswersSpec.kt:21:28 Unnecessary non-null assertion (!!) on a non-null receiver of type 'ShellEffectResult'.
+
+> Task :core:compileJvmTestJava NO-SOURCE
+> Task :core:jvmTestClasses
 
 > Task :core:jvmTest
 Picked up JAVA_TOOL_OPTIONS: -Duser.home=/tmp/centraid-robolectric-home
@@ -39,11 +36,13 @@ AbiRoundTripSpec[jvm] > open, call, next_event, free and close, against the real
     {"marker":"abi-command","status":"ACT_STATUS_EXECUTED"}
 
 AbiRoundTripSpec[jvm] > the five calls' latencies, reported for the two screens' reads[jvm] STANDARD_OUT
-    {"marker":"mobile-jvm-abi","reads":{"photos.grid":{"p50Us":339,"p95Us":616}},"samplesPerRead":200}
+    {"marker":"mobile-jvm-abi","reads":{"photos.grid":{"p50Us":488,"p95Us":791}},"samplesPerRead":200}
 
 AbiRoundTripSpec[jvm] > the other four symbols, timed[jvm] STANDARD_OUT
-    {"marker":"mobile-jvm-symbols","openUs":70278,"nextEventTimeoutUs":134,"closeUs":2915,"freeUs":"inside call, by contract"}
+    {"marker":"mobile-jvm-symbols","openUs":26961,"nextEventTimeoutUs":73,"closeUs":2522,"freeUs":"inside call, by contract"}
 
-BUILD SUCCESSFUL in 28s
-7 actionable tasks: 3 executed, 4 up-to-date
+[Incubating] Problems report is available at: file:///workspace/centraid/mobile/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 2m 31s
+7 actionable tasks: 7 executed
 Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html

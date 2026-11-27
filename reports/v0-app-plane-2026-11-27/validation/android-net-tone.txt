@@ -1,0 +1,13 @@
+Android Net tone focused verification
+
+Source check: Android maps `ROOM_TONE_NET` to the existing green state color for figure text, row values/chips, and chart rule labels. The synthetic `row_default` fixture previously paired `ROOM_TONE_NET` with `-$42.50`, while Core uses Net only for nonnegative values. The fixture now uses `$42.50` (the positive currency format). The reviewed comparison showed only that semantic change: red negative value to green positive value. Root approved the image before recording.
+
+Recorded image: `mobile/androidApp/src/test/snapshots/blocks/row_default.png` only.
+
+Verification command:
+
+```sh
+. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:testDebugUnitTest --tests dev.centraid.android.room.RoomBlockGoldensTest --tests dev.centraid.android.room.ChartCanvasGoldensTest -Droborazzi.test.verify=true --rerun-tasks --no-build-cache --no-daemon
+```
+
+Result: `BUILD SUCCESSFUL`. `RoomBlockGoldensTest` 1/1 and `ChartCanvasGoldensTest` 3/3 passed; no chart golden changed. Log: `/tmp/centraid-android-net-tone-verified.log`. The test is Robolectric/Compose render verification, not physical-device evidence.

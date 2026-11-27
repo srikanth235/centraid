@@ -212,8 +212,9 @@ struct KitSegmented<Key: Hashable>: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    private var stacked: Bool { fills && dynamicTypeSize >= Theme.reflowSize }
+
     var body: some View {
-        let stacked = fills && dynamicTypeSize >= Theme.reflowSize
         let layout = stacked ? AnyLayout(VStackLayout(spacing: 2)) : AnyLayout(HStackLayout(spacing: 2))
         layout {
             ForEach(Array(options.enumerated()), id: \.offset) { _, option in
@@ -246,7 +247,7 @@ struct KitSegmented<Key: Hashable>: View {
                 .frame(
                     maxWidth: fills ? .infinity : nil,
                     minHeight: CentraidGeometry.targetMinCoarse,
-                    maxHeight: fills ? .infinity : nil
+                    maxHeight: fills && !stacked ? .infinity : nil
                 )
                 .background(active ? Surface.card : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .contentShape(Rectangle())

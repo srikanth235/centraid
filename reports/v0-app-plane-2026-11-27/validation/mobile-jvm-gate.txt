@@ -1,13 +1,8 @@
-Source: 50510fd0befe4002643d5553d76af652e7064551
-Command: cargo xtask gate --profile mobile-jvm
-Environment: current rebuilt host FFI, JDK 21, verified Gradle 9.7.1 wrapper.
-Result: PASS. This narrow profile builds the host FFI, runs the JVM task, and checks generated design drift. It does not include Android device tests or the full PR gate.
-
 xtask gate — profile mobile-jvm
-  ok    mobile-jvm        189.2s  design/tokens.toml regenerates every committed design file unchanged
+  ok    mobile-jvm         86.4s  design/tokens.toml regenerates every committed design file unchanged
 
   step              seconds
-  mobile-jvm          189.2
-  TOTAL               189.2
+  mobile-jvm           86.4
+  TOTAL                86.4
 
 gate mobile-jvm: PASS

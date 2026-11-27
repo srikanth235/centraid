@@ -1,0 +1,18 @@
+Photos owner-ref and native layout source checks
+
+Source: the frozen code changes committed with this receipt; the native Mac outcome below still belongs to 096e04cb until the next hosted run completes.
+
+Commands actually run:
+- cargo test -p centraid-screens --no-fail-fast: 629 passed, 0 failed, 0 ignored, 48 reported suites.
+- cargo fmt --all -- --check: passed.
+- cargo clippy -p centraid-screens --all-targets -- -D warnings: passed.
+- cargo xtask doc-links: 0 findings.
+- cargo xtask gate --profile mobile-jvm: PASS; real host FFI rebuilt and generated design drift check passed. The independent forced JVM run passed 40 tests across 10 suites with no failures/errors/skips; all 7 Gradle tasks executed. See jvm-tests.txt and jvm-native-library.txt.
+- cargo xtask rules: only the owner-excluded DATA-PIN finding remains; every other rule, including native-shell-parity, passed. No pin hash was changed.
+- bash -n mobile/scripts/verify-ios.sh: passed.
+- actionlint 1.7.12 .github/workflows/gate.yml: passed; local ShellCheck unavailable.
+- git diff --check: passed.
+
+Android resolver: 5/5 Robolectric tests, valid PNG decoding, stale replies and overlapping scopes; see android-photo-content.txt. Net tone: four focused golden tests passed; the one row fixture/golden change was visually reviewed; see android-net-tone.txt.
+
+New iOS source is not yet SDK-verified. Source096 passed 174 unit tests and unsigned iPhone build, but UI audit failed with 55 failures. No audit baseline/exemption or font-size ruling changed. Store-only image paths are supported; OS-library-only preview decoding remains absent. The excluded demo world and assistant data are unchanged.

@@ -185,6 +185,7 @@ struct PhotoGridCanvasView: View {
 
     @State private var containerWidth: CGFloat = 0
     @State private var sectionLayouts: [PhotoSectionLayout] = []
+    @State private var contentPaths: [String: String] = [:]
 
     private var activeZoom: Centraid_Core_V1_RoomPhotoZoom {
         grid.zoom == .unspecified ? .all : grid.zoom
@@ -193,13 +194,51 @@ struct PhotoGridCanvasView: View {
     var body: some View {
         Group {
             if grid.hasViewer {
-                PhotoViewerView(viewer: grid.viewer, callbacks: callbacks)
+                PhotoViewerView(viewer: grid.viewer, callbacks: callbacks, contentPaths: contentPaths)
             } else {
                 gridContent
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("photo-grid")
+        .task(id: contentLoadID) {
+            contentPaths = [:]
+            guard let resolve = callbacks.photoPaths else { return }
+            let refs = Array(Set(photoReferences.filter(RoomStore.isOpaquePhotoReference))).sorted()
+            guard !refs.isEmpty else { return }
+            let loaded = await resolve(refs)
+            guard !Task.isCancelled else { return }
+            contentPaths = loaded
+        }
+    }
+
+    private var photoReferences: [String] {
+        if grid.hasViewer {
+            return grid.viewer.current.hasThumb ? [grid.viewer.current.thumb.ref] : []
+        }
+        return grid.sections.flatMap(\.tiles).compactMap { $0.hasThumb ? $0.thumb.ref : nil }
+    }
+
+    private var contentLoadID: String {
+        "\(callbacks.photoScope)|\(photoReferences.sorted().joined(separator: "|"))"
+    }
+
+    private func imagePath(for reference: String) -> String? {
+        contentPaths[reference] ?? Self.localFilePath(reference)
+    }
+
+    fileprivate static func localFilePath(_ reference: String) -> String? {
+        let url: URL
+        if let candidate = URL(string: reference), candidate.isFileURL {
+            url = candidate
+        } else if reference.hasPrefix("/") {
+            url = URL(fileURLWithPath: reference)
+        } else if FileManager.default.fileExists(atPath: reference) {
+            url = URL(fileURLWithPath: reference)
+        } else {
+            return nil
+        }
+        return FileManager.default.fileExists(atPath: url.path) ? url.path : nil
     }
 
     private var gridContent: some View {
@@ -221,7 +260,11 @@ struct PhotoGridCanvasView: View {
                                     ForEach(section.rows) { row in
                                         HStack(spacing: PhotoGridMath.tileGap) {
                                             ForEach(row.items) { item in
-                                                PhotoTileView(item: item, onTap: callbacks.tap)
+                                                PhotoTileView(
+                                                    item: item,
+                                                    imagePath: imagePath(for: item.tile.thumb.ref),
+                                                    onTap: callbacks.tap
+                                                )
                                             }
                                         }
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -298,6 +341,7 @@ struct PhotoGridCanvasView: View {
 
 private struct PhotoTileView: View {
     let item: PhotoJustifiedItem
+    let imagePath: String?
     let onTap: (String) -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -313,8 +357,8 @@ private struct PhotoTileView: View {
         } label: {
             ZStack {
                 placeholderFill
-                if tile.hasThumb, !tile.thumb.ref.isEmpty {
-                    ContentImage(path: tile.thumb.ref)
+                if let imagePath {
+                    ContentImage(path: imagePath)
                         .frame(width: item.width, height: item.height)
                 }
             }
@@ -389,6 +433,7 @@ private struct PhotoTileView: View {
 private struct PhotoViewerView: View {
     let viewer: Centraid_Core_V1_RoomPhotoViewer
     let callbacks: RoomCallbacks
+    let contentPaths: [String: String]
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
@@ -477,6 +522,7 @@ private struct PhotoViewerView: View {
             ? PhotoGridMath.aspectRatio(for: viewer.current.aspectMilli)
             : 1.0
         let ref = viewer.hasCurrent && viewer.current.hasThumb ? viewer.current.thumb.ref : ""
+        let imagePath = contentPaths[ref] ?? PhotoGridCanvasView.localFilePath(ref)
         let hueKey = viewer.hasCurrent && viewer.current.hasThumb ? viewer.current.thumb.hueKey : ""
         let alt = viewer.hasCurrent && viewer.current.hasThumb ? viewer.current.thumb.alt : ""
 
@@ -487,8 +533,8 @@ private struct PhotoViewerView: View {
                 } else {
                     Surface.fill
                 }
-                if !ref.isEmpty {
-                    ContentImage(path: ref)
+                if let imagePath {
+                    ContentImage(path: imagePath)
                 } else if viewer.hasCurrent {
                     CentraidIconView(iconKey: mediaIcon(viewer.current.kind), tint: Surface.meta, size: 36)
                 }

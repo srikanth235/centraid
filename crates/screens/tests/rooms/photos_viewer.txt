@@ -16,7 +16,7 @@ room pushed_page key="photos/photo/01900000-0000-7000-8000-000000003010"
   ready
     photo_grid all
       viewer index=1 count=2
-        media image #viewer/media thumb="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" caption="Golden Gate Fog"
+        media image #viewer/media thumb="01900000-0000-7000-8000-000000003010" caption="Golden Gate Fog"
         facts
           fact "Taken" "2026-11-26" kind=date
           fact "Type" "image/jpeg" kind=text

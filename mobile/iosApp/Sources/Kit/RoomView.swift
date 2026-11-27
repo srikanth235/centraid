@@ -93,7 +93,9 @@ struct RoomView: View {
             },
             canvas: { event in
                 store.sendCanvas(instance: shown.instance, event: event)
-            }
+            },
+            photoPaths: { refs in await store.photoContentPaths(refs, instance: shown.instance) },
+            photoScope: "\(store.photoContentScope.uuidString):\(shown.instance)"
         )
     }
 
@@ -350,6 +352,8 @@ private struct RoomReadyContent: View {
     let readable: Bool
     let callbacks: RoomCallbacks
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var canvasIndex: Int? {
         blocks.firstIndex { block in
             switch block.kind {
@@ -363,17 +367,21 @@ private struct RoomReadyContent: View {
 
     var body: some View {
         if let idx = canvasIndex {
-            VStack(spacing: 0) {
-                ForEach(0..<idx, id: \.self) { i in
-                    RoomBlockView(block: blocks[i], callbacks: callbacks)
-                        .readableColumn(readable)
-                }
-                RoomBlockView(block: blocks[idx], callbacks: callbacks)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if idx + 1 < blocks.count {
-                    ForEach((idx + 1)..<blocks.count, id: \.self) { i in
+            if dynamicTypeSize >= Theme.reflowSize, case .calendarGrid? = blocks[idx].kind {
+                calendarCanvasScrollLayout(index: idx)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(0..<idx, id: \.self) { i in
                         RoomBlockView(block: blocks[i], callbacks: callbacks)
                             .readableColumn(readable)
+                    }
+                    RoomBlockView(block: blocks[idx], callbacks: callbacks)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if idx + 1 < blocks.count {
+                        ForEach((idx + 1)..<blocks.count, id: \.self) { i in
+                            RoomBlockView(block: blocks[i], callbacks: callbacks)
+                                .readableColumn(readable)
+                        }
                     }
                 }
             }
@@ -397,6 +405,31 @@ private struct RoomReadyContent: View {
                     applyRestore(using: proxy)
                 }
             }
+        }
+    }
+
+    private func calendarCanvasScrollLayout(index: Int) -> some View {
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(0..<index, id: \.self) { i in
+                        RoomBlockView(block: blocks[i], callbacks: callbacks)
+                            .readableColumn(readable)
+                    }
+                    RoomBlockView(block: blocks[index], callbacks: callbacks)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: geometry.size.height)
+                    if index + 1 < blocks.count {
+                        ForEach((index + 1)..<blocks.count, id: \.self) { i in
+                            RoomBlockView(block: blocks[i], callbacks: callbacks)
+                                .readableColumn(readable)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: geometry.size.height, alignment: .top)
+            }
+            .softBottomScrollEdge()
         }
     }
 

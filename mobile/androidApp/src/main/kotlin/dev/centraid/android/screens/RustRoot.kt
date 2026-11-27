@@ -12,6 +12,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +42,8 @@ import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.TransferScreen
 import dev.centraid.design.KitWords
 import dev.centraid.android.room.RoomClient
+import dev.centraid.android.room.LocalRoomPhotoContentResolver
+import dev.centraid.android.room.RoomPhotoContentResolver
 import dev.centraid.android.room.RoomView
 import dev.centraid.android.screens.backup.BackupHomeScreen
 import dev.centraid.android.screens.pairing.PairLaptopPage
@@ -225,13 +228,23 @@ internal class RustRoot {
             Box(Modifier.fillMaxSize().background(Surface.page))
             return
         }
-        RoomView(
-            room = room,
-            onTap = { selectorId -> scope?.launch { roomClient.tap(shown.instance, selectorId) } },
-            onChange = { change -> scope?.launch { roomClient.change(shown.instance, change) } },
-            onScrolled = { anchor, fraction -> scope?.launch { roomClient.scrolled(shown.instance, anchor, fraction) } },
-            onCanvas = { event -> scope?.launch { roomClient.canvas(shown.instance, event) } },
-        )
+        val photoScopeKey = "${System.identityHashCode(roomClient)}:${shown.instance}:${room.key}"
+        val photoResolver = remember(roomClient, photoScopeKey) {
+            RoomPhotoContentResolver(photoScopeKey) { refs -> roomClient.resolvePhotoPaths(photoScopeKey, refs) }
+        }
+        DisposableEffect(roomClient, photoScopeKey) {
+            roomClient.activatePhotoResolutionScope(photoScopeKey)
+            onDispose { roomClient.clearPhotoResolutionScope(photoScopeKey) }
+        }
+        CompositionLocalProvider(LocalRoomPhotoContentResolver provides photoResolver) {
+            RoomView(
+                room = room,
+                onTap = { selectorId -> scope?.launch { roomClient.tap(shown.instance, selectorId) } },
+                onChange = { change -> scope?.launch { roomClient.change(shown.instance, change) } },
+                onScrolled = { anchor, fraction -> scope?.launch { roomClient.scrolled(shown.instance, anchor, fraction) } },
+                onCanvas = { event -> scope?.launch { roomClient.canvas(shown.instance, event) } },
+            )
+        }
     }
 
     @Composable

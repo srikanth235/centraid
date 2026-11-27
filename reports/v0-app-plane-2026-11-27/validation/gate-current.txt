@@ -1,0 +1,17 @@
+Full PR gate at source 096e04cb2354aef9b4ab42002e240bb1e02306ec
+
+Run: https://github.com/srikanth235/centraid/actions/runs/46071464163
+Gate job:140749131952; evidence artifact:15234387745.
+Result: failed; no full-gate success is claimed.
+
+Nextest failures:
+- centraid-assist::model_record::a_drifted_adapter_is_refused
+- centraid-assist::model_record::every_pinned_model_matches_the_runtime_it_runs_on
+- centraid-nativetools::export_fixture::the_committed_export_is_what_the_binary_writes
+These relate to the model/data/export work excluded by the owner. The failure list contains no Core or Screens regression cases.
+
+Other failed checks:
+- rules: DATA-PIN stale-at mismatch; excluded assistant data maintenance remains untouched. Native-shell-parity passed.
+- buf: crates/api-proto/proto/centraid/core/v1/room.proto:934:5, FOREGROUND enum value must have PHASE_ prefix. Broader CI/protocol cleanup remains outside this task.
+- model-record: the same two model-record test failures above.
+- ci-policy: ShellCheck SC2155 at gate.yml:63, the added unsigned-device step declared and assigned a variable in one export. The local fix separates assignment from export; it is held for the next evidence push to avoid cancelling the active iOS run. Local actionlint is available, but ShellCheck is not installed locally.

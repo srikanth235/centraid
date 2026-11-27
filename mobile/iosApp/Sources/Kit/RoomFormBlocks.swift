@@ -179,6 +179,7 @@ private struct RoomMomentField: View {
     let moment: Centraid_Core_V1_RoomMoment
     let onChange: (UInt64, String) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var date = Date()
     @State private var sync = RoomTextSync()
 
@@ -190,37 +191,64 @@ private struct RoomMomentField: View {
         }
     }
 
+    private var selection: Binding<Date> {
+        Binding(
+            get: { date },
+            set: { next in
+                date = next
+                let encoded = RoomMomentCodec.encode(next, kind: moment.kind, zone: moment.zone)
+                let seq = sync.nextSeq()
+                onChange(seq, encoded)
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var clearButton: some View {
+        if moment.clearable, !moment.value.isEmpty {
+            KitIconKey(
+                iconKey: "X",
+                label: KitWords.DISMISS,
+                identifier: "\(selectorID)-clear",
+                action: {
+                    let seq = sync.nextSeq()
+                    onChange(seq, "")
+                }
+            )
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                DatePicker(
-                    label,
-                    selection: Binding(
-                        get: { date },
-                        set: { next in
-                            date = next
-                            let encoded = RoomMomentCodec.encode(next, kind: moment.kind, zone: moment.zone)
-                            let seq = sync.nextSeq()
-                            onChange(seq, encoded)
-                        }
-                    ),
-                    displayedComponents: components
-                )
-                .kitType(.row)
-                .foregroundStyle(Surface.ink)
-                .accessibilityLabel(label)
-                .accessibilityIdentifier(selectorID)
-
-                if moment.clearable, !moment.value.isEmpty {
-                    KitIconKey(
-                        iconKey: "X",
-                        label: KitWords.DISMISS,
-                        identifier: "\(selectorID)-clear",
-                        action: {
-                            let seq = sync.nextSeq()
-                            onChange(seq, "")
-                        }
+            if dynamicTypeSize >= Theme.reflowSize {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(label)
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
+                        .accessibilityHidden(true)
+                    HStack {
+                        DatePicker("", selection: selection, displayedComponents: components)
+                            .labelsHidden()
+                            .kitType(.row)
+                            .foregroundStyle(Surface.ink)
+                            .accessibilityLabel(label)
+                            .accessibilityIdentifier(selectorID)
+                        Spacer(minLength: 0)
+                        clearButton
+                    }
+                }
+            } else {
+                HStack {
+                    DatePicker(
+                        label,
+                        selection: selection,
+                        displayedComponents: components
                     )
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
+                    .accessibilityLabel(label)
+                    .accessibilityIdentifier(selectorID)
+                    clearButton
                 }
             }
             if !error.isEmpty {

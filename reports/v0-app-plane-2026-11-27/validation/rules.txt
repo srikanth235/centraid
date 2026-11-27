@@ -4,10 +4,10 @@
   ok      commonmain-no-platform-import — 6 file(s) scanned, clean
   ok      gateway-harness-out-of-release — 24 file(s) scanned, clean
   ok      vault-connections-do-not-checkpoint — 4 file(s) scanned, clean
-  ok      no-kmp-shared — 350 file(s) scanned, clean
+  ok      no-kmp-shared — 351 file(s) scanned, clean
   ok      sqlite-page-flag — 175 file(s) scanned, clean
   ok      no-command-request — 31 file(s) scanned, clean
-  ok      native-accessibility — 283 file(s) scanned, clean
+  ok      native-accessibility — 284 file(s) scanned, clean
   ok      no-tasks-namespace — 195 file(s) scanned, clean
   ok      native-spells-no-screen-id — 192 file(s) scanned, clean (9 registered screen id(s))
   ok      native-names-no-command — 203 file(s) scanned, clean (147 registered command(s))

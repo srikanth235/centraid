@@ -265,7 +265,7 @@ public fun StatusChipView(chip: RoomChip, modifier: Modifier = Modifier) {
     val tagged = modifier.testTag("kit-chip")
     when (chip.tone) {
         RoomTone.ROOM_TONE_SEAM, RoomTone.ROOM_TONE_WARNING -> KitBadge(chip.label, StateColor.Amber, tagged)
-        RoomTone.ROOM_TONE_NET -> KitBadge(chip.label, StateColor.Red, tagged)
+        RoomTone.ROOM_TONE_NET -> KitBadge(chip.label, StateColor.Green, tagged)
         RoomTone.ROOM_TONE_ACCENT -> {
             val accent = appAccent()
             KitText(
@@ -295,7 +295,7 @@ public fun StatusChipView(chip: RoomChip, modifier: Modifier = Modifier) {
 @Composable
 public fun toneInk(tone: RoomTone, neutral: String): Color = when (tone) {
     RoomTone.ROOM_TONE_SEAM, RoomTone.ROOM_TONE_WARNING -> StateColor.Amber.text
-    RoomTone.ROOM_TONE_NET -> StateColor.Red.text
+    RoomTone.ROOM_TONE_NET -> StateColor.Green.text
     else -> if (neutral == "text") Surface.ink else Surface.meta
 }
 

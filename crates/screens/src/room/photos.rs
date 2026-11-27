@@ -280,7 +280,7 @@ fn build_photo_sections(
                 selector_id: sel.on(format!("tile/{id}"), handler),
                 kind: tile_kind(&tile.form) as i32,
                 thumb: Some(wire::RoomThumb {
-                    r#ref: tile.blob.clone(),
+                    r#ref: tile.id.clone(),
                     alt: label.clone(),
                     hue_key: "photos".to_owned(),
                 }),
@@ -990,7 +990,7 @@ impl RoomScreen for PhotoViewer {
             "viewer/media",
             media_kind(&photo.form),
             wire::RoomThumb {
-                r#ref: photo.blob.clone(),
+                r#ref: photo.id.clone(),
                 alt: photo.title.clone(),
                 hue_key: "photos".to_owned(),
             },
@@ -1178,7 +1178,7 @@ impl RoomScreen for SlideshowStage {
             "stage/media",
             media_kind(&photo.form),
             wire::RoomThumb {
-                r#ref: photo.blob,
+                r#ref: photo.id.clone(),
                 alt: photo.title.clone(),
                 hue_key: "photos".to_owned(),
             },
