@@ -375,7 +375,7 @@ private struct PhotoTileView: View {
     }
 
     private var spokenLabel: String {
-        if !tile.a11yLabel.isEmpty { return tile.a11yLabel }
+        if !tile.a11YLabel.isEmpty { return tile.a11YLabel }
         if tile.hasThumb, !tile.thumb.alt.isEmpty { return tile.thumb.alt }
         switch tile.kind {
         case .video: return "Video"
