@@ -736,6 +736,26 @@ final class ScreenStore: ObservableObject {
         changed.tables
     }
 
+    static func isHoldingsLoaded(_ holdings: Centraid_Core_V1_Holdings) -> Bool {
+        holdings.loaded
+    }
+
+    static func chatCardEntity(_ card: Centraid_Core_V1_ChatCard) -> String {
+        card.entity
+    }
+
+    static func wordsMadeLine(_ state: Centraid_Core_V1_WordsMakeState) -> String {
+        state.madeLine
+    }
+
+    static func originalsWithheld(_ vault: Centraid_Core_V1_ShellVault) -> UInt32 {
+        vault.originalsWithheld
+    }
+
+    static func searchChromeLabels(_ chrome: Centraid_Core_V1_HomeSearchChrome) -> (scope: String, close: String, loading: Bool) {
+        (chrome.scopeLabel, chrome.closeLabel, chrome.loading)
+    }
+
     #if os(iOS)
     /// THE OS-OWNED UPLOADS (iOS's background URLSession): how many tasks it holds, the whole
     /// requests Rust handed off, and letting go of all of them.
