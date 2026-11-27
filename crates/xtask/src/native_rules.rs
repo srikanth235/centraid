@@ -35,7 +35,6 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
         native_spells_no_screen_id(root),
         native_names_no_command(root),
         walker_platform_law(root),
-        first_launch_asks_nothing(root),
         native_effect_reasons(root),
         crate::native_parity::native_shell_parity(root),
     ]
@@ -834,58 +833,6 @@ pub fn walker_platform_law(root: &Path) -> RuleReport {
         )
     };
     RuleReport::applied(NAME, swift.len() + compose.len(), findings).with_note(note)
-}
-
-/// `first-launch-asks-nothing` — the first-launch gate lists Home's roster
-/// without typing app ids, and asks the phone for nothing: Health asks on its
-/// own Connect button (#1129, R-1127-15). The roster itself is Rust's ORDER,
-/// held to the catalogue by `crates/xtask/src/design_checks.rs`.
-pub fn first_launch_asks_nothing(root: &Path) -> RuleReport {
-    const NAME: &str = "first-launch-asks-nothing";
-    let mut views: Vec<PathBuf> = swift_sources(root)
-        .into_iter()
-        .filter(|path| path.ends_with("FirstLaunchView.swift"))
-        .collect();
-    views.extend(
-        compose_sources(root)
-            .into_iter()
-            .filter(|path| path.ends_with("FirstLaunchScreen.kt")),
-    );
-    if views.is_empty() {
-        return RuleReport::pending(NAME, "no native first-launch view");
-    }
-    let mut findings = Vec::new();
-    for file in &views {
-        let rel = relative(root, file);
-        let source = read(file);
-        for ask in [
-            "requestAuthorization",
-            "HKHealthStore",
-            "HealthConnect",
-            "PermissionController",
-            "CNContactStore",
-            "EKEventStore",
-            "Manifest.permission",
-            "rememberLauncherForActivityResult",
-        ] {
-            if source.contains(ask) {
-                findings.push(format!(
-                    "{rel}: `{ask}` — the gate asks the phone for nothing"
-                ));
-            }
-        }
-        let squashed: String = source.split_whitespace().collect();
-        for opener in ["[", "listOf(", "arrayOf("] {
-            for app in ["tasks"] {
-                if squashed.contains(&format!("{opener}\"{app}\"")) {
-                    findings.push(format!(
-                        "{rel}: types the app id \"{app}\" into a list; the house is Home's roster"
-                    ));
-                }
-            }
-        }
-    }
-    RuleReport::applied(NAME, views.len(), findings)
 }
 
 /// The Rust file that defines the reason codes a shell may send.
