@@ -146,7 +146,7 @@ fn restore_offer(newest_ms: i64, offered_ms: i64) -> wire::OffThreadDone {
                 vault_id: "ab".repeat(32),
                 newest_taken_at_ms: newest_ms,
                 offered_taken_at_ms: offered_ms,
-                device: "Office NAS".to_owned(),
+                device: "Office Mac".to_owned(),
             }],
             tokens: Vec::new(),
             unproven_newest: Vec::new(),
@@ -170,7 +170,7 @@ fn restore_unproven(taken_ms: i64) -> wire::OffThreadDone {
                 index: 0,
                 vault_id: "ab".repeat(32),
                 taken_at_ms: taken_ms,
-                label: "Office NAS".to_owned(),
+                label: "Office Mac".to_owned(),
             }],
             ..wire::RestoreResponse::default()
         })),
@@ -534,7 +534,7 @@ fn an_older_backup_is_offered_and_taken_only_on_a_yes() {
     assert_eq!(state.another_label, "Scan another QR code");
     assert_eq!(state.offer_rows.len(), 2);
     assert!(!state.offer_rows[0].opens && state.offer_rows[1].opens);
-    assert_eq!(state.offer_rows[0].title, "Office NAS");
+    assert_eq!(state.offer_rows[0].title, "Office Mac");
     assert!(state.cells.is_empty() && !state.secure, "no word is drawn");
     // NOTHING WAS STORED OR CLAIMED.
     assert!(!phone.shell.device.contains_key(secrets::LOCAL_SEED));
@@ -568,7 +568,7 @@ fn a_restore_that_cannot_prove_the_newest_asks_before_it_claims() {
     let state = phone.enter();
     assert_eq!(state.phase, Phase::Offer as i32);
     assert_eq!(state.title, "Restore this backup?");
-    assert!(state.body.contains("on Office NAS"), "{}", state.body);
+    assert!(state.body.contains("on Office Mac"), "{}", state.body);
     assert!(
         state
             .body

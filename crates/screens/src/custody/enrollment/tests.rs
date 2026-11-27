@@ -720,7 +720,7 @@ fn an_older_backup_is_an_offer_and_the_yes_asks_for_it() {
             index: 0,
             newest_taken_at_ms: 2_000,
             offered_taken_at_ms: 1_000,
-            device: "Office NAS".to_owned(),
+            device: "Office Mac".to_owned(),
         }],
         ..RestoreAnswer::default()
     });
@@ -747,7 +747,7 @@ fn an_unproven_newest_is_an_ask_and_the_yes_goes_ahead() {
         unproven: vec![door::UnprovenAt {
             index: 0,
             taken_at_ms: 1_000,
-            label: "Office NAS".to_owned(),
+            label: "Office Mac".to_owned(),
         }],
         ..RestoreAnswer::default()
     });
