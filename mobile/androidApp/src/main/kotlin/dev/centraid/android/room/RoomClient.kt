@@ -17,6 +17,7 @@ import centraid.core.v1.RoomTransition
 import centraid.core.v1.ShellEffect
 import centraid.core.v1.ShareInRequest
 import centraid.core.v1.ShareInResponse
+import dev.centraid.android.kit.EffectReason
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import dev.centraid.core.ShellEffectAnswers
@@ -155,7 +156,7 @@ internal class RoomClient(
     private fun declineRoomEffects(instance: Long, effects: List<ShellEffect>) {
         scope.launch {
             effects.forEach { effect ->
-                send(instance, ShellEffectAnswers.roomResult(effect))
+                send(instance, ShellEffectAnswers.roomResult(effect, EffectReason.UNAVAILABLE))
             }
         }
     }
