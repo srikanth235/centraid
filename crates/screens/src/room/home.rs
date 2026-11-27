@@ -309,14 +309,20 @@ impl Home {
             h_photo,
         ));
 
-        let people_line = self.empty_line(
-            b,
-            "people",
-            has_people,
-            &home_words::app_people(EN),
-            &home_words::tile_empty_people(EN),
-            &home_words::tile_contacts_refused(EN),
-        );
+        let counted = |n: usize, one: String, many: String| {
+            format!("{n} {}", if n == 1 { one } else { many })
+        };
+        let people_line = if has_people {
+            counted(
+                first::count(b, "person"),
+                home_words::tile_people_count_one(EN),
+                home_words::tile_people_count_many(EN),
+            )
+        } else if b.door.permission_refused("people") {
+            home_words::tile_contacts_refused(EN)
+        } else {
+            home_words::tile_empty_people(EN)
+        };
         let money_line = if has_money {
             home_words::tile_quiet_money(EN)
         } else {
@@ -335,12 +341,20 @@ impl Home {
             home_words::tile_empty_locker(EN)
         };
         let notes_line = if has_notes {
-            home_words::app_notes(EN)
+            counted(
+                first::count(b, "note"),
+                home_words::tile_notes_count_one(EN),
+                home_words::tile_notes_count_many(EN),
+            )
         } else {
             home_words::tile_empty_notes(EN)
         };
         let docs_line = if has_docs {
-            home_words::app_docs(EN)
+            counted(
+                first::count(b, "document"),
+                home_words::tile_docs_count_one(EN),
+                home_words::tile_docs_count_many(EN),
+            )
         } else {
             home_words::tile_empty_docs(EN)
         };

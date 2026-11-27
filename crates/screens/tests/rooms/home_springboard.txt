@@ -15,7 +15,7 @@ room home key="home"
     tiles
       tile "Money" subtitle="Import a statement" glyph="Coin" #tile/money
       tile "Health" subtitle="Connect Apple Health" glyph="Heart" #tile/health
-      tile "People" subtitle="People" glyph="Users" #tile/people
+      tile "People" subtitle="1 person" glyph="Users" #tile/people
       tile "Locker" subtitle="Set up Locker" glyph="Lock" #tile/locker
       tile "Notes" subtitle="Write your first note" glyph="Journal" #tile/notes
       tile "Docs" subtitle="Add a document" glyph="FileText" #tile/docs

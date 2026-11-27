@@ -68,14 +68,10 @@ fn vault(dir: &std::path::Path) -> (Handle, PathBuf) {
         .expect("the vector parses")
         .seed();
     let path = dir.join("vault.db");
-    let handle = Core::open(
-        CoreConfig::new(path.clone())
-            .with_seed(seed, 0)
-            .with_clock(
-                Arc::new(FixedClock::at(NOW)),
-                Arc::new(SeededIds::new("day-one")),
-            ),
-    )
+    let handle = Core::open(CoreConfig::new(path.clone()).with_seed(seed, 0).with_clock(
+        Arc::new(FixedClock::at(NOW)),
+        Arc::new(SeededIds::new("day-one")),
+    ))
     .expect("the core opens");
     handle
         .with_vault(|vault| Ok(vault.found("My vault", "Ada")?))
@@ -83,9 +79,9 @@ fn vault(dir: &std::path::Path) -> (Handle, PathBuf) {
     (handle, path)
 }
 
-fn phone(path: &PathBuf, reminders: bool, refused: Vec<&'static str>) -> Phone {
+fn phone(path: &std::path::Path, reminders: bool, refused: Vec<&'static str>) -> Phone {
     Phone {
-        path: path.clone(),
+        path: path.to_path_buf(),
         device: Mutex::default(),
         reminders,
         refused,
@@ -144,9 +140,15 @@ fn a_refused_permission_changes_only_its_widget() {
     door.device_put("welcome.seen", "1").unwrap();
     let (_rooms, first, _) = home(&door);
     let text = snapshot::render(&first);
-    assert!(text.contains("Photo access is off · Open Settings"), "{text}");
+    assert!(
+        text.contains("Photo access is off · Open Settings"),
+        "{text}"
+    );
     assert!(text.contains("Import your calendar"), "{text}");
-    assert!(first.status_line.is_none(), "a refusal is never the status line");
+    assert!(
+        first.status_line.is_none(),
+        "a refusal is never the status line"
+    );
     snapshot::assert_room("day_one_home_photos_refused", &first);
 }
 
@@ -170,4 +172,65 @@ fn the_first_thing_added_ends_day_one() {
         door.device_get("welcome.seen").is_none(),
         "a vault with something in it skips Welcome without recording it"
     );
+}
+
+fn open_app(door: &Phone, key: &str) -> wire::Room {
+    let mut rooms = Rooms::new(shell::registry());
+    rooms.open(door, key, "home", true).expect("opens").room
+}
+
+#[test]
+fn every_apps_first_open_is_one_sentence_its_import_and_the_plus() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_handle, path) = vault(dir.path());
+    let door = phone(&path, true, vec![]);
+    for (key, snap) in [
+        ("people", "first_open_people"),
+        ("calendar", "first_open_calendar"),
+        ("reminders", "first_open_reminders"),
+        ("photos", "first_open_photos"),
+        ("notes", "first_open_notes"),
+        ("docs", "first_open_docs"),
+        ("money", "first_open_money"),
+        ("health", "first_open_health"),
+        ("locker", "first_open_locker_check"),
+    ] {
+        snapshot::assert_room(snap, &open_app(&door, key));
+    }
+}
+
+#[test]
+fn android_reminders_first_open_has_no_import_and_no_or() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_handle, path) = vault(dir.path());
+    let door = phone(&path, false, vec![]);
+    let room = open_app(&door, "reminders");
+    let text = snapshot::render(&room);
+    assert!(
+        text.contains("Add the first thing you must not forget. Tap + to write one."),
+        "{text}"
+    );
+    assert!(!text.contains("Import"), "{text}");
+    snapshot::assert_room("first_open_reminders_android", &room);
+}
+
+#[test]
+fn a_refused_permission_is_open_settings_alone_on_the_app_and_never_the_status_line() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_handle, path) = vault(dir.path());
+    let door = phone(
+        &path,
+        true,
+        vec!["photos", "calendar", "reminders", "people"],
+    );
+    for (key, snap) in [
+        ("photos", "photos_refused"),
+        ("calendar", "calendar_refused"),
+        ("reminders", "reminders_refused"),
+        ("people", "people_refused"),
+    ] {
+        let room = open_app(&door, key);
+        assert!(room.status_line.is_none());
+        snapshot::assert_room(snap, &room);
+    }
 }

@@ -1,0 +1,23 @@
+room app_place key="docs"
+  header title="Docs" subtitle="0 documents"
+    key add sym="Plus" "Add" #header/add
+    filter clear=#filter/clear
+      menu #docs-filter-menu
+        section "Show"
+          item "Starred" #filter/starred
+        section "Sort"
+          item "Recently updated" checked #sort/updated
+          item "Name" #sort/title
+  band home=#band/home search=#band/search more=#band/more
+    tab "Docs" sym="FileText" selected #tab/docs
+    tab "Folders" sym="Folder" #tab/folders
+    menu #band/more/menu
+      section
+        item "Followed folders" #more/followed
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    empty glyph="FileText" body="Documents you own, kept in your vault."
+      action "Add" #first/docs/action
+  search placeholder="Search docs" #search
+  selection

@@ -1,0 +1,54 @@
+room app_place key="money"
+  header title="Money"
+    key add sym="Plus" "Add transaction" #key/add
+    filter clear=#filter/clear
+      menu #money/filter
+        section "Show"
+          item "Uncategorized" #filter/uncategorized
+          item "Pending" #filter/pending
+        section "Account"
+          item "All accounts" checked #filter/account/all
+        section "Category"
+          item "All categories" checked #filter/category/all
+          item "Clothes and household" #filter/category/category:shopping.general
+          item "Dining out" #filter/category/category:food.dining
+          item "Entertainment and travel" #filter/category/category:fun.entertainment
+          item "Fees and taxes" #filter/category/category:fees
+          item "Food" #filter/category/category:food
+          item "Fuel" #filter/category/category:transport.fuel
+          item "Fun and travel" #filter/category/category:fun
+          item "Groceries" #filter/category/category:food.groceries
+          item "Health" #filter/category/category:health
+          item "Health care" #filter/category/category:health.care
+          item "Home and repairs" #filter/category/category:housing.home
+          item "Housing" #filter/category/category:housing
+          item "Income" #filter/category/category:income
+          item "Other income" #filter/category/category:income.other
+          item "Pay" #filter/category/category:income.pay
+          item "Phone and internet" #filter/category/category:utilities.phone
+          item "Power, gas and water" #filter/category/category:utilities.bills
+          item "Rent or mortgage" #filter/category/category:housing.rent
+          item "Shopping" #filter/category/category:shopping
+          item "Subscriptions" #filter/category/category:fun.subscriptions
+          item "Transit and rideshare" #filter/category/category:transport.transit
+          item "Transport" #filter/category/category:transport
+          item "Utilities" #filter/category/category:utilities
+  band home=#band/home search=#band/search more=#band/more
+    tab "Activity" sym="Activity" selected #tab/activity
+    tab "Spending" sym="BarChart2" #tab/spending
+    tab "Cash flow" sym="Coin" #tab/cashflow
+    menu #band/more/menu
+      section
+        item "Accounts" #more/accounts
+        item "Budgets" #more/budgets
+        item "Rules" #more/rules
+        item "Categories" #more/categories
+        item "Transfers" #more/transfers
+        item "Match dismissals" #more/dismissals
+        item "Import CSV" #more/import-csv
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    empty glyph="Coin" body="Your statements, sorted and searchable."
+      action "Import statement" #first/money/action
+  search placeholder="Search transactions" #search

@@ -8,11 +8,12 @@ use serde_json::{Value, json};
 
 use super::blocks::{self, Confirm, glyph};
 use super::door::Door;
+use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::{Act, Handler, Sel};
-use crate::strings::{Locale, fill, photos as words, shared};
+use crate::strings::{Locale, fill, home as home_words, photos as words, shared};
 
 pub const PHOTOS: &str = "photos";
 pub const ALBUMS: &str = "photos/albums";
@@ -491,11 +492,27 @@ impl RoomScreen for LibraryPage {
                     "Plus",
                     Handler::Tag("add:photo".to_owned()),
                 );
-                content.push(blocks::empty(
-                    glyph("Image", "photos"),
-                    &words::empty_library_title(EN),
-                    &words::empty_library_body(EN),
-                    Some(add),
+                let _ = add;
+                let refused = b.door.permission_refused("photos").then(|| {
+                    (
+                        home_words::refused_photos_title(EN),
+                        home_words::refused_photos_body(EN),
+                    )
+                });
+                content.push(first::first_open(
+                    b,
+                    first::FirstOpen {
+                        app: "photos",
+                        icon: "Image",
+                        hue: "photos",
+                        sentence: home_words::first_open_photos(EN),
+                        action: Some((
+                            Handler::Tag(format!("{}photos", first::IMPORT_TAG)),
+                            home_words::first_open_import_photos(EN),
+                        )),
+                        tail: first::Tail::OrAdd,
+                        refused,
+                    },
                 ));
             } else {
                 let body = fill(&words::empty_search_body(EN), &[("term", &term)]);

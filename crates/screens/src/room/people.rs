@@ -6,11 +6,36 @@ use serde_json::{Map, Value, json};
 
 use super::blocks::{self, Confirm, glyph};
 use super::door::Door;
+use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::{Act, Handler, Sel};
-use crate::strings::{Locale, fill, people as words, shared};
+use crate::strings::{Locale, fill, home as home_words, people as words, shared};
+
+fn people_first_card(b: &mut Build<'_>) -> wire::RoomBlock {
+    let refused = b.door.permission_refused("people").then(|| {
+        (
+            home_words::refused_contacts_title(EN),
+            home_words::refused_contacts_body(EN),
+        )
+    });
+    first::first_open(
+        b,
+        first::FirstOpen {
+            app: "people",
+            icon: "Users",
+            hue: "",
+            sentence: home_words::first_open_people(EN),
+            action: Some((
+                Handler::Tag(format!("{}people", first::IMPORT_TAG)),
+                home_words::first_open_import_contacts(EN),
+            )),
+            tail: first::Tail::OrAdd,
+            refused,
+        },
+    )
+}
 
 pub const PEOPLE: &str = "people";
 pub const LISTS: &str = "people/lists";
@@ -441,19 +466,7 @@ impl RoomScreen for PeopleList {
                     None,
                 )]
             } else {
-                let add = blocks::action(
-                    &mut b.sel,
-                    "empty/add",
-                    &words::add_person(EN),
-                    "Plus",
-                    Handler::Open(NEW_PERSON.to_owned()),
-                );
-                vec![blocks::empty(
-                    glyph("Users", ""),
-                    &words::empty_title(EN),
-                    &words::empty_body(EN),
-                    Some(add),
-                )]
+                vec![people_first_card(b)]
             }
         } else {
             let selecting = b.ui.selecting();
@@ -501,6 +514,11 @@ impl RoomScreen for PeopleList {
             vec![list_section.into_block()]
         };
 
+        let mut blocks_out = blocks_out;
+        if !visible.is_empty() && term.is_empty() && !first::holds(b, "person") {
+            let card = people_first_card(b);
+            blocks_out.insert(0, card);
+        }
         frame.ready(blocks_out).build()
     }
 
