@@ -8,6 +8,7 @@ use centraid_domain::read::Args;
 
 use super::blocks::{self, glyph};
 use super::calendar;
+use super::first;
 use super::frame::{self, room};
 use super::money;
 use super::people;
@@ -185,6 +186,277 @@ fn kind_label(kind: &str) -> String {
 
 struct Home;
 
+impl Home {
+    fn widgets(&mut self, b: &mut Build<'_>) -> Vec<wire::RoomBlock> {
+        let now = b.door.now_ms();
+        let day = today_iso(now);
+        let low = week_before(now);
+        let from = format!("{day}T00:00:00.000Z");
+        let to = format!("{}T00:00:00.000Z", next_day(now));
+        let floating_from = format!("{day}T00:00");
+        let floating_to = format!("{day}T23:59");
+        let day_one = first::day_one(b);
+        let has_events = first::holds(b, "event");
+        let has_tasks = first::holds(b, "task");
+        let has_photos = first::holds(b, "photo");
+        let has_people = first::holds(b, "person");
+        let has_money = first::holds(b, "txn");
+        let has_health = first::holds(b, "workout");
+        let has_notes = first::holds(b, "note");
+        let has_docs = first::holds(b, "document");
+        let has_locker = first::holds(b, "locker_item");
+
+        let mut events: Vec<String> = Vec::new();
+        if let Ok(short) = b.run(
+            &cal_reads::TODAY_SHORT,
+            &Args::new()
+                .day("day", &day)
+                .text("from", &from)
+                .text("to", &to)
+                .text("floating_from", &floating_from)
+                .text("floating_to", &floating_to)
+                .text("low", &low)
+                .text("high", &to),
+        ) {
+            events.extend(short.rows.into_iter().take(2).map(|ev| ev.title));
+        }
+        let mut tasks: Vec<String> = Vec::new();
+        if let Ok(due) = b.run(
+            &task_reads::TODAY_DUE,
+            &Args::new()
+                .day("day", &day)
+                .text("from", &from)
+                .text("to", &to)
+                .text("floating_from", &floating_from)
+                .text("floating_to", &floating_to)
+                .text("low", &day)
+                .text("high", &to),
+        ) {
+            tasks.extend(due.rows.into_iter().take(2).map(|t| t.title));
+        }
+
+        let mut out = Vec::new();
+        if day_one {
+            out.push(blocks::prose(&home_words::home_welcome(EN)));
+        }
+
+        let calendar_lines = if events.is_empty() {
+            vec![self.empty_line(
+                b,
+                "calendar",
+                has_events,
+                &home_words::tile_quiet_calendar(EN),
+                &home_words::tile_empty_calendar(EN),
+                &home_words::tile_calendar_refused(EN),
+            )]
+        } else {
+            events
+        };
+        let calendar_refs: Vec<&str> = calendar_lines.iter().map(String::as_str).collect();
+        let h_cal = self.widget_handler(b, "calendar", has_events, calendar::CALENDAR);
+        out.push(blocks::glance(
+            &mut b.sel,
+            "tile/calendar",
+            &home_words::app_calendar(EN),
+            &calendar_refs,
+            glyph("Calendar", ""),
+            h_cal,
+        ));
+
+        let reminders_empty = if b.door.reminders_source() {
+            home_words::tile_empty_reminders(EN)
+        } else {
+            home_words::tile_empty_reminders_by_hand(EN)
+        };
+        let reminder_lines = if tasks.is_empty() {
+            vec![self.empty_line(
+                b,
+                "reminders",
+                has_tasks,
+                &words::widget_nothing(EN),
+                &reminders_empty,
+                &home_words::tile_reminders_refused(EN),
+            )]
+        } else {
+            tasks
+        };
+        let reminder_refs: Vec<&str> = reminder_lines.iter().map(String::as_str).collect();
+        let h_rem = self.widget_handler(b, "reminders", has_tasks, reminders::REMINDERS);
+        out.push(blocks::glance(
+            &mut b.sel,
+            "tile/reminders",
+            &home_words::app_reminders(EN),
+            &reminder_refs,
+            glyph("Check", ""),
+            h_rem,
+        ));
+
+        let photos_line = self.empty_line(
+            b,
+            "photos",
+            has_photos,
+            &home_words::app_photos(EN),
+            &home_words::tile_empty_photos(EN),
+            &home_words::tile_photos_refused(EN),
+        );
+        let h_photo = self.widget_handler(b, "photos", has_photos, PHOTOS);
+        out.push(blocks::glance(
+            &mut b.sel,
+            "tile/photos",
+            &home_words::app_photos(EN),
+            &[photos_line.as_str()],
+            glyph("Image", ""),
+            h_photo,
+        ));
+
+        let counted = |n: usize, one: String, many: String| {
+            format!("{n} {}", if n == 1 { one } else { many })
+        };
+        let people_line = if has_people {
+            counted(
+                first::count(b, "person"),
+                home_words::tile_people_count_one(EN),
+                home_words::tile_people_count_many(EN),
+            )
+        } else if b.door.permission_refused("people") {
+            home_words::tile_contacts_refused(EN)
+        } else {
+            home_words::tile_empty_people(EN)
+        };
+        let money_line = if has_money {
+            home_words::tile_quiet_money(EN)
+        } else {
+            home_words::tile_empty_money(EN)
+        };
+        let health_line = if has_health {
+            home_words::app_health(EN)
+        } else if b.door.reminders_source() {
+            home_words::tile_empty_health(EN)
+        } else {
+            home_words::tile_empty_health_connect(EN)
+        };
+        let locker_line = if has_locker {
+            home_words::tile_locker_locked(EN)
+        } else {
+            home_words::tile_empty_locker(EN)
+        };
+        let notes_line = if has_notes {
+            counted(
+                first::count(b, "note"),
+                home_words::tile_notes_count_one(EN),
+                home_words::tile_notes_count_many(EN),
+            )
+        } else {
+            home_words::tile_empty_notes(EN)
+        };
+        let docs_line = if has_docs {
+            counted(
+                first::count(b, "document"),
+                home_words::tile_docs_count_one(EN),
+                home_words::tile_docs_count_many(EN),
+            )
+        } else {
+            home_words::tile_empty_docs(EN)
+        };
+        let people_handler = self.widget_handler(b, "people", has_people, people::PEOPLE);
+        out.push(blocks::tiles(vec![
+            blocks::tile(
+                &mut b.sel,
+                "tile/money",
+                &words::home_money_tile(EN),
+                &money_line,
+                glyph("Coin", ""),
+                Handler::Open(money::MONEY.to_owned()),
+            ),
+            blocks::tile(
+                &mut b.sel,
+                "tile/health",
+                &words::home_health_tile(EN),
+                &health_line,
+                glyph("Heart", ""),
+                Handler::Open(HEALTH.to_owned()),
+            ),
+            blocks::tile(
+                &mut b.sel,
+                "tile/people",
+                &words::home_people_tile(EN),
+                &people_line,
+                glyph("Users", ""),
+                people_handler,
+            ),
+            blocks::tile(
+                &mut b.sel,
+                "tile/locker",
+                &words::home_locker_tile(EN),
+                &locker_line,
+                glyph("Lock", ""),
+                Handler::Open(LOCKER.to_owned()),
+            ),
+            blocks::tile(
+                &mut b.sel,
+                "tile/notes",
+                &words::home_notes_tile(EN),
+                &notes_line,
+                glyph("Journal", ""),
+                Handler::Open(NOTES.to_owned()),
+            ),
+            blocks::tile(
+                &mut b.sel,
+                "tile/docs",
+                &words::home_docs_tile(EN),
+                &docs_line,
+                glyph("FileText", ""),
+                Handler::Open(DOCS.to_owned()),
+            ),
+        ]));
+        out
+    }
+
+    fn empty_line(
+        &self,
+        b: &Build<'_>,
+        store: &str,
+        has: bool,
+        quiet: &str,
+        teach: &str,
+        refused: &str,
+    ) -> String {
+        if !has && b.door.permission_refused(store) {
+            refused.to_owned()
+        } else if has {
+            quiet.to_owned()
+        } else {
+            teach.to_owned()
+        }
+    }
+
+    fn widget_handler(&self, b: &Build<'_>, store: &str, has: bool, app: &str) -> Handler {
+        if !has && b.door.permission_refused(store) {
+            Handler::Tag(format!("open_settings:{store}"))
+        } else {
+            Handler::Open(app.to_owned())
+        }
+    }
+
+    fn backup_status(&self, b: &mut Build<'_>) -> String {
+        let Ok((line, reading, now)) = shell::the_line(b.door) else {
+            return String::new();
+        };
+        if !reading.destinations.is_empty() {
+            return line.status;
+        }
+        if crate::backup::line::pair_owed(&reading, now) {
+            format!(
+                "{} · {}",
+                home_words::home_backup_unpaired_status(EN),
+                home_words::home_backup_unpaired_action(EN)
+            )
+        } else {
+            String::new()
+        }
+    }
+}
+
 impl RoomScreen for Home {
     fn key(&self) -> String {
         HOME.to_owned()
@@ -192,6 +464,10 @@ impl RoomScreen for Home {
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
         b.watch(&BACKUP_TABLES);
+        b.watch(&["entity"]);
+        if !first::welcomed(b.door) && first::day_one(b) {
+            return first::welcome(b);
+        }
         let vault_title = b
             .run(&entity_reads::VAULT_INFO, &Args::new())
             .ok()
@@ -200,7 +476,7 @@ impl RoomScreen for Home {
             .filter(|n| !n.trim().is_empty())
             .unwrap_or_else(|| words::home_title(EN));
 
-        let backup_status = shell::backup_line_status(b.door);
+        let backup_status = self.backup_status(b);
 
         let tabs = vec![
             frame::tab(
@@ -365,134 +641,7 @@ impl RoomScreen for Home {
                 sections
             }
         } else {
-            let now = b.door.now_ms();
-            let day = today_iso(now);
-            let low = week_before(now);
-            let from = format!("{day}T00:00:00.000Z");
-            let to = format!("{}T00:00:00.000Z", next_day(now));
-            let floating_from = format!("{day}T00:00");
-            let floating_to = format!("{day}T23:59");
-            let mut glance_lines: Vec<String> = Vec::new();
-            if let Ok(short) = b.run(
-                &cal_reads::TODAY_SHORT,
-                &Args::new()
-                    .day("day", &day)
-                    .text("from", &from)
-                    .text("to", &to)
-                    .text("floating_from", &floating_from)
-                    .text("floating_to", &floating_to)
-                    .text("low", &low)
-                    .text("high", &to),
-            ) {
-                for ev in short.rows.into_iter().take(2) {
-                    glance_lines.push(ev.title);
-                }
-            }
-            if let Ok(due) = b.run(
-                &task_reads::TODAY_DUE,
-                &Args::new()
-                    .day("day", &day)
-                    .text("from", &from)
-                    .text("to", &to)
-                    .text("floating_from", &floating_from)
-                    .text("floating_to", &floating_to)
-                    .text("low", &day)
-                    .text("high", &to),
-            ) {
-                for t in due.rows.into_iter().take(2) {
-                    if glance_lines.len() < 3 {
-                        glance_lines.push(t.title);
-                    }
-                }
-            }
-            if glance_lines.is_empty() {
-                glance_lines.push(words::widget_nothing(EN));
-            }
-            let line_refs: Vec<&str> = glance_lines.iter().map(String::as_str).collect();
-            let glance = blocks::glance(
-                &mut b.sel,
-                "glance/today",
-                &words::widget_today(EN),
-                &line_refs,
-                glyph("Calendar", ""),
-                Handler::Open(calendar::CALENDAR.to_owned()),
-            );
-
-            let tiles = blocks::tiles(vec![
-                blocks::tile(
-                    &mut b.sel,
-                    "tile/people",
-                    &words::home_people_tile(EN),
-                    "",
-                    glyph("Users", ""),
-                    Handler::Open(people::PEOPLE.to_owned()),
-                ),
-                blocks::tile(
-                    &mut b.sel,
-                    "tile/money",
-                    &words::home_money_tile(EN),
-                    "",
-                    glyph("Coin", ""),
-                    Handler::Open(money::MONEY.to_owned()),
-                ),
-                blocks::tile(
-                    &mut b.sel,
-                    "tile/calendar",
-                    &words::home_calendar_tile(EN),
-                    "",
-                    glyph("Calendar", ""),
-                    Handler::Open(calendar::CALENDAR.to_owned()),
-                ),
-                blocks::tile(
-                    &mut b.sel,
-                    "tile/reminders",
-                    &words::home_reminders_tile(EN),
-                    "",
-                    glyph("Check", ""),
-                    Handler::Open(reminders::REMINDERS.to_owned()),
-                ),
-                blocks::tile(
-                    &mut b.sel,
-                    "tile/notes",
-                    &words::home_notes_tile(EN),
-                    "",
-                    glyph("Journal", ""),
-                    Handler::Open(NOTES.to_owned()),
-                ),
-                blocks::tile(
-                    &mut b.sel,
-                    "tile/docs",
-                    &words::home_docs_tile(EN),
-                    "",
-                    glyph("FileText", ""),
-                    Handler::Open(DOCS.to_owned()),
-                ),
-                blocks::tile(
-                    &mut b.sel,
-                    "tile/photos",
-                    &words::home_photos_tile(EN),
-                    "",
-                    glyph("Image", ""),
-                    Handler::Open(PHOTOS.to_owned()),
-                ),
-                blocks::tile(
-                    &mut b.sel,
-                    "tile/health",
-                    &words::home_health_tile(EN),
-                    "",
-                    glyph("Heart", ""),
-                    Handler::Open(HEALTH.to_owned()),
-                ),
-                blocks::tile(
-                    &mut b.sel,
-                    "tile/locker",
-                    &words::home_locker_tile(EN),
-                    "",
-                    glyph("Lock", ""),
-                    Handler::Open(LOCKER.to_owned()),
-                ),
-            ]);
-            vec![glance, tiles]
+            self.widgets(b)
         };
 
         let mut built = room(wire::RoomKind::Home, HOME)
@@ -513,10 +662,15 @@ impl RoomScreen for Home {
         built
     }
 
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
         match tag {
             "tab:tab/backup" | "tab/backup" => Outcome::push(BACKUP),
             "tab:tab/chat" | "tab/chat" => Outcome::push(CHAT),
+            first::START => {
+                first::mark_welcomed(e.door);
+                Outcome::replace(HOME)
+            }
+            tag if tag.starts_with("go:") => Outcome::push(&tag["go:".len()..]),
             _ => Outcome::default(),
         }
     }

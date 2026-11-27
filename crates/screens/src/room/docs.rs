@@ -6,11 +6,12 @@ use serde_json::json;
 
 use super::blocks::{self, Confirm, glyph};
 use super::door::Door;
+use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::{Act, Handler, Sel};
-use crate::strings::{Locale, docs as words, fill, shared};
+use crate::strings::{Locale, docs as words, fill, home as home_words, shared};
 
 pub const DOCS: &str = "docs";
 pub const FOLDERS: &str = "docs/folders";
@@ -411,11 +412,20 @@ impl RoomScreen for DocsList {
                     "Plus",
                     Handler::Open(ADD_SHEET.to_owned()),
                 );
-                content.push(blocks::empty(
-                    glyph("FileText", "docs"),
-                    &words::empty_docs_title(EN),
-                    &words::empty_docs_body(EN),
-                    Some(add),
+                let add_label = add.label.clone();
+                let add_handler = Handler::Open(ADD_SHEET.to_owned());
+                drop(add);
+                content.push(first::first_open(
+                    b,
+                    first::FirstOpen {
+                        app: "docs",
+                        icon: "FileText",
+                        hue: "docs",
+                        sentence: home_words::first_open_docs(EN),
+                        action: Some((add_handler, add_label)),
+                        tail: first::Tail::None,
+                        refused: None,
+                    },
                 ));
             } else {
                 let body = fill(&words::empty_search_body(EN), &[("term", &term)]);

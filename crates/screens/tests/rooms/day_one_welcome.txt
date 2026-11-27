@@ -1,0 +1,11 @@
+room stage key="welcome"
+  header title="Welcome to Centraid"
+  ready
+    prose "Apps and an assistant on this phone, backed up to your own devices."
+    row #welcome/point/0 "Apps on this phone" meta="Photos, notes, documents, money and more, with no account to make." mark=glyph:Home
+    row #welcome/point/1 "An assistant on this phone" meta="Ask about your own things. It runs on this phone." mark=glyph:NewChat
+    row #welcome/point/2 "Encrypted backups" meta="Pair a backup device. It keeps a copy it can't open." mark=glyph:Backup
+    empty glyph="Home"
+      action "Get started" #welcome/start
+    empty glyph="Backup"
+      action "Restore backup" #welcome/restore

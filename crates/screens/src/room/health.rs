@@ -7,12 +7,13 @@ use serde_json::{Map, Value, json};
 
 use super::blocks::{self, Confirm, glyph};
 use super::door::Door;
+use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::{Act, Handler, Sel};
 use super::shell::UNITS_KEY;
-use crate::strings::{Locale, fill, health as words, shared};
+use crate::strings::{Locale, fill, health as words, home as home_words, shared};
 
 pub const HEALTH: &str = "health";
 pub const WORKOUTS: &str = "health/workouts";
@@ -458,18 +459,30 @@ impl RoomScreen for SummaryRoom {
         }));
 
         if totals.is_empty() {
-            blocks_out.push(blocks::empty(
-                glyph("Heart", "app.health"),
-                &words::summary_empty_title(EN),
-                &words::summary_empty_body(EN),
-                Some(blocks::action(
-                    &mut b.sel,
-                    "empty/edit",
-                    &words::summary_edit_action(EN),
-                    "Edit",
-                    Handler::Open(format!("health/day/{day}/edit")),
-                )),
-            ));
+            let (sentence, label) = if b.door.reminders_source() {
+                (
+                    home_words::first_open_health(EN),
+                    home_words::tile_empty_health(EN),
+                )
+            } else {
+                (
+                    home_words::first_open_health_connect(EN),
+                    home_words::tile_empty_health_connect(EN),
+                )
+            };
+            let card = first::first_open(
+                b,
+                first::FirstOpen {
+                    app: "health",
+                    icon: "Heart",
+                    hue: "app.health",
+                    sentence,
+                    action: Some((Handler::Tag(format!("{}health", first::IMPORT_TAG)), label)),
+                    tail: first::Tail::None,
+                    refused: None,
+                },
+            );
+            blocks_out.push(card);
         } else {
             let mut rows = Vec::new();
             let mut says_fields = Vec::new();

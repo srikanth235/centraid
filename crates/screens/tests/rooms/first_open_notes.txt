@@ -1,0 +1,25 @@
+room app_place key="notes"
+  header title="Notes" subtitle="0 notes"
+    key add sym="Plus" "New note" #header/add
+    filter clear=#filter/clear
+      menu #notes-filter-menu
+        section "Show"
+          item "Pinned" #filter/pinned
+          item "Journal" #filter/journal
+        section "Sort"
+          item "Recently updated" checked #sort/updated
+          item "Title" #sort/title
+  band home=#band/home search=#band/search more=#band/more
+    tab "Notes" sym="Journal" selected #tab/notes
+    tab "Notebooks" sym="Book" #tab/notebooks
+    tab "Journal" sym="Calendar" #tab/journal
+    menu #band/more/menu
+      section
+        item "Tags" #more/tags
+        item "Import Markdown" #more/import
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    empty glyph="Journal" body="Write down what you want to keep. Tap + to write one."
+  search placeholder="Search notes" #search
+  selection

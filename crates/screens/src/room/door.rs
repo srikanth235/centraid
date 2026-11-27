@@ -75,6 +75,37 @@ pub trait Door {
         Err(Refused("this door carries no reader".to_owned()))
     }
 
+    /// Whether the member refused the OS permission a store's import needs (`photos`, `calendar`,
+    /// `reminders`, `people`). A door that follows no store says no.
+    fn permission_refused(&self, store: &str) -> bool {
+        let _ = store;
+        false
+    }
+
+    /// Follow or import a phone store (`photos`, `calendar`, `reminders`, `people`, `health`):
+    /// the one enrolment the Home widgets and every first-open card send.
+    ///
+    /// # Errors
+    /// The core's sentence, or that this door follows no store.
+    fn enrol_store(&self, store: &str) -> Result<Done, Refused> {
+        let _ = store;
+        Err(Refused("this door follows no phone store".to_owned()))
+    }
+
+    /// Open the OS settings page for a store whose permission was refused.
+    ///
+    /// # Errors
+    /// That this door has no settings page to open.
+    fn open_settings(&self, store: &str) -> Result<Done, Refused> {
+        let _ = store;
+        Err(Refused("this door opens no settings page".to_owned()))
+    }
+
+    /// Whether this phone has a Reminders store to import from (iOS does, Android has none).
+    fn reminders_source(&self) -> bool {
+        true
+    }
+
     /// What a draft is kept under for the vault in front.
     fn vault_id(&self) -> String {
         String::new()
