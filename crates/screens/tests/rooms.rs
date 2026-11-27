@@ -533,7 +533,7 @@ fn a_new_root_replaces_the_stack() {
 fn the_list_room_reads_as_text() {
     let (mut rooms, _) = rooms();
     let first = rooms.open("notes", "t", true).unwrap();
-    snapshot::assert_room("notes_list", &first.room);
+    snapshot::assert_room("harness_notes_list", &first.room);
 }
 
 #[test]
