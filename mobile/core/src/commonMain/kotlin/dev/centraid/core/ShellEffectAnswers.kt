@@ -9,12 +9,10 @@ import centraid.core.v1.ShellEffectResult
 import centraid.core.v1.ShellFailed
 
 object ShellEffectAnswers {
-    const val UNAVAILABLE_REASON: String = "unavailable"
-
-    fun roomResult(effect: ShellEffect): RoomEvent = RoomEvent(
+    fun roomResult(effect: ShellEffect, unavailableReason: String): RoomEvent = RoomEvent(
         effect_result = ShellEffectResult(
             effect_id = effect.effect_id,
-            failed = ShellFailed(grant = FollowGrant.FOLLOW_GRANT_UNAVAILABLE, reason = UNAVAILABLE_REASON),
+            failed = ShellFailed(grant = FollowGrant.FOLLOW_GRANT_UNAVAILABLE, reason = unavailableReason),
         ),
     )
 
