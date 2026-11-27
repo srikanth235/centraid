@@ -318,13 +318,13 @@ impl Home {
                 home_words::tile_people_count_one(EN),
                 home_words::tile_people_count_many(EN),
             )
-        } else if b.door.permission_refused("people") {
+        } else if first::refused(b.door, "people") {
             home_words::tile_contacts_refused(EN)
         } else {
             home_words::tile_empty_people(EN)
         };
         let money_line = if has_money {
-            home_words::tile_quiet_money(EN)
+            money::month_spend(b, now)
         } else {
             home_words::tile_empty_money(EN)
         };
@@ -358,6 +358,7 @@ impl Home {
         } else {
             home_words::tile_empty_docs(EN)
         };
+        let health_handler = self.widget_handler(b, "health", has_health, HEALTH);
         let people_handler = self.widget_handler(b, "people", has_people, people::PEOPLE);
         out.push(blocks::tiles(vec![
             blocks::tile(
@@ -374,7 +375,7 @@ impl Home {
                 &words::home_health_tile(EN),
                 &health_line,
                 glyph("Heart", ""),
-                Handler::Open(HEALTH.to_owned()),
+                health_handler,
             ),
             blocks::tile(
                 &mut b.sel,
@@ -421,7 +422,7 @@ impl Home {
         teach: &str,
         refused: &str,
     ) -> String {
-        if !has && b.door.permission_refused(store) {
+        if !has && first::refused(b.door, store) {
             refused.to_owned()
         } else if has {
             quiet.to_owned()
@@ -430,9 +431,17 @@ impl Home {
         }
     }
 
+    fn importable(&self, b: &Build<'_>, store: &str) -> bool {
+        store != "reminders" || b.door.reminders_source()
+    }
+
     fn widget_handler(&self, b: &Build<'_>, store: &str, has: bool, app: &str) -> Handler {
-        if !has && b.door.permission_refused(store) {
-            Handler::Tag(format!("open_settings:{store}"))
+        if has {
+            Handler::Open(app.to_owned())
+        } else if first::refused(b.door, store) {
+            first::settings(store)
+        } else if self.importable(b, store) {
+            first::import(store)
         } else {
             Handler::Open(app.to_owned())
         }

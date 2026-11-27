@@ -13,7 +13,7 @@ room app_place key="people"
     tab "Lists" sym="List" #tab/lists
     menu #band/more/menu
       section
-        item "Phone contacts" #more/contacts
+        item "Follow Contacts" #more/follow-contacts
         item "Import vCard or CSV" #more/import
         item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash

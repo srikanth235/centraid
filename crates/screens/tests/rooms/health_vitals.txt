@@ -7,7 +7,7 @@ room app_place key="health/vitals"
     tab "Vitals" sym="Pulse" selected #tab/vitals
     menu #band/more/menu
       section
-        item "Phone health" #more/following
+        item "Follow Health" #more/follow-health
         item "Workout kinds" #more/kinds
         item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash

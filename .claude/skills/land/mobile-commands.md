@@ -73,7 +73,7 @@ xcodebuild -project Centraid.xcodeproj -scheme Centraid \
 
 There is no `swift test` path: the sources import UIKit and link the core's C archive. Swift protobuf output is generated in the Xcode pre-build phase; it requires `protoc` and `protoc-gen-swift` (`brew install protobuf swift-protobuf`). A new proto also requires `xcodegen generate` to update the generated input/output lists.
 
-For iOS Maestro runs, use the command in the [Maestro section](#maestro). The simulator's Apple Health store is empty; the debug seeder and `flows/health-seed.yaml` are available for that flow. Simulator scheduling is not evidence of iOS background scheduling on a phone.
+For iOS Maestro runs, use the command in the [Maestro section](#maestro). The simulator's Apple Health store is empty, and no seeder app ships with the repository. Simulator scheduling is not evidence of iOS background scheduling on a phone.
 
 ## Maestro
 

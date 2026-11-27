@@ -30,6 +30,7 @@ pub struct RoomRuntime {
     rooms: Mutex<Rooms>,
     keys: AtomicU64,
     last: Mutex<Option<UndoRecord>>,
+    platform: Mutex<String>,
 }
 
 impl RoomRuntime {
@@ -39,6 +40,7 @@ impl RoomRuntime {
             rooms: Mutex::new(Rooms::new(registry)),
             keys: AtomicU64::new(1),
             last: Mutex::new(None),
+            platform: Mutex::new(String::new()),
         }
     }
 }
@@ -115,7 +117,16 @@ impl CtxDoor<'_> {
 
 impl Door for CtxDoor<'_> {
     fn reminders_source(&self) -> bool {
-        self.ctx.reminders_source()
+        let platform = self
+            .runtime
+            .platform
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if platform.is_empty() {
+            self.ctx.reminders_source()
+        } else {
+            *platform != "android"
+        }
     }
 
     fn act(&self, act: &Act) -> std::result::Result<Done, Refused> {
@@ -279,6 +290,11 @@ impl RoomHost for RoomRuntime {
         let mut rooms = self.rooms.lock().unwrap_or_else(PoisonError::into_inner);
         let shown = match &request.kind {
             Some(K::Open(open)) => {
+                if !open.platform.is_empty() {
+                    open.platform.clone_into(
+                        &mut self.platform.lock().unwrap_or_else(PoisonError::into_inner),
+                    );
+                }
                 let tab = if open.tab.is_empty() {
                     DEFAULT_TAB
                 } else {
@@ -306,6 +322,7 @@ impl RoomHost for RoomRuntime {
         };
         Ok(wire::RoomResponse {
             shown: shown.iter().map(super::rooms::Shown::wire).collect(),
+            effects: rooms.take_effects(),
         })
     }
 

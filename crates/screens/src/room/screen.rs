@@ -18,6 +18,8 @@ pub enum Input {
     Option(String),
     Moment(String),
     Canvas(wire::room_canvas_event::Kind),
+    /// The shell's answer to an effect this room asked for.
+    Effect(wire::ShellEffectResult),
 }
 
 /// Where an event sends the member.
@@ -43,14 +45,32 @@ pub struct Status {
 pub struct Outcome {
     pub nav: Nav,
     pub status: Option<Status>,
+    /// A job for the shell and the tag its answer comes back under (`RoomScreen::on`, `Input::Effect`).
+    pub effect: Option<(String, wire::shell_effect::Kind)>,
 }
 
 impl Outcome {
+    /// Ask the shell to do `effect`; its answer reaches `on` under `tag`.
+    #[must_use]
+    pub fn effect(tag: &str, effect: wire::shell_effect::Kind) -> Self {
+        Self {
+            effect: Some((tag.to_owned(), effect)),
+            ..Self::default()
+        }
+    }
+
+    #[must_use]
+    pub fn and_effect(mut self, tag: &str, effect: wire::shell_effect::Kind) -> Self {
+        self.effect = Some((tag.to_owned(), effect));
+        self
+    }
+
     #[must_use]
     pub fn push(key: &str) -> Self {
         Self {
             nav: Nav::Push(key.to_owned()),
             status: None,
+            effect: None,
         }
     }
 
@@ -59,6 +79,7 @@ impl Outcome {
         Self {
             nav: Nav::Replace(key.to_owned()),
             status: None,
+            effect: None,
         }
     }
 
@@ -67,6 +88,7 @@ impl Outcome {
         Self {
             nav: Nav::Pop,
             status: None,
+            effect: None,
         }
     }
 
@@ -79,6 +101,7 @@ impl Outcome {
                 undo,
                 refused: false,
             }),
+            effect: None,
         }
     }
 
@@ -91,6 +114,7 @@ impl Outcome {
                 undo: false,
                 refused: false,
             }),
+            effect: None,
         }
     }
 
@@ -103,6 +127,7 @@ impl Outcome {
                 undo: false,
                 refused: true,
             }),
+            effect: None,
         }
     }
 }

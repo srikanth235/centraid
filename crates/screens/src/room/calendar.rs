@@ -9,7 +9,7 @@ use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
-use super::selector::{Act, Handler, Sel};
+use super::selector::{Act, Handler};
 use crate::strings::{Locale, calendar as words, fill, home as home_words, shared};
 
 pub const CALENDAR: &str = "calendar";
@@ -184,7 +184,9 @@ fn draft_key(door: &dyn Door) -> Option<String> {
     (!vault.is_empty()).then(|| format!("draft.{vault}.event"))
 }
 
-fn calendar_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
+fn calendar_band(b: &mut Build<'_>, active_tab: &str) -> wire::RoomBand {
+    let follow_rows = super::follow::items(b, "calendar");
+    let sel = &mut b.sel;
     let tabs = vec![
         frame::tab(
             sel,
@@ -208,13 +210,7 @@ fn calendar_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         Handler::Open(TRASH.to_owned()),
     );
     more_trash.secondary = shared::trash_entry_meta(EN);
-    let more_items = vec![
-        blocks::menu_item(
-            sel,
-            "more/following",
-            &words::more_following(EN),
-            Handler::Tag("more:following".to_owned()),
-        ),
+    let mut more_items = vec![
         blocks::menu_item(
             sel,
             "more/import-ics",
@@ -229,6 +225,7 @@ fn calendar_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         ),
         more_trash,
     ];
+    more_items.splice(0..0, follow_rows);
     let more_menu = blocks::menu(
         "band/more/menu",
         vec![blocks::menu_section("", more_items)],
@@ -245,12 +242,14 @@ fn calendar_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
     band
 }
 
-fn handle_band_tag(tag: &str) -> Option<Outcome> {
+fn handle_band_tag(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
+    if let Some(outcome) = super::follow::handle(e, tag) {
+        return Some(outcome);
+    }
     match tag {
         "nav:home" => Some(Outcome::replace(super::shell::HOME)),
         "tab:tab/calendar" => Some(Outcome::replace(CALENDAR)),
         "tab:tab/calendars" => Some(Outcome::replace(CALENDARS)),
-        "more:following" => Some(Outcome::say(&words::follow_note(EN))),
         "more:export" => Some(Outcome::say(&words::export_note(EN))),
         _ => None,
     }
@@ -334,7 +333,7 @@ impl RoomScreen for CalendarRoot {
             Err(err) => {
                 return room(wire::RoomKind::AppPlace, CALENDAR)
                     .title(&words::app_title(EN))
-                    .band(calendar_band(&mut b.sel, CALENDAR))
+                    .band(calendar_band(b, CALENDAR))
                     .failed(&mut b.sel, &err.0, &shared::kit_retry(EN))
                     .build();
             }
@@ -621,7 +620,7 @@ impl RoomScreen for CalendarRoot {
             );
         }
         if !first::holds(b, "event") {
-            let refused = b.door.permission_refused("calendar").then(|| {
+            let refused = first::refused(b.door, "calendar").then(|| {
                 (
                     home_words::refused_calendar_title(EN),
                     home_words::refused_calendar_body(EN),
@@ -635,7 +634,7 @@ impl RoomScreen for CalendarRoot {
                     hue: "",
                     sentence: home_words::first_open_calendar(EN),
                     action: Some((
-                        Handler::Tag(format!("{}calendar", first::IMPORT_TAG)),
+                        first::import("calendar"),
                         home_words::first_open_import_calendar(EN),
                     )),
                     tail: first::Tail::OrWrite,
@@ -657,7 +656,7 @@ impl RoomScreen for CalendarRoot {
                 &words::add_event(EN),
                 Handler::Open(format!("calendar/new/{anchor}")),
             )
-            .band(calendar_band(&mut b.sel, CALENDAR))
+            .band(calendar_band(b, CALENDAR))
             .search(&mut b.sel, b.ui, &words::search_placeholder(EN));
         if needs_reply_only {
             frame = frame.scope(
@@ -670,7 +669,7 @@ impl RoomScreen for CalendarRoot {
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, input: &Input) -> Outcome {
-        if let Some(out) = handle_band_tag(tag) {
+        if let Some(out) = handle_band_tag(e, tag) {
             return out;
         }
         let lens = e.ui.lens().unwrap_or("day").to_owned();
@@ -750,7 +749,7 @@ impl RoomScreen for CalendarsPage {
             Err(err) => {
                 return room(wire::RoomKind::AppPlace, CALENDARS)
                     .title(&words::tab_calendars(EN))
-                    .band(calendar_band(&mut b.sel, CALENDARS))
+                    .band(calendar_band(b, CALENDARS))
                     .failed(&mut b.sel, &err.0, &shared::kit_retry(EN))
                     .build();
             }
@@ -816,13 +815,13 @@ impl RoomScreen for CalendarsPage {
                 &words::add_calendar(EN),
                 Handler::Open(NEW_CALENDAR.to_owned()),
             )
-            .band(calendar_band(&mut b.sel, CALENDARS))
+            .band(calendar_band(b, CALENDARS))
             .ready(content)
             .build()
     }
 
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
-        handle_band_tag(tag).unwrap_or_default()
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        handle_band_tag(e, tag).unwrap_or_default()
     }
 }
 
@@ -932,6 +931,7 @@ impl RoomScreen for NewCalendarForm {
                             undo: true,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     },
                     Err(refused) => Outcome::refuse(&refused.0),
                 }
@@ -998,6 +998,7 @@ impl RoomScreen for TrashCalendarConfirm {
                         undo: done.undo,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -1387,6 +1388,7 @@ impl RoomScreen for EventDetailRoom {
                         undo: done.undo,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -1861,6 +1863,7 @@ impl RoomScreen for EventForm {
                                 undo: done.undo,
                                 refused: false,
                             }),
+                            ..Outcome::default()
                         }
                     }
                     Err(refused) => Outcome::refuse(&refused.0),
@@ -1970,6 +1973,7 @@ impl RoomScreen for ImportIcsRoom {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 }
             }
             _ => Outcome::default(),
@@ -2092,6 +2096,7 @@ impl RoomScreen for EmptyTrashConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -2140,6 +2145,7 @@ impl RoomScreen for PurgeConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };

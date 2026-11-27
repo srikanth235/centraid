@@ -4,7 +4,7 @@ The one interface between the vault, the core, the assistant and both shells. A 
 
 **Built.** The app plane is built end to end: the vault below ([`crates/vault`](../../../crates/vault), [`001_baseline.sql`](../../../contracts/migrations/001_baseline.sql), [`vault-commands.txt`](../../../contracts/schema/vault-commands.txt)); the declaration layer ([`crates/domain`](../../../crates/domain): read registry in sections 2–3, action catalogue in section 4, kind registry in section 8, and the chat census in section 7, held by the registry and census tests); the core services (reads, actions, draft service, notification scheduler, device store with its key registry, and widget snapshots); the room builders, room runtime and rooms for Home, Chat, Settings, Backup and all nine apps ([`crates/screens/src/room`](../../../crates/screens/src/room)); and the blocks and four canvases in both shells (iOS SwiftUI and Android Compose).
 
-**Day one** is in [`room/first.rs`](../../../crates/screens/src/room/first.rs): a founded vault with nothing of the member's opens the `welcome` room (a Stage) until Get started writes the device key `welcome.seen`; Home then shows one layout at every stage, each empty widget teaching with its own line, and every app's root shows one `first_open` card. The import and Open Settings buttons send `import:<store>` and `open_settings:<store>`, which the runtime answers through the door's `enrol_store` and `open_settings`; `permission_refused(store)` is what a refusal reads. (target) The core's door does not yet implement those three, nor tell the room plane the platform (`reminders_source` stands in for iOS), and no starter note is seeded.
+**Day one** is in [`room/first.rs`](../../../crates/screens/src/room/first.rs): a founded vault with nothing of the member's opens the `welcome` room (a Stage) until Get started writes the device key `welcome.seen`; Home then shows one layout at every stage, each empty widget teaching with its own line, and every app's root shows one `first_open` card. The import and Open Settings buttons send the follow tags (`follow:enrol:<system>`, `follow:settings:<system>`), which the runtime hands to `follow::handle` before the screen, so a card or Home widget uses the same enrolment and `open_settings` effect as the More sheet; a refusal is read from `follow::status`. (target) The room plane does not yet get the platform (`reminders_source` stands in for iOS), and no starter note is seeded.
 
 ## 1. Who owns what
 
@@ -337,7 +337,7 @@ One scheduler in core ([`crates/core/src/notify`](../../../crates/core/src/notif
 | Platform limit | The scheduler registers the soonest alerts that fit the platform's pending cap and refills on every commit and launch |
 | Payload | `centraid://open/<kind>/<id>`, plus action ids `done` and `snooze`; categories per `reminder_target` kind. No `Route` in any payload (D4) |
 
-## 10. Device store (D1–D12)
+## 10. Device store (D1–D13)
 
 Persisted outside the vault, so frozen: every key a shell or the core writes is listed once in the **device-key registry (D5)** ([`crates/core/src/device/registry.rs`](../../../crates/core/src/device/registry.rs)) with its version, and a test fails on an unlisted key or a JSON value without `"v"`.
 
@@ -355,6 +355,7 @@ Persisted outside the vault, so frozen: every key a shell or the core writes is 
 | D10 | **Locker clipboard lease** (vault id, item marker, digest, expiry; never the secret) | Listed in D5 |
 | D11 | **The backup plane's state file** (`plane.state_path()`) | Owned by the backup plane, out of this plane's changes; listed in D5 so the registry is complete |
 | D12 | **Portable files:** the "Export everything" manifest, each kind's portable JSON/CSV header, Locker's export, the index file's version header | Each states a format version; one export test per kind |
+| D13 | **Follow enrolment.** `follow.<store>`: `{"v":1,"on":true,"chosen":[…]}`, one per phone store this device enrolled | Core-owned; written when the OS grants the member's tap, deleted by a stop. Section 16 |
 
 **Where D1–D12 live.** [`crates/core/src/device`](../../../crates/core/src/device): `registry.rs` (D5), `store.rs` (a file per key beside the vault, written through the registry), `draft.rs` (D1), `inbox.rs` (D2, the drain), `open_url.rs` (D4), `widget.rs` (D6: `widget.today`, rewritten on every commit that touches `event`, `task` or `entity`, and `widget.health`, rewritten on every commit that touches Health's tables). A shell reads and writes device keys through `DeviceRequest`, so its keys are checked by the same registry. `.ics` files drain into `event.propose`; Money `.csv` files stay in the inbox because Money's column mapping needs its account and column layout.
 
@@ -428,7 +429,7 @@ Where the plan left a choice, the safest was taken. Reverse by editing this page
 
 ## 14. The wire a shell speaks
 
-Requests, answered inside `centraid_call`; no symbol was added. `RoomRequest` (`open{key, tab, root}`, `send{instance, event}`) answers with the `RoomShown`s that changed (none for a scroll report or a stale selector); the same `RoomShown` is pushed as `Event.room` when a commit reaches a room's reads. `NotifyRequest` and `Event.notify` are section 9's. `DeviceRequest` (`get`, `put`, `delete`), `FollowRequest` (`pass`, `stop` of a followed store, run as `follow.<system>`) and `ShareInRequest` (drain the inbox) are bounded or, for the drain, cancellable. `AssistRequest.plan`, `.finished` and `.opened` decide the chat model's files (what to fetch, load and delete; a reload held back by a running turn): the transfer is the shell's, the rules are [`core/src/assist/files.rs`](../../../crates/core/src/assist/files.rs).
+Requests, answered inside `centraid_call`; no symbol was added. `RoomRequest` (`open{key, tab, root}`, `send{instance, event}`) answers with the `RoomShown`s that changed (none for a scroll report or a stale selector); the same `RoomShown` is pushed as `Event.room` when a commit reaches a room's reads. `NotifyRequest` and `Event.notify` are section 9's. `DeviceRequest` (`get`, `put`, `delete`), `FollowRequest` (section 16) and `ShareInRequest` (drain the inbox) are bounded or, for the drain, cancellable. `AssistRequest.plan`, `.finished` and `.opened` decide the chat model's files (what to fetch, load and delete; a reload held back by a running turn): the transfer is the shell's, the rules are [`core/src/assist/files.rs`](../../../crates/core/src/assist/files.rs).
 
 ## 15. Adding to the plane
 
@@ -440,7 +441,71 @@ Requests, answered inside `centraid_call`; no symbol was added. `RoomRequest` (`
 | A block | A part board first; the `RoomBlock` arm and fields in `room.proto` with this page's row; both native blocks; a golden per state |
 | A string | A `strings/` row, as today ([wording](../design/wording.md)); `cargo xtask rules copy` |
 | A kind | The `KINDS` row (section 8) and the vault steps in [vault-model](vault-model.md) |
-| A followed store | [following](following.md) |
+| A followed store | [following](following.md), section 16 |
 | The C ABI or a wire message | [ffi](ffi.md) |
 
 Proof is in [land](../land/SKILL.md): room-tree text snapshots, the registry test, Android block goldens, iOS simulator screenshots at the hand-offs.
+
+## 16. Following a phone store (D13)
+
+The member turns a phone store on from the More of the app that owns it; the core asks the shell to read it; the vault merges what the shell read. The rooms say the state, the core owns every decision about when to read and whether to ask, and a shell reads and answers. Nothing is written back to the phone. What a member is promised is [arrive-take-out](../product/rulings/arrive-take-out.md); the page that lists what each shell performs is [following](following.md).
+
+| Store (`system`) | Owner and row in its More | The shell reads | May ask the OS |
+| --- | --- | --- | --- |
+| `contacts` | People: "Follow Contacts" | the address book | on the member's tap |
+| `calendar` | Calendar: "Follow phone calendars" | the calendars, over a window | on the member's tap |
+| `reminders` | Reminders: "Follow phone reminders"; Android answers `UNAVAILABLE` and the row says so | iOS Reminders | on the member's tap |
+| `files` | Docs: "Follow a folder" | a folder the member picks (the picker is the ask) | the picker, on the member's tap |
+| `health` | Health: "Follow Health" | the health store, read permission only; windows and a cursor | on the member's tap |
+| `camera_roll` | Photos: "Follow camera roll" | the grant only (the camera-roll walk stays the pass service's) | on the member's tap |
+
+**The wire** is `FollowRequest`/`FollowResponse` and the shell-effect channel of section 17 (`ShellStoreRead`, `ShellPhoneWatch`, `ShellOpenSettings`, `ShellReleaseGrant`, pushed as `Event.effect`). Field numbers are additive.
+
+| Direction | Message | Meaning |
+| --- | --- | --- |
+| Room, on a tap | `FollowRequest{verb: ENROL, system}` through `Door::call` | The member's tap. Core mints an ask with `ask_permission` true and pushes it |
+| Shell, app forward, a watch, a window | `FollowRequest{verb: TRIGGER, system}` (empty `system` is every store) | A trigger carries no data. For every store this device enrolled and the phone has not refused, core pushes one ask with `ask_permission` false. It never pushes one for a store not enrolled, refused, restricted or unavailable, and a trigger while an ask is in flight queues exactly one more |
+| Core to shell | `Event.effect`: `store_read{system, ask_permission, window, cursor}`, `phone_watch{system, on}`, `release_grant{ref}`; a room's tap on a refused row asks `open_settings{system}` through `Outcome::effect` | `store_read`: read the store and answer with `PASS` (its `ask_id` is the effect's `effect_id`). `phone_watch`: start or stop watching (contacts, calendar, reminders) and send a `TRIGGER` for it on each change. `release_grant`: release the grant for one folder |
+| Shell to core | `FollowRequest{verb: PASS, system, ask_id, grant, input_json, refused, background_refused}` | The answer to a `store_read`. `grant` is what the OS said; with `GRANTED`, `input_json` is the follow command's input (`origin`, `records`, `complete`, `since`, `gone`; for Health `{"workouts": …, "readings": …}`). An answer to an older ask is `stale` and ignored |
+| Room, on the stop row | `FollowRequest{verb: STOP, system, input_json: {"ref"?}}` | Retires every origin of the store (or the one `ref`), forgets this device's habit, pushes `phone_watch` off and, for a folder, `release_grant`. Deletes nothing |
+
+**Rules.**
+
+1. **`ask_permission` is true only in the ask a member's tap made.** A trigger's ask never is. Core holds the enrolment as a device key (`follow.<store>`, D13), so "did this device enrol" is asked first, before any ask, exactly as the old keychain habit was; a vault restored onto a new phone is enrolled there once.
+2. **A refusal ends reading.** A `REFUSED`, `RESTRICTED` or `UNAVAILABLE` answer sets the store's state; no trigger asks again until the member taps the row again (a `LIMITED` read is merged and said). The room offers the `OPEN_SETTINGS` effect for a plain refusal only; a restricted grant has no button that can change it.
+3. **One ask in flight per store.** Triggers during it set one `queued` bit; the answer sends one more ask. A tap supersedes whatever is in flight. There is no clock: the machine is driven by triggers and answers, and tests count asks.
+4. **The cursor is the origin's.** For Health the ask carries the cursor the vault holds for this install (`entity.origin_cursor`; absent or another install's is empty and the read is complete). The answer's command input carries the new one in `origin.cursor` with this install's `device_id`, which core sets itself, so it moves in the same commit as the records. A shell keeps none.
+5. **A stop never erases.** `follow.stop` per origin, then the habit goes; the rows the follow filled stay. Following again revives the same origin.
+6. **State is words from core.** The rows say "Following Contacts", "Contacts is off", "Only part of your phone's contacts was readable" from the same report the pass left (`Follower::report`); the room reloads when it changes (the `follow` watch, as the backup ledger's).
+
+**D13: the enrolment key.** `follow.<store>` (`contacts`, `calendar`, `reminders`, `files`, `health`, `camera_roll`): `{"v":1,"on":true,"chosen":[…]}` (`chosen` is Health's types), core-owned, in the device store beside the vault.
+
+**Not built (target).** The native adapters (Swift, Kotlin) that perform the following effects and send `FollowRequest`; until they land a shell that sends nothing leaves every store as it is. A background-window pass for Health (Android only) waits on the same adapters.
+
+## 17. The shell-effect channel
+
+A room never touches the phone. When a tap needs the phone, its screen returns `Outcome::effect(tag, kind)`; the runtime gives the effect an id, answers the event with it in `RoomResponse.effects`, and routes the shell's answer (`RoomEvent.effect_result`, carrying the id) back to the same room as `Input::Effect` under `tag`. The core asks on its own through `Event.effect` (following does); an answer to those is a request of its own (`FollowRequest{PASS}`), not a room event. The wire is `ShellEffect` and `ShellEffectResult` in [`room.proto`](../../../crates/api-proto/proto/centraid/core/v1/room.proto); every variant is defined now so the native lanes are briefed once. Bytes never cross: a file is a path the core wrote or a shell picked. A shell names no command and no screen, and does only what an effect says.
+
+The old performers are the intended homes: iOS `ScreenPlatform.swift`, `LockerClipboardLease.swift`, `ShelfCopyExport.swift`, `Chat/ChatModelDownload.swift`; Android `kit/ScreenEffects.kt`, `kit/OwnerPrompt.kt`.
+
+| Effect (answer) | iOS | Android | Used by |
+| --- | --- | --- | --- |
+| `store_read` (a `FollowRequest{PASS}`) | `CNContactStore`, `EKEventStore` events and reminders, `HKHealthStore` read-only, the document picker with a security-scoped bookmark, `PHPhotoLibrary` authorization | `ContactsContract`, `CalendarContract`, Health Connect `HealthConnectClient`, `ACTION_OPEN_DOCUMENT_TREE`, `READ_MEDIA_IMAGES`; Reminders answers `UNAVAILABLE` | Following (built in Rust; the performers are target) |
+| `phone_watch` (none) | `EKEventStoreChanged`, `CNContactStoreDidChange` | content observers (`PhoneWatchers.kt`) | Following |
+| `open_settings` (`ShellDone`) | `UIApplication.openSettingsURLString` | `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`, or the notification channel page for `notifications` | Following (built); Notifications |
+| `release_grant` (none) | drop the folder's bookmark | release the persisted tree URI permission | Following |
+| `owner_check` (`ShellOwner`) | `LAContext` `deviceOwnerAuthentication` | `BiometricPrompt` with device credential (`OwnerPrompt.kt`) | Locker, every `export*`, recovery key, restore (target) |
+| `share` (`ShellDone`) | `UIActivityViewController` | `Intent.ACTION_SEND` through a `FileProvider` | A single item's Share (target) |
+| `save_file` (`ShellDone`) | `UIDocumentPickerViewController` export | `ACTION_CREATE_DOCUMENT` | Export (target) |
+| `pick_file` (`ShellPicked`) | `UIDocumentPickerViewController` open | `ACTION_OPEN_DOCUMENT` | Docs, imports (target) |
+| `pick_photo` (`ShellPicked`) | `PHPickerViewController` | the photo picker | Photos (target) |
+| `scan_document` (`ShellPicked`) | `VNDocumentCameraViewController` | the document scanner | Docs, Money (target) |
+| `clipboard_copy` (`ShellDone`) | `UIPasteboard` with `localOnly` and an expiry, the lease in `LockerClipboardLease.swift` | `ClipboardManager` with `EXTRA_IS_SENSITIVE`, cleared at the lease | Locker (target) |
+| `photo_delete` (`ShellDone` or `ShellFailed{cancelled}`) | `PHAssetChangeRequest.deleteAssets` | `MediaStore.createDeleteRequest` | Photos Free up space (target) |
+| `model_download` (`ShellDone`) | a background `URLSession` download (`ChatModelDownload.swift`) | `DownloadManager` or `WorkManager` | Chat (target) |
+| `permission_status` (`ShellGrant`) | `UNUserNotificationCenter`, `PHPhotoLibrary`, `AVCaptureDevice`, the store's own status | `NotificationManagerCompat`, `checkSelfPermission` | Settings, the More rows (target) |
+
+A refused grant answers `ShellFailed{grant}` or `ShellGrant{grant}` with one of `REFUSED`, `RESTRICTED`, `LIMITED`, `UNAVAILABLE`; a dismissed sheet is `ShellFailed{cancelled}`. Core words every sentence the member reads. Built here: the channel, `Outcome::effect`, `Input::Effect`, and the callers for following (`store_read`, `phone_watch`, `open_settings`, `release_grant`); the rest are defined and wait for their lanes.
+
+**The door's three calls (lane W's seam).** `Door::enrol_store(store)` with `store` in `photos`, `calendar`, `reminders`, `people`, `health` sends `FollowRequest{ENROL}` for `camera_roll`, `calendar`, `reminders`, `contacts`, `health` (the tap that asks the OS once) and says "Waiting for your phone." `Door::open_settings(store)` adds an `open_settings` effect to the response. `Door::permission_refused(store)` is the follower's `STATUS.blocked == REFUSED`. The shell tells the core its platform with `RoomOpen.platform` (`ios` or `android`); `Door::reminders_source()` is false on `android`.
+

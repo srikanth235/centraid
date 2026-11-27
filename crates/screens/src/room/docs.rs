@@ -129,7 +129,9 @@ fn short_day(iso: &str) -> &str {
     iso.get(..10).unwrap_or(iso)
 }
 
-fn docs_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
+fn docs_band(b: &mut Build<'_>, active_tab: &str) -> wire::RoomBand {
+    let follow_rows = super::follow::items(b, "files");
+    let sel = &mut b.sel;
     let tabs = vec![
         frame::tab(
             sel,
@@ -153,7 +155,7 @@ fn docs_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         Handler::Open(TRASH.to_owned()),
     );
     more_trash.secondary = shared::trash_entry_meta(EN);
-    let more_items = vec![
+    let mut more_items = vec![
         blocks::menu_item(
             sel,
             "more/followed",
@@ -168,6 +170,7 @@ fn docs_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         ),
         more_trash,
     ];
+    more_items.splice(0..0, follow_rows);
     let more_menu = blocks::menu(
         "band/more/menu",
         vec![blocks::menu_section("", more_items)],
@@ -184,7 +187,10 @@ fn docs_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
     band
 }
 
-fn handle_more_or_nav(tag: &str) -> Option<Outcome> {
+fn handle_more_or_nav(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
+    if let Some(outcome) = super::follow::handle(e, tag) {
+        return Some(outcome);
+    }
     match tag {
         "nav:home" => Some(Outcome::replace(super::shell::HOME)),
         "tab:tab/docs" => Some(Outcome::replace(DOCS)),
@@ -458,7 +464,7 @@ impl RoomScreen for DocsList {
 
         let sel_actions = selection_actions(&mut b.sel, &picked);
         let sel_label = words::selected_count(EN, picked.len() as u64);
-        let band = docs_band(&mut b.sel, DOCS);
+        let band = docs_band(b, DOCS);
 
         room(wire::RoomKind::AppPlace, DOCS)
             .title(&words::title(EN))
@@ -479,8 +485,8 @@ impl RoomScreen for DocsList {
             .build()
     }
 
-    fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
-        if let Some(out) = handle_more_or_nav(tag) {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+        if let Some(out) = handle_more_or_nav(e, tag) {
             return out;
         }
         if tag == SORT_UPDATED {
@@ -650,7 +656,7 @@ impl RoomScreen for FoldersList {
             );
         }
 
-        let band = docs_band(&mut b.sel, FOLDERS);
+        let band = docs_band(b, FOLDERS);
         room(wire::RoomKind::AppPlace, FOLDERS)
             .title(&words::folders_title(EN))
             .subtitle(&count_str)
@@ -667,8 +673,8 @@ impl RoomScreen for FoldersList {
             .build()
     }
 
-    fn on(&mut self, _e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
-        handle_more_or_nav(tag).unwrap_or_default()
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _input: &Input) -> Outcome {
+        handle_more_or_nav(e, tag).unwrap_or_default()
     }
 }
 
@@ -1508,9 +1514,9 @@ impl RoomScreen for FollowedFoldersPage {
                                     &mut b.sel,
                                     &format!("followed/{}/stop", origin.id),
                                     &words::menu_stop_following(EN),
-                                    Handler::Act(Act::new(
-                                        "follow.stop",
-                                        json!({ "origin_id": origin.id }),
+                                    Handler::Open(format!(
+                                        "follow/stop/files:{}",
+                                        origin.external_ref
                                     )),
                                 )],
                             )],

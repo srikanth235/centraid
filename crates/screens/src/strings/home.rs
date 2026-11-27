@@ -62,6 +62,7 @@ catalog! {
     plain tile_empty_reminders = ("Import your reminders", "Import your reminders");
     plain tile_empty_reminders_by_hand = ("Write your first reminder", "Write your first reminder");
     plain tile_quiet_calendar = ("Nothing coming up", "Nothing coming up");
+    plain tile_money_spent = ("{amount} spent", "{amount} spent");
     plain tile_quiet_money = ("Nothing spent this month", "Nothing spent this month");
     plain tile_empty_people = ("Import contacts", "Import contacts");
     plain tile_photos_refused = ("Photo access is off · Open Settings", "Photo access is off · Open Settings");

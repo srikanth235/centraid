@@ -376,6 +376,7 @@ pub struct HandleState {
     pub(crate) rooms: std::sync::OnceLock<Arc<dyn crate::rooms::RoomHost>>,
     /// THE NOTIFICATION SERVICE (app-plane §9), once its words are attached.
     pub(crate) notify: std::sync::OnceLock<crate::notify::Service>,
+    pub(crate) follower: crate::follow::Follower,
     /// THE DEVICE STORE BESIDE THE VAULT FILE (app-plane §10), opened on first use.
     device: std::sync::OnceLock<Arc<crate::device::Checked<crate::device::DirStore>>>,
     /// THE DIRECTORY OF VAULTS THIS CORE IS THE DOOR TO, when it is one
@@ -535,6 +536,7 @@ impl Core {
             screens: std::sync::OnceLock::new(),
             rooms: std::sync::OnceLock::new(),
             notify: std::sync::OnceLock::new(),
+            follower: crate::follow::Follower::default(),
             device: std::sync::OnceLock::new(),
             shelf_config,
             vaults: std::sync::OnceLock::new(),

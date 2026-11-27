@@ -14,7 +14,7 @@ use super::selector::{Act, Handler, Sel};
 use crate::strings::{Locale, fill, home as home_words, people as words, shared};
 
 fn people_first_card(b: &mut Build<'_>) -> wire::RoomBlock {
-    let refused = b.door.permission_refused("people").then(|| {
+    let refused = first::refused(b.door, "people").then(|| {
         (
             home_words::refused_contacts_title(EN),
             home_words::refused_contacts_body(EN),
@@ -28,7 +28,7 @@ fn people_first_card(b: &mut Build<'_>) -> wire::RoomBlock {
             hue: "",
             sentence: home_words::first_open_people(EN),
             action: Some((
-                Handler::Tag(format!("{}people", first::IMPORT_TAG)),
+                first::import("people"),
                 home_words::first_open_import_contacts(EN),
             )),
             tail: first::Tail::OrAdd,
@@ -147,7 +147,9 @@ fn draft_key(door: &dyn Door) -> Option<String> {
     }
 }
 
-fn people_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
+fn people_band(b: &mut Build<'_>, active_tab: &str) -> wire::RoomBand {
+    let follow_rows = super::follow::items(b, "contacts");
+    let sel = &mut b.sel;
     let tabs = vec![
         frame::tab(
             sel,
@@ -171,13 +173,7 @@ fn people_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         Handler::Open(TRASH.to_owned()),
     );
     more_trash.secondary = shared::trash_entry_meta(EN);
-    let more_items = vec![
-        blocks::menu_item(
-            sel,
-            "more/contacts",
-            &words::more_following(EN),
-            Handler::Tag("more:contacts".to_owned()),
-        ),
+    let mut more_items = vec![
         blocks::menu_item(
             sel,
             "more/import",
@@ -192,6 +188,7 @@ fn people_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
         ),
         more_trash,
     ];
+    more_items.splice(0..0, follow_rows);
     let more_menu = blocks::menu(
         "band/more/menu",
         vec![blocks::menu_section("", more_items)],
@@ -208,12 +205,14 @@ fn people_band(sel: &mut Sel, active_tab: &str) -> wire::RoomBand {
     band
 }
 
-fn handle_more_or_nav(tag: &str) -> Option<Outcome> {
+fn handle_more_or_nav(e: &mut Event<'_>, tag: &str) -> Option<Outcome> {
+    if let Some(outcome) = super::follow::handle(e, tag) {
+        return Some(outcome);
+    }
     match tag {
         "nav:home" => Some(Outcome::replace(super::shell::HOME)),
         "tab:tab/people" => Some(Outcome::replace(PEOPLE)),
         "tab:tab/lists" => Some(Outcome::replace(LISTS)),
-        "more:contacts" => Some(Outcome::say(&words::follow_contacts_note(EN))),
         "more:import" => Some(Outcome::say(&words::import_note(EN))),
         "more:export" => Some(Outcome::say(&words::export_note(EN))),
         _ => None,
@@ -392,7 +391,7 @@ impl RoomScreen for PeopleList {
             .search(&mut b.sel, b.ui, &words::search_placeholder(EN));
 
         if !b.ui.selecting() {
-            frame = frame.band(people_band(&mut b.sel, PEOPLE));
+            frame = frame.band(people_band(b, PEOPLE));
         }
 
         let answer = match answer {
@@ -523,7 +522,7 @@ impl RoomScreen for PeopleList {
     }
 
     fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
-        if let Some(outcome) = handle_more_or_nav(tag) {
+        if let Some(outcome) = handle_more_or_nav(e, tag) {
             return outcome;
         }
         if tag == "next:section/people" {
@@ -2192,7 +2191,7 @@ impl RoomScreen for ListsPage {
                 &words::new_list(EN),
                 Handler::Open(NEW_LIST.to_owned()),
             )
-            .band(people_band(&mut b.sel, LISTS));
+            .band(people_band(b, LISTS));
 
         let answer = match b.reload(&reads::LISTS, &Args::new(), self.loaded) {
             Ok(a) => a,
@@ -2281,8 +2280,8 @@ impl RoomScreen for ListsPage {
         frame.build()
     }
 
-    fn on(&mut self, _: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
-        if let Some(outcome) = handle_more_or_nav(tag) {
+    fn on(&mut self, e: &mut Event<'_>, tag: &str, _: &Input) -> Outcome {
+        if let Some(outcome) = handle_more_or_nav(e, tag) {
             return outcome;
         }
         if tag == "next:section/lists" {

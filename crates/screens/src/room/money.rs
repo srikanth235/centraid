@@ -238,6 +238,30 @@ fn month_bounds(year: i32, month: u32) -> (String, String) {
     )
 }
 
+pub(super) fn month_spend(b: &mut Build<'_>, now_ms: i64) -> String {
+    let (y, m) = current_ym(now_ms);
+    let (from_day, to_day) = month_bounds(y, m);
+    let currency = vault_currency(b);
+    let outflow = b
+        .run(
+            &reads::CASHFLOW_WINDOW,
+            &Args::new()
+                .text("from_day", &from_day)
+                .text("to_day", &to_day),
+        )
+        .ok()
+        .and_then(|ans| ans.rows.into_iter().next())
+        .map_or(0, |row| row.outflow_minor);
+    if outflow <= 0 {
+        home_words::tile_quiet_money(EN)
+    } else {
+        fill(
+            &home_words::tile_money_spent(EN),
+            &[("amount", &fmt_minor(outflow, &currency))],
+        )
+    }
+}
+
 fn short_month_label(year: i32, month: u32) -> String {
     let name = match month {
         1 => "Jan",
@@ -2423,6 +2447,7 @@ impl TxnForm {
                     undo: false,
                     refused: false,
                 }),
+                ..Outcome::default()
             }
         } else {
             let id = mint_uuid_v7(e.door.now_ms());
@@ -2455,6 +2480,7 @@ impl TxnForm {
                             undo: done.undo,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     }
                 }
                 Err(refused) => Outcome::refuse(&refused.0),
@@ -3054,6 +3080,7 @@ impl RoomScreen for CsvImportRoom {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 }
             }
             _ => Outcome::default(),
@@ -3320,6 +3347,7 @@ impl RoomScreen for NewAccountForm {
                             undo: done.undo,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     },
                     Err(refused) => Outcome::refuse(&refused.0),
                 }
@@ -3667,6 +3695,7 @@ impl RoomScreen for CurrencyRoom {
                             undo: done.undo,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     },
                     Err(refused) => {
                         self.confirming = false;
@@ -3787,6 +3816,7 @@ impl RoomScreen for CheckpointForm {
                             undo: done.undo,
                             refused: false,
                         }),
+                        ..Outcome::default()
                     },
                     Err(refused) => Outcome::refuse(&refused.0),
                 }
@@ -3854,6 +3884,7 @@ impl RoomScreen for TrashAccountConfirm {
                         undo: done.undo,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -4511,6 +4542,7 @@ impl RoomScreen for CategoryMergeConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -4760,6 +4792,7 @@ impl RoomScreen for PurgeConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };
@@ -4808,6 +4841,7 @@ impl RoomScreen for EmptyTrashConfirm {
                         undo: false,
                         refused: false,
                     }),
+                    ..Outcome::default()
                 },
                 Err(refused) => Outcome::refuse(&refused.0),
             };

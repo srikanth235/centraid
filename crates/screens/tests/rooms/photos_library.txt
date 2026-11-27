@@ -13,7 +13,7 @@ room app_place key="photos"
     tab "Places" sym="MapPin" #tab/places
     menu #band/more/menu
       section
-        item "Camera roll" #more/camera-roll
+        item "Follow Camera roll" #more/follow-camera-roll
         item "Free up space" #more/free-space
         item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash

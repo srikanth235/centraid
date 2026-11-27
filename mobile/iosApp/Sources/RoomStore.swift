@@ -54,6 +54,7 @@ final class RoomStore: ObservableObject {
         open.key = key
         open.tab = tab
         open.root = root
+        open.platform = "ios"
         var roomReq = Centraid_Core_V1_RoomRequest()
         roomReq.kind = .open(open)
         await sendRoomRequest(roomReq)
@@ -68,7 +69,7 @@ final class RoomStore: ObservableObject {
         var roomReq = Centraid_Core_V1_RoomRequest()
         roomReq.kind = .send(send)
         Task { [weak self] in
-            await self?.sendRoomRequest(roomReq)
+            await self?.sendRoomRequest(roomReq, instance: send.instance)
         }
     }
 
@@ -203,7 +204,7 @@ final class RoomStore: ObservableObject {
         }
     }
 
-    private func sendRoomRequest(_ roomReq: Centraid_Core_V1_RoomRequest) async {
+    private func sendRoomRequest(_ roomReq: Centraid_Core_V1_RoomRequest, instance: UInt64? = nil) async {
         var request = Centraid_Core_V1_Request()
         request.kind = .room(roomReq)
         guard let response = try? await core.call(request),
@@ -211,6 +212,22 @@ final class RoomStore: ObservableObject {
         else { return }
         for shown in answer.shown {
             apply(shown)
+        }
+        answerEffects(answer.effects, instance: instance ?? answer.shown.last?.instance)
+    }
+
+    /// EVERY EFFECT A ROOM ASKS IS ANSWERED (app-plane §17): until a performer exists for it, the
+    /// answer is that the phone has none, so no room waits on a silence.
+    private func answerEffects(_ effects: [Centraid_Core_V1_ShellEffect], instance: UInt64?) {
+        guard let instance else { return }
+        for effect in effects {
+            var failed = Centraid_Core_V1_ShellFailed()
+            failed.grant = .unavailable
+            failed.reason = EffectReason.unavailable
+            var result = Centraid_Core_V1_ShellEffectResult()
+            result.effectID = effect.effectID
+            result.outcome = .failed(failed)
+            send(instance: instance, event: .effectResult(result))
         }
     }
 

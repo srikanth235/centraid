@@ -52,46 +52,7 @@ impl crate::handle::HandleState {
     }
 }
 
-const FOLLOW_SYSTEMS: [&str; 8] = [
-    "contacts",
-    "calendar",
-    "files",
-    "camera_roll",
-    "reminders",
-    "health",
-    "health_readings",
-    "statement",
-];
-
 impl crate::handle::HandleState {
-    /// A shell's follow pass, or its stop of one.
-    pub(crate) fn follow_call(
-        &self,
-        request: &wire::FollowRequest,
-    ) -> crate::error::Result<wire::FollowResponse> {
-        let refused = |detail: String| crate::error::CoreError::InvalidRequest { detail };
-        if !FOLLOW_SYSTEMS.contains(&request.system.as_str()) {
-            return Err(refused(format!(
-                "`{}` is not a followed store",
-                request.system
-            )));
-        }
-        let name = match wire::FollowVerb::try_from(request.verb) {
-            Ok(wire::FollowVerb::Pass) => format!("follow.{}", request.system),
-            Ok(wire::FollowVerb::Stop) => "follow.stop".to_owned(),
-            _ => return Err(refused("a follow request names pass or stop".to_owned())),
-        };
-        let input: serde_json::Value = serde_json::from_str(&request.input_json)
-            .map_err(|error| refused(format!("the snapshot is not JSON: {error}")))?;
-        let outcome = self.command(&name, &input, &request.invoke_key)?;
-        let declined = outcome.status != centraid_vault::CommandStatus::Executed;
-        Ok(wire::FollowResponse {
-            output_json: outcome.output.to_string(),
-            declined,
-            sentence: outcome.reason.unwrap_or_default(),
-        })
-    }
-
     /// A shell's drain of the share-in inbox.
     pub(crate) fn share_in_call(
         &self,

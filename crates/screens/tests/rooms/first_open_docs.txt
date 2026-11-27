@@ -13,6 +13,7 @@ room app_place key="docs"
     tab "Folders" sym="Folder" #tab/folders
     menu #band/more/menu
       section
+        item "Follow a folder" #more/follow-files
         item "Followed folders" #more/followed
         item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash

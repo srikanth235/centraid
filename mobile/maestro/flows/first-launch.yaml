@@ -1,55 +1,56 @@
-# First launch: a device that holds no vault opens onto the deck, not Home.
+# First launch: a device that holds no vault opens onto Welcome, not Home.
 #
-# THE POINT OF THIS FLOW is that the first frame a new member sees is the way to
-# make a vault. Home behind it would be a grid with nothing to read, so the gate
-# stands in its place, and what is asserted here is the one thing a unit test
-# cannot: that the two RENDER differently, and that no system prompt lands on
-# top of it (the photo-library observer waits for a grant, so none appears).
+# THE POINT OF THIS FLOW is that the first frame a new member sees is the way to make a vault. The
+# springboard behind it would have nothing to read, so Welcome stands in its place, and what is
+# asserted here is the one thing a unit test cannot: that the two RENDER differently, and that no
+# system prompt lands on top of it. Ids are the room's own (`crates/screens/tests/rooms/day_one_welcome.txt`).
 appId: dev.centraid.Centraid
 name: first-launch
 ---
-# Every grant denied: Maestro grants all by default, and a made vault would
-# then import the phone's photos, contacts and calendar on the way to Home.
+# Every grant denied: Maestro grants all by default, and a made vault would then import the phone's
+# photos, contacts and calendar on the way to Home.
 - launchApp:
     clearState: true
     permissions:
       all: deny
 - assertVisible:
-    id: "first-launch"
+    id: "room-welcome"
 - assertNotVisible:
-    id: "home-grid"
-# ONE WELCOME SCREEN (#1173), not a deck: the title, the three claims and both
-# doors are on the first frame, and there is no Next or Skip.
+    id: "block-tiles"
+# ONE WELCOME SCREEN, not a deck: the title, the three points and both doors are on the first frame.
 - assertVisible: "Welcome to Centraid"
-- assertVisible: "An assistant on this phone"
-- assertVisible: "Restore backup"
-- assertNotVisible:
-    id: "first-launch-skip"
-- assertVisible: "Get started"
-# GET STARTED (R-ONBOARD-10). Where the keychain synchronises — the simulator
-# counts — the key is kept without being shown and Home comes up with no sheet
-# in between. Where it stays on this phone alone, the key shows once with Save
-# a copy, and the round X (Cancel) returns to the deck.
+- assertVisible:
+    id: "welcome/point/0"
+- assertVisible:
+    id: "welcome/point/1"
+- assertVisible:
+    id: "welcome/point/2"
+- assertVisible:
+    id: "welcome/restore"
+- assertVisible:
+    id: "welcome/start"
+# GET STARTED. Where the keychain synchronises the key is kept without being shown and Home comes up
+# with no sheet in between. Where it stays on this phone alone, the key shows once with Save a copy,
+# and the round X returns to Welcome.
 - tapOn:
-    id: "first-launch-primary"
+    id: "welcome/start"
 - runFlow:
     when:
       visible:
         id: "words-shown"
     commands:
-      - assertVisible: "Your recovery key"
       - assertVisible:
           id: "words-save-copy"
       - tapOn:
           id: "words-make-secondary"
       - assertVisible:
-          id: "first-launch"
+          id: "room-welcome"
 - runFlow:
     when:
       notVisible:
-        id: "first-launch"
+        id: "room-welcome"
     commands:
       - extendedWaitUntil:
           visible:
-            id: "home-grid"
+            id: "block-tiles"
           timeout: 30000

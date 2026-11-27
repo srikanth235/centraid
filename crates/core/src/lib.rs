@@ -60,6 +60,7 @@ pub mod device;
 pub mod error;
 pub mod events;
 pub mod example;
+pub mod follow;
 pub mod handle;
 pub mod identity;
 pub mod load;

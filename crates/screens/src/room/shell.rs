@@ -39,6 +39,7 @@ pub fn registry() -> Registry {
         .exact(SETTINGS_RECOVERY, || Box::new(RecoveryKeyConfirm))
         .exact(BACKUP, || Box::new(Backup))
         .exact(BACKUP_PAIR, || Box::new(BackupPair))
+        .merge(super::follow::registry())
         .merge(super::people::registry())
         .merge(super::money::registry())
         .merge(super::calendar::registry())
