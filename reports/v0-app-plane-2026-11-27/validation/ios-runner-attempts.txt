@@ -34,4 +34,10 @@ Latest retry: [run 46040847364](https://github.com/srikanth235/centraid/actions/
 - Swift compilation then failed in `AccessibilityAuditTests.swift` because two closure bodies used `homeShowing(app)` without explicit `self` at lines 124 and 390. XCTest execution and screenshot capture did not start; the unsigned-device build was skipped.
 - Both closures now use `self.homeShowing(app)`. This follow-up awaits the next hosted run.
 
+Latest retry: [run 46043020839](https://github.com/srikanth235/centraid/actions/runs/46043020839), commit `c340ceb8239fdf25d40dba5d6d157704b1909545`, iOS job `140655366304`, Xcode 26.3 / Swift 6.2.4.
+
+- Both Rust core slices and the app module compile passed.
+- XCTest build failed on `RoomStoreTests.swift`: a missing EventKit import, optional contact-record unwrapping, optional-pattern matching on a nonoptional outcome, missing enum context for the typed shell-effect fixture array, and assigning `Data` to the string `StageHandle.contentHash`. These errors prevented XCTest execution and screenshot capture; the unsigned-device build was skipped.
+- The test fixtures now use the generated types directly and retain their existing assertions. Root review corrected expectations against the fixtures and native contracts: pick-file/photo/scan are effect IDs 8/9/10 (array indices 7/8/9); a 19-byte staged file with a 1024-byte chunk size sends exactly begin/chunk/end; clearing optional contact fields preserves `sort_name` as `Ada`; and the cancellation fake sets `ShellFailed.cancelled` as a real performer must. The unavailable calendar pass injects a deterministic unavailable reader result rather than depending on EventKit permission state. This follow-up awaits the next hosted run.
+
 No physical device, native owner authentication, or share-extension host-app/share-sheet flow is proven by these attempts. M1, M3, and M4 remain unticked pending owner review.

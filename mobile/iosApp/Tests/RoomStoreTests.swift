@@ -1,5 +1,6 @@
 import SwiftUI
 import Contacts
+import EventKit
 import LocalAuthentication
 import XCTest
 @testable import CentraidApp
@@ -132,7 +133,13 @@ final class RoomStoreTests: XCTestCase {
 
     func testStoreReadEffectFromCoreAnswersOneUnavailableFollowRequest() async throws {
         let core = RoomEffectTestCore()
-        let store = RoomStore(core: core)
+        var readerCalls = 0
+        let store = RoomStore(core: core, nativeFollowReader: { read in
+            readerCalls += 1
+            XCTAssertEqual(read.system, "calendar")
+            XCTAssertFalse(read.askPermission)
+            return (.unavailable, "")
+        })
         var effect = Centraid_Core_V1_ShellEffect()
         effect.effectID = 101
         effect.kind = .storeRead(.with { $0.system = "calendar" })
@@ -145,6 +152,7 @@ final class RoomStoreTests: XCTestCase {
         XCTAssertEqual(pass.system, "calendar")
         XCTAssertEqual(pass.askID, 101)
         XCTAssertEqual(pass.grant, .unavailable)
+        XCTAssertEqual(readerCalls, 1)
     }
 
     func testNativeReaderAdapterFeedsSnapshotIntoExactlyOneCorePass() async throws {
@@ -225,7 +233,8 @@ final class RoomStoreTests: XCTestCase {
         contact.nickname = "Augusta"
         contact.organizationName = "Analytical Engines"
         contact.jobTitle = "Mathematician"
-        let populated = try XCTUnwrap(RoomStore.contactRecord(contact)["fields"] as? [String: Any])
+        let populatedRecord = try XCTUnwrap(RoomStore.contactRecord(contact))
+        let populated = try XCTUnwrap(populatedRecord["fields"] as? [String: Any])
         XCTAssertEqual(populated["nickname"] as? String, "Augusta")
         XCTAssertEqual(populated["org"] as? String, "Analytical Engines")
         XCTAssertEqual(populated["role"] as? String, "Mathematician")
@@ -235,7 +244,8 @@ final class RoomStoreTests: XCTestCase {
         let record = try XCTUnwrap(RoomStore.contactRecord(contact))
         let fields = try XCTUnwrap(record["fields"] as? [String: Any])
         XCTAssertEqual(fields["form"] as? String, "person")
-        for key in ["sort_name", "family", "phonetic", "nickname", "org", "role"] {
+        XCTAssertEqual(fields["sort_name"] as? String, "Ada")
+        for key in ["family", "phonetic", "nickname", "org", "role"] {
             XCTAssertTrue(fields[key] is NSNull, "cleared contact field \(key) must be explicit null")
         }
     }
@@ -511,9 +521,11 @@ final class RoomStoreTests: XCTestCase {
             case 4:
                 guard case .owner(let owner)? = answer.outcome else { return XCTFail("Expected owner check") }
                 XCTAssertTrue(owner.passed)
-            case 8, 9, 10:
+            case 7, 8, 9:
                 guard case .picked(let picked)? = answer.outcome else { return XCTFail("Expected picked files") }
                 XCTAssertEqual(picked.items.count, 1)
+                let expectedPath = ["/picked/file", "/picked/photo", "/picked/scan"][index - 7]
+                XCTAssertEqual(picked.items[0].path, expectedPath)
             default:
                 guard case .done? = answer.outcome else { return XCTFail("Expected completion") }
             }
@@ -527,6 +539,7 @@ final class RoomStoreTests: XCTestCase {
             var failed = Centraid_Core_V1_ShellFailed()
             failed.grant = .cancelled
             failed.reason = EffectReason.cancelled
+            failed.cancelled = true
             return .failed(failed)
         }
         var effect = Centraid_Core_V1_ShellEffect()
@@ -583,27 +596,29 @@ final class RoomStoreTests: XCTestCase {
         XCTAssertEqual(staged.count, 1)
         XCTAssertTrue(staged[0].hasStageHandle)
         XCTAssertEqual(staged[0].stageHandle.byteSize, UInt64(bytes.count))
-        XCTAssertEqual(staged[0].stageHandle.contentHash.count, 32)
+        XCTAssertEqual(staged[0].stageHandle.contentHash.count, 64)
         let count = await core.stageRequestCount()
-        XCTAssertGreaterThanOrEqual(count, 4)
+        XCTAssertEqual(count, 3)
+        let verbs = await core.stageRequestVerbs()
+        XCTAssertEqual(verbs, ["begin", "chunk", "end"])
     }
 
     func testOwnerCheckCapabilityErrorsDoNotCountAsDenials() {
         let unavailable = RoomStore.ownerCheckOutcome(available: false, errorCode: LAError.biometryNotAvailable.rawValue, passed: false)
-        guard case .failed(let noCapability)? = unavailable else { return XCTFail("Expected unavailable") }
+        guard case .failed(let noCapability) = unavailable else { return XCTFail("Expected unavailable") }
         XCTAssertEqual(noCapability.reason, EffectReason.unavailable)
 
         let noPasscode = RoomStore.ownerCheckOutcome(available: false, errorCode: LAError.passcodeNotSet.rawValue, passed: false)
-        guard case .owner(let ownerNoPasscode)? = noPasscode else { return XCTFail("Expected no-passcode owner result") }
+        guard case .owner(let ownerNoPasscode) = noPasscode else { return XCTFail("Expected no-passcode owner result") }
         XCTAssertTrue(ownerNoPasscode.noPasscode)
 
         let denial = RoomStore.ownerCheckOutcome(available: true, errorCode: LAError.authenticationFailed.rawValue, passed: false)
-        guard case .owner(let ownerDenied)? = denial else { return XCTFail("Expected an owner denial") }
+        guard case .owner(let ownerDenied) = denial else { return XCTFail("Expected an owner denial") }
         XCTAssertFalse(ownerDenied.passed)
         XCTAssertFalse(ownerDenied.cancelled)
 
         let cancel = RoomStore.ownerCheckOutcome(available: true, errorCode: LAError.userCancel.rawValue, passed: false)
-        guard case .owner(let ownerCancelled)? = cancel else { return XCTFail("Expected cancellation") }
+        guard case .owner(let ownerCancelled) = cancel else { return XCTFail("Expected cancellation") }
         XCTAssertTrue(ownerCancelled.cancelled)
     }
 
@@ -749,7 +764,7 @@ final class RoomStoreTests: XCTestCase {
     }
 
     private func roomEffects() -> [Centraid_Core_V1_ShellEffect] {
-        [
+        let effects: [Centraid_Core_V1_ShellEffect] = [
             .with { $0.kind = .storeRead(.init()) },
             .with { $0.kind = .phoneWatch(.init()) },
             .with { $0.kind = .openSettings(.init()) },
@@ -764,7 +779,8 @@ final class RoomStoreTests: XCTestCase {
             .with { $0.kind = .photoDelete(.init()) },
             .with { $0.kind = .modelDownload(.init()) },
             .with { $0.kind = .permissionStatus(.init()) },
-        ].enumerated().map { index, effect in
+        ]
+        return effects.enumerated().map { index, effect in
             var identified = effect
             identified.effectID = UInt64(index + 1)
             return identified
@@ -808,6 +824,7 @@ private actor RoomEffectTestCore: ScreenCore {
     private let failShareIn: Bool
     private var appearance: String?
     private var stageCount = 0
+    private var stageVerbs: [String] = []
     private var followTriggers = 0
 
     init(followSentence: String? = nil, appearance: String? = nil, failShareIn: Bool = false) {
@@ -836,11 +853,14 @@ private actor RoomEffectTestCore: ScreenCore {
             var answer = Centraid_Core_V1_StageResponse()
             switch stage.kind {
             case .begin?:
+                stageVerbs.append("begin")
                 answer.kind = .begun(.with { $0.stagingID = "stage-fixture"; $0.chunkBytes = 1024 })
             case .chunk?:
+                stageVerbs.append("chunk")
                 answer.kind = .chunked(.with { $0.received = 1 })
             case .end?:
-                answer.kind = .handle(.with { $0.contentHash = Data(repeating: 0x11, count: 32); $0.byteSize = 19 })
+                stageVerbs.append("end")
+                answer.kind = .handle(.with { $0.contentHash = String(repeating: "1", count: 64); $0.byteSize = 19 })
             default:
                 break
             }
@@ -879,6 +899,8 @@ private actor RoomEffectTestCore: ScreenCore {
     func setAppearance(_ value: String?) { appearance = value }
 
     func stageRequestCount() -> Int { stageCount }
+
+    func stageRequestVerbs() -> [String] { stageVerbs }
 
     func followTriggerCount() -> Int { followTriggers }
 
