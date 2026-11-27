@@ -8,8 +8,6 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
-import "centraid/core/v1/kit_screens.proto";
-import "centraid/core/v1/route.proto";
 
 message HomeSearchChrome {
   string placeholder = 1;

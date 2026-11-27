@@ -1,0 +1,23 @@
+room home key="home"
+  header title="My vault"
+    key verb sym="Settings" "Settings" #tile/settings
+  band search=#band/search
+    tab "Home" sym="Home" selected #tab/home
+    tab "Chat" sym="NewChat" #tab/chat
+    tab "Backup" sym="Backup" #tab/backup
+  ready
+    prose "Nothing in here yet. Start with what this phone already holds."
+    glance "Calendar" #tile/calendar
+      line "Import your calendar"
+    glance "Reminders" #tile/reminders
+      line "Import your reminders"
+    glance "Photos" #tile/photos
+      line "Import your camera roll"
+    tiles
+      tile "Money" subtitle="Import a statement" glyph="Coin" #tile/money
+      tile "Health" subtitle="Connect Apple Health" glyph="Heart" #tile/health
+      tile "People" subtitle="Import contacts" glyph="Users" #tile/people
+      tile "Locker" subtitle="Set up Locker" glyph="Lock" #tile/locker
+      tile "Notes" subtitle="Write your first note" glyph="Journal" #tile/notes
+      tile "Docs" subtitle="Add a document" glyph="FileText" #tile/docs
+  search placeholder="Search everything" #search

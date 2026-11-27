@@ -5,11 +5,12 @@ use rand::RngCore as _;
 use serde_json::{Map, Value, json};
 
 use super::blocks::{self, Confirm, glyph};
+use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::{Act, Handler, Sel};
-use crate::strings::{Locale, fill, locker as words, shared};
+use crate::strings::{Locale, fill, home as home_words, locker as words, shared};
 
 pub const LOCKER: &str = "locker";
 pub const STARRED: &str = "locker/starred";
@@ -322,15 +323,33 @@ impl RoomScreen for LockerItemsRoom {
                 "Lock",
                 Handler::Tag("locker:unlock".to_owned()),
             );
-            let wall = blocks::wall(
-                &words::wall_title(EN),
-                &words::wall_body(EN),
-                unlock,
-                &self.unlock_failure,
-            );
+            let first_use = !first::holds(b, "locker_item");
+            let wall = if first_use {
+                let confirm = wire::RoomAction {
+                    label: home_words::locker_step_one_action(EN),
+                    ..unlock
+                };
+                blocks::wall(
+                    &home_words::locker_step_one_title(EN),
+                    &home_words::locker_step_one_body(EN),
+                    confirm,
+                    &self.unlock_failure,
+                )
+            } else {
+                blocks::wall(
+                    &words::wall_title(EN),
+                    &words::wall_body(EN),
+                    unlock,
+                    &self.unlock_failure,
+                )
+            };
             return room(wire::RoomKind::AppPlace, LOCKER)
                 .title(&words::title(EN))
-                .subtitle(&words::locked_subtitle(EN))
+                .subtitle(&if first_use {
+                    home_words::locker_step_one(EN)
+                } else {
+                    words::locked_subtitle(EN)
+                })
                 .secure()
                 .band(locker_band(&mut b.sel, LOCKER, false))
                 .ready(vec![wall])
@@ -372,11 +391,13 @@ impl RoomScreen for LockerItemsRoom {
             })
             .collect();
 
+        let filtered_empty_first =
+            filtered.is_empty() && term.is_empty() && self.filter_type.is_none();
         let blocks_out = if filtered.is_empty() {
             vec![blocks::empty(
                 glyph("Lock", "app.locker"),
-                &words::items_empty_title(EN),
-                &words::items_empty_body(EN),
+                &home_words::locker_step_two_title(EN),
+                &home_words::locker_step_two_body(EN),
                 Some(blocks::action(
                     &mut b.sel,
                     "empty/add",
@@ -429,7 +450,11 @@ impl RoomScreen for LockerItemsRoom {
 
         room(wire::RoomKind::AppPlace, LOCKER)
             .title(&words::title(EN))
-            .subtitle(&words::unlocked_subtitle(EN))
+            .subtitle(&if filtered_empty_first {
+                home_words::locker_step_two(EN)
+            } else {
+                words::unlocked_subtitle(EN)
+            })
             .secure()
             .filter(&mut b.sel, filter_menu, b.ui)
             .key(

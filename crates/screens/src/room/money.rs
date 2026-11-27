@@ -8,11 +8,12 @@ use serde_json::{Map, Value, json};
 use super::blocks::{self, Confirm, glyph};
 use super::door::Door;
 use super::field::Fields;
+use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::{Act, Handler, Sel};
-use crate::strings::{Locale, fill, money as words, shared};
+use crate::strings::{Locale, fill, home as home_words, money as words, shared};
 
 pub const MONEY: &str = "money";
 pub const SPENDING: &str = "money/spending";
@@ -684,17 +685,20 @@ impl RoomScreen for ActivityRoom {
                     None,
                 )]
             } else {
-                vec![blocks::empty(
-                    glyph("Coin", "app.money"),
-                    &words::empty_title(EN),
-                    &words::empty_body(EN),
-                    Some(blocks::action(
-                        &mut b.sel,
-                        "empty/import",
-                        &words::empty_action(EN),
-                        "Upload",
-                        Handler::Open(IMPORT_CSV.to_owned()),
-                    )),
+                vec![first::first_open(
+                    b,
+                    first::FirstOpen {
+                        app: "money",
+                        icon: "Coin",
+                        hue: "app.money",
+                        sentence: home_words::first_open_money(EN),
+                        action: Some((
+                            Handler::Open(IMPORT_CSV.to_owned()),
+                            words::empty_action(EN),
+                        )),
+                        tail: first::Tail::None,
+                        refused: None,
+                    },
                 )]
             }
         } else {

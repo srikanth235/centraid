@@ -5,11 +5,12 @@ use serde_json::{Map, Value, json};
 
 use super::blocks::{self, Confirm, glyph};
 use super::door::Door;
+use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::{Act, Handler, Sel};
-use crate::strings::{Locale, fill, reminders as words, shared};
+use crate::strings::{Locale, fill, home as home_words, reminders as words, shared};
 
 pub const REMINDERS: &str = "reminders";
 pub const NEW_TASK: &str = "reminders/new";
@@ -392,7 +393,41 @@ impl RoomScreen for RemindersRoot {
             .collect();
 
         let mut content = vec![smart_choice];
-        if filtered.is_empty() {
+        if filtered.is_empty() && !first::holds(b, "task") {
+            let by_hand = !b.door.reminders_source();
+            let refused = (!by_hand && b.door.permission_refused("reminders")).then(|| {
+                (
+                    home_words::refused_reminders_title(EN),
+                    home_words::refused_reminders_body(EN),
+                )
+            });
+            let card = if by_hand {
+                first::FirstOpen {
+                    app: "reminders",
+                    icon: "Check",
+                    hue: "",
+                    sentence: home_words::first_open_reminders_by_hand(EN),
+                    action: None,
+                    tail: first::Tail::Write,
+                    refused: None,
+                }
+            } else {
+                first::FirstOpen {
+                    app: "reminders",
+                    icon: "Check",
+                    hue: "",
+                    sentence: home_words::first_open_reminders(EN),
+                    action: Some((
+                        Handler::Tag(format!("{}reminders", first::IMPORT_TAG)),
+                        home_words::first_open_import_reminders(EN),
+                    )),
+                    tail: first::Tail::OrWrite,
+                    refused,
+                }
+            };
+            let card = first::first_open(b, card);
+            content.push(card);
+        } else if filtered.is_empty() {
             let body = match smart.as_str() {
                 "completed" => words::empty_completed_body(EN),
                 "starred" => words::empty_starred_body(EN),

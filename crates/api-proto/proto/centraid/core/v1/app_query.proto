@@ -38,8 +38,6 @@ package centraid.core.v1;
 
 import "centraid/core/v1/backup_screens.proto";
 import "centraid/core/v1/chat.proto";
-import "centraid/core/v1/imports_screens.proto";
-import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/vault_screens.proto";
 
 message AppQueryRequest {

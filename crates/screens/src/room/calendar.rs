@@ -5,11 +5,12 @@ use serde_json::{Map, Value, json};
 
 use super::blocks::{self, Confirm, glyph};
 use super::door::Door;
+use super::first;
 use super::form::{self, Explicit, Save};
 use super::frame::{self, room};
 use super::screen::{Build, Event, Input, Outcome, Registry, RoomScreen};
 use super::selector::{Act, Handler};
-use crate::strings::{Locale, calendar as words, fill, shared};
+use crate::strings::{Locale, calendar as words, fill, home as home_words, shared};
 
 pub const CALENDAR: &str = "calendar";
 pub const CALENDARS: &str = "calendar/calendars";
@@ -617,6 +618,30 @@ impl RoomScreen for CalendarRoot {
                     .blocks(overdue_rows)
                     .into_block(),
             );
+        }
+        if !first::holds(b, "event") {
+            let refused = b.door.permission_refused("calendar").then(|| {
+                (
+                    home_words::refused_calendar_title(EN),
+                    home_words::refused_calendar_body(EN),
+                )
+            });
+            let card = first::first_open(
+                b,
+                first::FirstOpen {
+                    app: "calendar",
+                    icon: "Calendar",
+                    hue: "",
+                    sentence: home_words::first_open_calendar(EN),
+                    action: Some((
+                        Handler::Tag(format!("{}calendar", first::IMPORT_TAG)),
+                        home_words::first_open_import_calendar(EN),
+                    )),
+                    tail: first::Tail::OrWrite,
+                    refused,
+                },
+            );
+            content.push(card);
         }
         content.push(grid);
 

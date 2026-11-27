@@ -1,0 +1,24 @@
+room app_place key="health"
+  header title="Health" subtitle="2026-06-15"
+    key tool sym="ChevronLeft" "Previous day" #key/prev
+    key add sym="Edit" "Edit figures" #key/edit
+  band home=#band/home more=#band/more
+    tab "Summary" sym="Heart" selected #tab/summary
+    tab "Workouts" sym="Activity" #tab/workouts
+    tab "Vitals" sym="Pulse" #tab/vitals
+    menu #band/more/menu
+      section
+        item "Follow Health" #more/follow-health
+        item "Workout kinds" #more/kinds
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    choice chips "Summary" #choice/metric
+      option "Steps" id="steps" selected
+      option "Sleep" id="sleep_min"
+      option "Active energy" id="active_energy_kcal"
+      option "Exercise" id="exercise_min"
+      option "Resting heart rate" id="resting_hr_bpm"
+    chart #chart/summary summary="Steps over the last 14 days" empty="No Steps figures yet."
+    empty glyph="Heart" body="Steps, sleep and workouts, read from Apple Health."
+      action "Connect Apple Health" #first/health/action

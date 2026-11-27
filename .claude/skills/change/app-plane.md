@@ -4,6 +4,8 @@ The one interface between the vault, the core, the assistant and both shells. A 
 
 **Built.** The app plane is built end to end: the vault below ([`crates/vault`](../../../crates/vault), [`001_baseline.sql`](../../../contracts/migrations/001_baseline.sql), [`vault-commands.txt`](../../../contracts/schema/vault-commands.txt)); the declaration layer ([`crates/domain`](../../../crates/domain): read registry in sections 2–3, action catalogue in section 4, kind registry in section 8, and the chat census in section 7, held by the registry and census tests); the core services (reads, actions, draft service, notification scheduler, device store with its key registry, and widget snapshots); the room builders, room runtime and rooms for Home, Chat, Settings, Backup and all nine apps ([`crates/screens/src/room`](../../../crates/screens/src/room)); and the blocks and four canvases in both shells (iOS SwiftUI and Android Compose).
 
+**Day one** is in [`room/first.rs`](../../../crates/screens/src/room/first.rs): a founded vault with nothing of the member's opens the `welcome` room (a Stage) until Get started writes the device key `welcome.seen`; Home then shows one layout at every stage, each empty widget teaching with its own line, and every app's root shows one `first_open` card. The import and Open Settings buttons send `import:<store>` and `open_settings:<store>`, which the runtime answers through the door's `enrol_store` and `open_settings`; `permission_refused(store)` is what a refusal reads. (target) The core's door does not yet implement those three, nor tell the room plane the platform (`reminders_source` stands in for iOS), and no starter note is seeded.
+
 ## 1. Who owns what
 
 | Layer | Owns |

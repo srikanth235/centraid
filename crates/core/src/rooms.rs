@@ -34,6 +34,11 @@ pub trait RoomCtx {
     /// The store cannot be opened.
     fn device(&self) -> Result<std::sync::Arc<crate::device::Checked<crate::device::DirStore>>>;
 
+    /// Whether this phone has a Reminders store to import from (iOS does, Android has none).
+    fn reminders_source(&self) -> bool {
+        true
+    }
+
     /// What a draft is kept under for the vault in front.
     fn vault_id(&self) -> String;
 

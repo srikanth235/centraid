@@ -53,12 +53,6 @@ pub fn registry() -> Registry {
         .merge(super::home::registry())
 }
 
-pub(super) fn backup_line_status(door: &dyn super::door::Door) -> String {
-    the_line(door)
-        .map(|(line, ..)| line.status)
-        .unwrap_or_default()
-}
-
 fn stored(build: &Build<'_>, key: &str, default: &str) -> String {
     build
         .door
@@ -87,7 +81,7 @@ fn status_of(door: &dyn super::door::Door) -> Result<wire::BackupStatusResponse,
     }
 }
 
-fn the_line(
+pub(super) fn the_line(
     door: &dyn super::door::Door,
 ) -> Result<(wire::BackupLine, reading::Reading, i64), String> {
     let status = status_of(door)?;

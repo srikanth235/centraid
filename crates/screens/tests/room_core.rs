@@ -98,16 +98,20 @@ fn a_shell_opens_settings_by_key_and_a_pick_lands_in_the_device_store() {
     let dir = tempfile::tempdir().unwrap();
     let handle = phone(dir.path());
 
-    let home = open(&handle, "home", "home", true);
-    assert_eq!(home.depth, 1);
-    let room = home.room.as_ref().unwrap();
-    assert_eq!(room.kind, wire::RoomKind::Home as i32);
-
     let tap = |id: &str| {
         wire::room_event::Kind::Tap(wire::RoomTap {
             selector_id: id.to_owned(),
         })
     };
+    let welcome = open(&handle, "home", "home", true);
+    let welcome_room = welcome.room.as_ref().unwrap();
+    assert_eq!(welcome_room.kind, wire::RoomKind::Stage as i32);
+    assert_eq!(welcome_room.key, "welcome");
+    let home = send(&handle, welcome.instance, tap("welcome/start")).remove(0);
+    assert_eq!(home.depth, 1);
+    let room = home.room.as_ref().unwrap();
+    assert_eq!(room.kind, wire::RoomKind::Home as i32);
+
     let settings = send(&handle, home.instance, tap("tile/settings")).remove(0);
     assert_eq!(settings.depth, 2);
     assert_eq!(settings.transition, wire::RoomTransition::Push as i32);
