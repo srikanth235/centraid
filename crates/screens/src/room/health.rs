@@ -476,7 +476,7 @@ impl RoomScreen for SummaryRoom {
                     icon: "Heart",
                     hue: "app.health",
                     sentence,
-                    action: Some((Handler::Tag(format!("{}health", first::IMPORT_TAG)), label)),
+                    action: Some((first::import("health"), label)),
                     tail: first::Tail::None,
                     refused: None,
                 },

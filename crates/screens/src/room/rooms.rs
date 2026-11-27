@@ -431,14 +431,13 @@ fn dispatch(entry: &mut Entry, selector: &str, input: &Input, door: &dyn Door) -
 }
 
 fn own(entry: &mut Entry, tag: &str, input: &Input, door: &dyn Door) -> Then {
-    let outcome: Outcome = if let Some(outcome) = super::first::door_event(door, tag) {
-        outcome
-    } else {
+    let outcome: Outcome = {
         let mut event = Event {
             ui: &mut entry.ui,
             door,
         };
-        entry.screen.on(&mut event, tag, input)
+        super::follow::handle(&mut event, tag)
+            .unwrap_or_else(|| entry.screen.on(&mut event, tag, input))
     };
     if let Some(status) = outcome.status {
         entry.status = Some(status);

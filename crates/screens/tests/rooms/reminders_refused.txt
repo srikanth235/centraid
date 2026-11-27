@@ -5,7 +5,8 @@ room app_place key="reminders"
     tab "Reminders" sym="Check" selected #tab/reminders
     menu #band/more/menu
       section
-        item "Follow Reminders" #more/follow-reminders
+        item "Reminders is off" secondary="Reminders access is off. Turn it on in Settings." #more/follow-reminders
+        item "Follow Reminders" #more/follow-reminders-again
         item "Export" #more/export
         item "Trash" secondary="30 days, then erased" #more/trash
   ready

@@ -14,7 +14,7 @@ use super::selector::{Act, Handler, Sel};
 use crate::strings::{Locale, fill, home as home_words, people as words, shared};
 
 fn people_first_card(b: &mut Build<'_>) -> wire::RoomBlock {
-    let refused = b.door.permission_refused("people").then(|| {
+    let refused = first::refused(b.door, "people").then(|| {
         (
             home_words::refused_contacts_title(EN),
             home_words::refused_contacts_body(EN),
@@ -28,7 +28,7 @@ fn people_first_card(b: &mut Build<'_>) -> wire::RoomBlock {
             hue: "",
             sentence: home_words::first_open_people(EN),
             action: Some((
-                Handler::Tag(format!("{}people", first::IMPORT_TAG)),
+                first::import("people"),
                 home_words::first_open_import_contacts(EN),
             )),
             tail: first::Tail::OrAdd,

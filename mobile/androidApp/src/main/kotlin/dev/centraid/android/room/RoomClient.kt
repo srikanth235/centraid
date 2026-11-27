@@ -3,6 +3,9 @@ package dev.centraid.android.room
 import centraid.core.v1.DeviceGet
 import centraid.core.v1.DeviceRequest
 import centraid.core.v1.Envelope
+import centraid.core.v1.FollowGrant
+import centraid.core.v1.FollowRequest
+import centraid.core.v1.FollowVerb
 import centraid.core.v1.Request
 import centraid.core.v1.RoomCanvasEvent
 import centraid.core.v1.RoomChange
@@ -14,6 +17,9 @@ import centraid.core.v1.RoomSend
 import centraid.core.v1.RoomShown
 import centraid.core.v1.RoomTap
 import centraid.core.v1.RoomTransition
+import centraid.core.v1.ShellEffect
+import centraid.core.v1.ShellEffectResult
+import centraid.core.v1.ShellFailed
 import centraid.core.v1.ShareInRequest
 import centraid.core.v1.ShareInResponse
 import dev.centraid.core.CentraidCore
@@ -44,6 +50,7 @@ internal class RoomClient(
     fun attach(): Job = scope.launch {
         core.events.collect { event ->
             event.room?.let(::applyShown)
+            event.effect?.let(::declineCoreEffect)
         }
     }
 
@@ -73,7 +80,7 @@ internal class RoomClient(
                     ),
                 ),
             )
-            applyResponse(outcome)
+            applyResponse(outcome, asker = null)
         }
 
     suspend fun send(instance: Long, event: RoomEvent): CoreOutcome<Unit> =
@@ -86,7 +93,7 @@ internal class RoomClient(
                     ),
                 ),
             )
-            val result = applyResponse(outcome)
+            val result = applyResponse(outcome, asker = instance)
             if (event.change?.selector_id == "choice/appearance") {
                 loadAppearance()
             }
@@ -137,13 +144,49 @@ internal class RoomClient(
         selectedTab.value = tab
     }
 
-    private fun applyResponse(outcome: CoreOutcome<Envelope>): CoreOutcome<Unit> = when (outcome) {
+    private fun applyResponse(outcome: CoreOutcome<Envelope>, asker: Long?): CoreOutcome<Unit> = when (outcome) {
         is CoreOutcome.Failed -> outcome
         is CoreOutcome.Answered -> {
-            outcome.value.response?.room?.shown.orEmpty().forEach(::applyShown)
+            val room = outcome.value.response?.room
+            room?.shown.orEmpty().forEach(::applyShown)
+            val effects = room?.effects.orEmpty()
+            val instance = asker ?: room?.shown?.lastOrNull()?.instance
+            if (effects.isNotEmpty() && instance != null) declineRoomEffects(instance, effects)
             CoreOutcome.Answered(Unit)
         }
     }
+
+    private fun declineRoomEffects(instance: Long, effects: List<ShellEffect>) {
+        scope.launch {
+            effects.forEach { effect ->
+                send(instance, RoomEvent(effect_result = unavailable(effect.effect_id)))
+            }
+        }
+    }
+
+    private fun declineCoreEffect(effect: ShellEffect) {
+        if (effect.store_read == null) return
+        scope.launch {
+            core.call(
+                Envelope(
+                    request_id = 0,
+                    request = Request(
+                        follow = FollowRequest(
+                            verb = FollowVerb.FOLLOW_VERB_PASS,
+                            system = effect.store_read!!.system,
+                            ask_id = effect.effect_id,
+                            grant = FollowGrant.FOLLOW_GRANT_UNAVAILABLE,
+                        ),
+                    ),
+                ),
+            )
+        }
+    }
+
+    private fun unavailable(effectId: Long) = ShellEffectResult(
+        effect_id = effectId,
+        failed = ShellFailed(grant = FollowGrant.FOLLOW_GRANT_UNAVAILABLE, reason = "unavailable"),
+    )
 
     private fun applyShown(shown: RoomShown) {
         val tab = shown.tab.ifEmpty { DEFAULT_TAB }

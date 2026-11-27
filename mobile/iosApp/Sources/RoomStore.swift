@@ -54,6 +54,7 @@ final class RoomStore: ObservableObject {
         open.key = key
         open.tab = tab
         open.root = root
+        open.platform = "ios"
         var roomReq = Centraid_Core_V1_RoomRequest()
         roomReq.kind = .open(open)
         await sendRoomRequest(roomReq)

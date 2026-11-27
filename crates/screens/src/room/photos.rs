@@ -492,7 +492,7 @@ impl RoomScreen for LibraryPage {
                     Handler::Tag("add:photo".to_owned()),
                 );
                 let _ = add;
-                let refused = b.door.permission_refused("photos").then(|| {
+                let refused = first::refused(b.door, "photos").then(|| {
                     (
                         home_words::refused_photos_title(EN),
                         home_words::refused_photos_body(EN),
@@ -506,7 +506,7 @@ impl RoomScreen for LibraryPage {
                         hue: "photos",
                         sentence: home_words::first_open_photos(EN),
                         action: Some((
-                            Handler::Tag(format!("{}photos", first::IMPORT_TAG)),
+                            first::import("photos"),
                             home_words::first_open_import_photos(EN),
                         )),
                         tail: first::Tail::OrAdd,
