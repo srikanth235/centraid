@@ -112,6 +112,7 @@
   --shadow-card: rgba(0,0,0,0.08);
   --shadow-deep: rgba(20,20,20,0.5);
   --shadow-flat: rgba(0,0,0,0.12);
+  --shadow-lift: rgba(0,0,0,0.14);
   --shadow-sheet: rgba(0,0,0,0.10);
   --shadow-text: rgba(0,0,0,0.4);
   --stroke-paper: #D8D3CA;
@@ -272,6 +273,7 @@
   --shadow-card: rgba(0,0,0,0.5);
   --shadow-deep: rgba(20,20,20,0.5);
   --shadow-flat: rgba(0,0,0,0.12);
+  --shadow-lift: rgba(0,0,0,0.5);
   --shadow-sheet: rgba(0,0,0,0.5);
   --shadow-text: rgba(0,0,0,0.5);
   --stroke-paper: #C9C2B6;
