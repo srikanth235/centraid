@@ -290,14 +290,16 @@ impl Door for Silent {
         self.inner.reader()
     }
 
-    fn enrol_store(&self, store: &str) -> Result<Done, Refused> {
-        self.asked.lock().unwrap().push(format!("enrol {store}"));
-        Err(Refused("asked".to_owned()))
-    }
-
-    fn open_settings(&self, store: &str) -> Result<Done, Refused> {
-        self.asked.lock().unwrap().push(format!("settings {store}"));
-        Err(Refused("asked".to_owned()))
+    fn call(&self, request: &wire::Request) -> Result<wire::Response, Refused> {
+        if let Some(wire::request::Kind::Follow(follow)) = &request.kind
+            && follow.verb != wire::FollowVerb::Status as i32
+        {
+            self.asked
+                .lock()
+                .unwrap()
+                .push(format!("follow {} {}", follow.system, follow.verb));
+        }
+        self.inner.call(request)
     }
 }
 
