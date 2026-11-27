@@ -38,7 +38,6 @@ import "centraid/core/v1/notify_screens.proto";
 import "centraid/core/v1/route.proto";
 import "centraid/core/v1/vault_screens.proto";
 import "centraid/core/v1/shell_home_screens.proto";
-import "centraid/core/v1/shell_search_screens.proto";
 import "centraid/core/v1/shell_settings_screens.proto";
 
 // ---------------------------------------------------------------------------
