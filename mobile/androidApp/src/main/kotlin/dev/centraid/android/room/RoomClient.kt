@@ -3,9 +3,6 @@ package dev.centraid.android.room
 import centraid.core.v1.DeviceGet
 import centraid.core.v1.DeviceRequest
 import centraid.core.v1.Envelope
-import centraid.core.v1.FollowGrant
-import centraid.core.v1.FollowRequest
-import centraid.core.v1.FollowVerb
 import centraid.core.v1.Request
 import centraid.core.v1.RoomCanvasEvent
 import centraid.core.v1.RoomChange
@@ -18,12 +15,11 @@ import centraid.core.v1.RoomShown
 import centraid.core.v1.RoomTap
 import centraid.core.v1.RoomTransition
 import centraid.core.v1.ShellEffect
-import centraid.core.v1.ShellEffectResult
-import centraid.core.v1.ShellFailed
 import centraid.core.v1.ShareInRequest
 import centraid.core.v1.ShareInResponse
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
+import dev.centraid.core.ShellEffectAnswers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -159,34 +155,17 @@ internal class RoomClient(
     private fun declineRoomEffects(instance: Long, effects: List<ShellEffect>) {
         scope.launch {
             effects.forEach { effect ->
-                send(instance, RoomEvent(effect_result = unavailable(effect.effect_id)))
+                send(instance, ShellEffectAnswers.roomResult(effect))
             }
         }
     }
 
     private fun declineCoreEffect(effect: ShellEffect) {
-        if (effect.store_read == null) return
+        val answer = ShellEffectAnswers.coreAnswer(effect) ?: return
         scope.launch {
-            core.call(
-                Envelope(
-                    request_id = 0,
-                    request = Request(
-                        follow = FollowRequest(
-                            verb = FollowVerb.FOLLOW_VERB_PASS,
-                            system = effect.store_read!!.system,
-                            ask_id = effect.effect_id,
-                            grant = FollowGrant.FOLLOW_GRANT_UNAVAILABLE,
-                        ),
-                    ),
-                ),
-            )
+            core.call(Envelope(request_id = 0, request = Request(follow = answer)))
         }
     }
-
-    private fun unavailable(effectId: Long) = ShellEffectResult(
-        effect_id = effectId,
-        failed = ShellFailed(grant = FollowGrant.FOLLOW_GRANT_UNAVAILABLE, reason = "unavailable"),
-    )
 
     private fun applyShown(shown: RoomShown) {
         val tab = shown.tab.ifEmpty { DEFAULT_TAB }
