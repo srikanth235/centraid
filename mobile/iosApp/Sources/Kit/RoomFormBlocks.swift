@@ -208,6 +208,7 @@ private struct RoomMomentField: View {
                 )
                 .kitType(.row)
                 .foregroundStyle(Surface.ink)
+                .accessibilityLabel(label)
                 .accessibilityIdentifier(selectorID)
 
                 if moment.clearable, !moment.value.isEmpty {
@@ -250,7 +251,7 @@ private struct RoomPickField: View {
             if !label.isEmpty {
                 Text(label)
                     .kitType(.meta)
-                    .foregroundStyle(Surface.meta)
+                    .foregroundStyle(Surface.body)
             }
             HStack(spacing: 8) {
                 Button { onTap(selectorID) } label: {
@@ -372,7 +373,7 @@ private struct RoomRepeatView: View {
             if !repeatGroup.label.isEmpty {
                 Text(repeatGroup.label)
                     .kitType(.group)
-                    .foregroundStyle(Surface.meta)
+                    .foregroundStyle(Surface.body)
                     .padding(.horizontal, CentraidGeometry.pageMargin)
             }
             ForEach(Array(repeatGroup.rows.enumerated()), id: \.offset) { _, group in

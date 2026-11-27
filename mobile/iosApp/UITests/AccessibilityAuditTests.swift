@@ -241,7 +241,7 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.el("key/add").waitForExistence(timeout: 10))
         expectOrder(
             try readingOrder(app),
-            ["^Reminders$", "^New reminder$", "^Today", "^Scheduled", "^All", "^Starred", "^Completed", "^My Lists", "^Home$", "^Reminders$", "^More$"],
+            ["^Reminders$", "^New reminder$", "^Today", "^Scheduled", "^All", "^Starred", "^Completed", "^My Lists", "^Home$", "^Reminders, current place$", "^More$"],
             flow: "reminders room"
         )
     }
@@ -264,7 +264,7 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.el("wall/unlock").waitForExistence(timeout: 10))
         expectOrder(
             try readingOrder(app),
-            ["^Locker$", "Locker is locked", "Unlock Locker", "^Home$", "^Items$", "^Starred$", "^More$"],
+            ["^Locker$", "Locker is locked", "Unlock Locker", "^Home$", "^Items, current place$", "^Starred$", "^More$"],
             flow: "Locker unlock wall"
         )
     }

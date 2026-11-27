@@ -84,7 +84,9 @@ test -f "$container/Documents/demo-vault/vault.db" || { echo "error: demo vault 
 xcrun simctl terminate "$simulator" dev.centraid.Centraid || true
 documents_listing
 ui_status=0
+mkdir -p "$artifacts/screenshots/pages"
 TEST_RUNNER_CENTRAID_DEV_SEED="$CENTRAID_DEV_SEED" \
+TEST_RUNNER_CENTRAID_UI_PROOF_DIR="$artifacts/screenshots/pages" \
   xcodebuild -project Centraid.xcodeproj -scheme Centraid \
   -destination "$destination" -derivedDataPath "$artifacts/app-derived-data" \
   -resultBundlePath "$artifacts/CentraidUITests.xcresult" \
@@ -121,6 +123,7 @@ xcrun simctl bootstatus "$simulator" -b >/dev/null
 status=0
 TEST_RUNNER_CENTRAID_DEV_SEED="$CENTRAID_DEV_SEED" \
 TEST_RUNNER_CENTRAID_UI_SYSTEM_SETTINGS=reduce-motion \
+TEST_RUNNER_CENTRAID_UI_PROOF_DIR="$artifacts/screenshots/pages" \
   xcodebuild -project Centraid.xcodeproj -scheme Centraid \
   -destination "$destination" -derivedDataPath "$artifacts/app-derived-data" \
   -resultBundlePath "$artifacts/CentraidSystemSettings.xcresult" \

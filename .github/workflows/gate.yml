@@ -69,6 +69,17 @@ jobs:
             -derivedDataPath ../../target/ios-verification/device-derived-data \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build \
             2>&1 | tee ../../target/ios-verification/centraid-device-build.log
+      - name: Upload iOS screenshots and readable logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ios-review
+          path: |
+            target/ios-verification/*.log
+            target/ios-verification/screenshots/**/*.png
+            target/ios-verification/screenshots/manifest.json
+          retention-days: 7
+          if-no-files-found: warn
       - name: Upload iOS compiler and test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

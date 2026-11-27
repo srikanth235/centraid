@@ -528,7 +528,23 @@ private struct RoomFilterButton: View {
             )
         }
         .accessibilityIdentifier(filter.hasMenu ? filter.menu.selectorID : "room-filter-menu")
+        .accessibilityLabel(filterAccessibilityLabel)
         .headerKeyTarget()
+    }
+
+    /// The menu's section headings are core-authored and describe the choices
+    /// this control opens (for example, the calendar's view selector).
+    private var filterAccessibilityLabel: String {
+        let headings = filter.menu.sections
+            .map(\.heading)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if !headings.isEmpty {
+            return headings.joined(separator: ", ")
+        }
+        return filter.menu.sections
+            .flatMap(\.items)
+            .first(where: { !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?
+            .label ?? KitWords.SELECT
     }
 }
 
@@ -737,7 +753,10 @@ private struct RoomBandBar: View {
         identifier: String,
         action: @escaping () -> Void
     ) -> some View {
-        let ink = selected ? Surface.ink : Surface.meta
+        // Room tabs sit over translucent glass, so both states use the semantic
+        // full-contrast ink. Selection is conveyed by weight and the selected
+        // accessibility trait rather than a low-contrast label colour.
+        let ink = Surface.ink
         return Button(action: action) {
             VStack(spacing: BandMetrics.labelGap) {
                 CentraidIconView(

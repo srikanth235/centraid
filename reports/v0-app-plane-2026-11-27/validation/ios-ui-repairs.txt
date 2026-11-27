@@ -1,0 +1,12 @@
+Prepared repairs after the actual 50510fd0b simulator audit
+
+Native shared font resolver: preserve token faces/sizes, expose relative SwiftUI text styles; navigation labels retain the existing fixed-size rule.
+Filter and input controls: expose core-provided labels; Notes canvas labels are generated from the existing Rust notes catalogue through KitWords. No protocol selector is spoken as member copy.
+Forms: stronger existing semantic ink for captions and placeholders; hide duplicate Money amount from VoiceOver while retaining the formatted input value.
+Calendar: permit the event title to expand vertically.
+Reading-order tests: require the selected-place wording actually spoken for Reminders and Locker Items.
+Evidence upload: retain full result bundles and also upload a smaller logs/screenshots archive; save each audited page for visual diagnosis.
+
+No audit baselines, exemptions, query allowlists or budgets changed. Existing semantic button colors are preserved pending rendered evidence; the supplied audit log does not report measured colors.
+
+Local checks: design_words 6 passed; native_parity 25 passed; xtask all-target Clippy -D warnings passed; generated design drift check passed; bash syntax and actionlint passed. Rules are clean except the explicitly excluded DATA-PIN finding. No Swift compiler or iOS SDK is installed on Linux, so these repairs need the next Mac run.

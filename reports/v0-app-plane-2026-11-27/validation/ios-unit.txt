@@ -1,17 +1,20 @@
 Hosted iOS verification — partial result, not a passing job
 
-Run: https://github.com/srikanth235/centraid/actions/runs/46045372411
-Commit: 5c1b94498abd5e7bbcee890fd5a767b8af9377ad
-iOS job: 140663294315
-Toolchain: Xcode 26.3 / Swift 6.2.4
+Run: https://github.com/srikanth235/centraid/actions/runs/46059161071
+Source: 50510fd0befe4002643d5553d76af652e7064551
+iOS job: 140708923072
 
-Both real llama-enabled Rust targets built successfully. Swift app/test compilation completed and XCTest executed 173 unit tests with 0 failures. The simulator app was installed and launched for the UI suite.
+Both real llama-enabled Rust simulator/device targets passed. Swift app/test compilation passed. XCTest executed 174 unit tests, 0 failures. The unsigned generic iPhone app build passed independently after the UI step failed. No physical iPhone was exercised.
 
-UI outcome: 8 tests, 1 skipped, 18 failures. App taps stayed on Home and the visible error was "This version of Centraid can't do that." The shared Core router was forwarding Room requests from the front shelf to a foreground child without a RoomHost. The Core fix and its regression test are pending verification in a later run. The screenshot helper also used header/add for People/Money, while Rust supplies key/add; that test-only correction is pending the next batch.
+UI suite: 8 tests, 1 expected skip, 87 failures. The full tour opened the app rooms and recorded all ten required native screenshot attachments, so the previous unsupported-navigation failure is corrected. Reported failures include missing input/filter labels, Dynamic Type metadata, contrast, Calendar clipping, two reading-order expectations that omitted the selected-place wording, and one Home audit-service timeout. The separate Reduce Motion pass did not run because the normal UI suite failed.
 
-No required screenshot PNGs were exported. The exported UI Snapshot attachments are plist/debug data, not screenshots. The unsigned generic iPhone app build was skipped after the UI failure. No physical-device or share-extension host-app flow is proved.
+Recorded attachments (both light and dark): calendar_grid, note_editor, people_root, money_root, photo_grid. Attachment creation is confirmed in the native job log; visual review is pending.
 
-Artifact: ios-verification, ID 15224790855, 215318943 bytes.
-Downloaded archive SHA256: 9916cccfa4bb7b95ef23ff9116637273a91468f7a683cc446c43045f666a1e69
-Unit log: target/ios-verification/centraid-tests.log
-UI log: target/ios-verification/centraid-ui-tests.log
+Artifact: ios-verification, ID 15232355859, 832551836 bytes.
+Server-reported archive digest: sha256:b131c06733a28757267182c0d5da8990c7bcbb8472ddb2d5b256a1e819b45caf. This digest was not verified by a local download: the connector limit is 512 MiB and the command sandbox proxy refuses the redirected Azure host. The next workflow also publishes a smaller ios-review archive while retaining the complete raw result archive.
+
+Actual unit log: Executed 174 tests, with 0 failures.
+Actual UI log: Executed 8 tests, with 1 test skipped and 87 failures.
+Actual device log: ** BUILD SUCCEEDED ** at 2026-11-27T21:12:07Z.
+
+Shared native UI repairs are prepared for the next Mac run; these source edits are not yet SDK-verified. Existing audit baselines/exemptions are unchanged. The design rule holding navigation labels at a fixed size is preserved.

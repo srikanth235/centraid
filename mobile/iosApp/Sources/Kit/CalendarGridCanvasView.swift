@@ -661,6 +661,7 @@ struct CalendarGridCanvasView: View {
                         .strikethrough(item.done)
                         .foregroundStyle(item.done ? Surface.meta : Surface.ink)
                         .kitLineLimit(2, wide: 6)
+                        .fixedSize(horizontal: false, vertical: true)
                     if !item.timeLabel.isEmpty {
                         Text(item.timeLabel)
                             .kitType(.meta)

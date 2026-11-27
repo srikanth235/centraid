@@ -22,6 +22,8 @@ public object KitWords {
     public const val DONE: String = "Done"
     public const val FLAG: String = "Flag"
     public const val LOADING_MORE: String = "Loading more"
+    public const val NOTE_EDITOR_TITLE: String = "Title"
+    public const val NOTE_EDITOR_BODY: String = "Note"
     public const val OPEN: String = "Open"
     public const val OPENING: String = "Opening"
     public const val PENDING: String = "Saving"

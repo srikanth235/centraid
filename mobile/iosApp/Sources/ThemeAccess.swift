@@ -119,8 +119,24 @@ private struct CentraidTypeModifier: ViewModifier {
         // token's absolute 22 under a 21pt face.
         let resolved = Theme.resolve(role, scheme, dynamicTypeSize, scales: scales)
         let delta = max(0, resolved.lineHeight - resolved.font.lineHeight)
+        let token = Theme.style(role, scheme)
+        let base = Theme.face(for: token)
+        let font: Font
+        if scales && !Theme.holdsSize(role) {
+            // Keep the custom face and token point size, but attach a native
+            // SwiftUI text style. `Font(uiFont)` renders the UIFontMetrics
+            // result at the right size yet exposes it as a fixed font to the
+            // accessibility inspector, which reports Dynamic Type as missing.
+            font = .custom(
+                base.fontName,
+                size: token.fontSize,
+                relativeTo: Theme.swiftUITextStyle(forPointSize: token.fontSize)
+            )
+        } else {
+            font = Font(base)
+        }
         return content
-            .font(Font(resolved.font))
+            .font(font)
             .lineSpacing(delta)
             .padding(.vertical, delta / 2)
     }
@@ -188,7 +204,7 @@ extension Theme {
         // environment, so the environment's size is handed over as the category
         // it stands for.
         let traits = UITraitCollection(preferredContentSizeCategory: size.contentSizeCategory)
-        let font = UIFontMetrics(forTextStyle: textStyle(forPointSize: token.fontSize))
+        let font = UIFontMetrics(forTextStyle: platformTextStyle(forPointSize: token.fontSize).uiKit)
             .scaledFont(for: base, compatibleWith: traits)
         // The line box keeps its proportion to the face: the token's box times
         // the factor the size grew by.
@@ -202,17 +218,51 @@ extension Theme {
     /// (11, 13, 15, 17, 20, 27, 32) sit on Apple's defaults for these styles
     /// (caption2, footnote, subheadline, body, title3, title1, largeTitle), so a
     /// rung scales as the system's own text of that size does.
-    private static func textStyle(forPointSize size: CGFloat) -> UIFont.TextStyle {
-        switch size {
-        case ..<12: return .caption2
-        case ..<14: return .footnote
-        case ..<16: return .subheadline
-        case ..<18.5: return .body
-        case ..<21: return .title3
-        case ..<25: return .title2
-        case ..<30: return .title1
-        default: return .largeTitle
+    private enum PlatformTextStyle {
+        case caption2, footnote, subheadline, body, title3, title2, title1, largeTitle
+
+        var uiKit: UIFont.TextStyle {
+            switch self {
+            case .caption2: .caption2
+            case .footnote: .footnote
+            case .subheadline: .subheadline
+            case .body: .body
+            case .title3: .title3
+            case .title2: .title2
+            case .title1: .title1
+            case .largeTitle: .largeTitle
+            }
         }
+
+        var swiftUI: Font.TextStyle {
+            switch self {
+            case .caption2: .caption2
+            case .footnote: .footnote
+            case .subheadline: .subheadline
+            case .body: .body
+            case .title3: .title3
+            case .title2: .title2
+            case .title1: .title
+            case .largeTitle: .largeTitle
+            }
+        }
+    }
+
+    private static func platformTextStyle(forPointSize size: CGFloat) -> PlatformTextStyle {
+        switch size {
+        case ..<12: .caption2
+        case ..<14: .footnote
+        case ..<16: .subheadline
+        case ..<18.5: .body
+        case ..<21: .title3
+        case ..<25: .title2
+        case ..<30: .title1
+        default: .largeTitle
+        }
+    }
+
+    static func swiftUITextStyle(forPointSize size: CGFloat) -> Font.TextStyle {
+        platformTextStyle(forPointSize: size).swiftUI
     }
 
     /// THE FACE THE TOKEN ASKS FOR, OR A CRASH — NEVER A QUIET SUBSTITUTE.

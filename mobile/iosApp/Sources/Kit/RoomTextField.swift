@@ -27,12 +27,22 @@ struct RoomTextField: View {
     @State private var sync = RoomTextSync()
     @FocusState private var isFocused: Bool
 
+    private var spokenLabel: String {
+        let visibleLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !visibleLabel.isEmpty { return visibleLabel }
+        return hint.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var accessiblePrompt: Text {
+        Text(hint).foregroundColor(Surface.body)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !label.isEmpty {
                 Text(label)
                     .kitType(.meta)
-                    .foregroundStyle(Surface.meta)
+                    .foregroundStyle(Surface.body)
             }
             if !text.chips.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -44,6 +54,7 @@ struct RoomTextField: View {
                 }
             }
             inputControl
+                .accessibilityLabel(spokenLabel)
                 .focused($isFocused)
                 .kitType(.row)
                 .foregroundStyle(Surface.ink)
@@ -97,26 +108,26 @@ struct RoomTextField: View {
     private var inputControl: some View {
         switch text.kind {
         case .paragraph:
-            TextField(hint, text: $typed, axis: .vertical)
+            TextField("", text: $typed, prompt: accessiblePrompt, axis: .vertical)
                 .lineLimit(3...10)
         case .email:
-            TextField(hint, text: $typed)
+            TextField("", text: $typed, prompt: accessiblePrompt)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
         case .phone:
-            TextField(hint, text: $typed)
+            TextField("", text: $typed, prompt: accessiblePrompt)
                 .keyboardType(.phonePad)
         case .url:
-            TextField(hint, text: $typed)
+            TextField("", text: $typed, prompt: accessiblePrompt)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
         case .number:
-            TextField(hint, text: $typed)
+            TextField("", text: $typed, prompt: accessiblePrompt)
                 .keyboardType(.decimalPad)
         case .line, .unspecified, .UNRECOGNIZED:
-            TextField(hint, text: $typed)
+            TextField("", text: $typed, prompt: accessiblePrompt)
         }
     }
 
@@ -143,13 +154,14 @@ struct RoomMoneyField: View {
             if !label.isEmpty {
                 Text(label)
                     .kitType(.meta)
-                    .foregroundStyle(Surface.meta)
+                    .foregroundStyle(Surface.body)
             }
             ZStack(alignment: .leading) {
                 Text(money.display)
                     .kitType(.section)
                     .monospacedDigit()
                     .foregroundStyle(Surface.ink)
+                    .accessibilityHidden(true)
                 TextField("", text: $digits)
                     .keyboardType(.numberPad)
                     .focused($isFocused)

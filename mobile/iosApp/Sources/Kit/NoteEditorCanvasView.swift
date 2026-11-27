@@ -228,6 +228,7 @@ struct NoteEditorCanvasView: View {
                 .foregroundStyle(Surface.ink)
                 .submitLabel(.next)
                 .onSubmit { focusedField = .body }
+                .accessibilityLabel(KitWords.NOTE_EDITOR_TITLE)
                 .accessibilityIdentifier("\(editor.selectorID)-title")
 
             KitHairline()
@@ -238,6 +239,7 @@ struct NoteEditorCanvasView: View {
                 .foregroundStyle(Surface.ink)
                 .lineLimit(8...)
                 .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
+                .accessibilityLabel(KitWords.NOTE_EDITOR_BODY)
                 .accessibilityIdentifier("\(editor.selectorID)-body")
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)

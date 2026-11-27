@@ -22,6 +22,8 @@ public enum KitWords {
     public static let DONE = "Done"
     public static let FLAG = "Flag"
     public static let LOADING_MORE = "Loading more"
+    public static let NOTE_EDITOR_TITLE = "Title"
+    public static let NOTE_EDITOR_BODY = "Note"
     public static let OPEN = "Open"
     public static let OPENING = "Opening"
     public static let PENDING = "Saving"
