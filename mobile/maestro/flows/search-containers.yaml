@@ -1,92 +1,45 @@
-# A container is a search result of its own (#1097): the project a member
-# typed the name of is a row in Home's Agenda group, before its rows, and a row
-# of Agenda's own search, above its task hits (#1128, Q-1128-1); a tap opens it
-# where its app opens it, the project page.
+# A container is a search result of its own (#1097): the list a member typed the name of is a row of
+# Home's search (`search/container/<id>`), and a tap opens it where its app opens it, the list's page.
 #
-# THE FLOW MAKES ITS OWN PROJECT. The onboarding starters hold no notebook,
-# project, group or folder, so the first run creates a Tasks project called
-# "Orchard" (Reminders' lists page -> Add List) and every later run finds it there
-# and skips the step. Re-runnable: it leaves that one list and a recent search.
-#
-# The container's id is `search-container-<entity>-<id>`; a project's entity is
-# `project`, so the id is matched by its stem (Maestro matches an id as a regular
-# expression).
+# THE FLOW MAKES ITS OWN LIST. The demo vault holds no list called "Orchard", so the first run adds
+# one from Reminders' "New list" (`lists/add`, a form with `field/title` and `form/save`) and every
+# later run finds it there and skips the step. Re-runnable: it leaves that one list and a recent
+# search. Maestro matches an id as a regular expression, so the container's id is matched by its stem.
 appId: dev.centraid.Centraid
 name: search-containers
 ---
 - launchApp
 - tapOn:
-    id: "home-tile-reminders"
-- tapOn:
-    id: "reminders-band-reminders"
+    id: "tile/reminders"
 - runFlow:
     when:
       notVisible: "Orchard.*"
     commands:
       - tapOn:
-          id: "agenda-new-project"
+          id: "lists/add"
       - tapOn:
-          id: "agenda-style-name"
+          id: "field/title"
       - inputText: "Orchard"
-      # iOS's keyboard has a Done key that only puts the keyboard away (Maestro's hideKeyboard finds no
-      # dismiss action on it); Android hides it with hideKeyboard.
-      - runFlow:
-          when:
-            platform: iOS
-          commands:
-            - pressKey: Enter
-      - runFlow:
-          when:
-            platform: Android
-          commands:
-            - hideKeyboard
       - tapOn:
-          id: "agenda-style-submit"
-# A list's row is one spoken element ("Orchard, 0 tasks"), so the name is matched at its start.
+          id: "form/save"
 - assertVisible: "Orchard.*"
-# Home's search: the project is a hit of the Agenda group, kind named, above the
-# tasks (none here, so it stands alone), and counted.
+# Home's search: the list is a hit, before the rows.
 - launchApp
 - tapOn:
-    id: "home-search-open"
+    id: "band/search"
 - tapOn:
-    id: "home-search-field"
+    id: "search"
 - inputText: "orchard"
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-reminders"
+      id: "search/container/.*"
     timeout: 5000
-- assertVisible:
-    id: "search-container-project-.*"
-# The row is one spoken element on Android ("Project, Orchard"), two texts on iOS: match each word within.
-- assertVisible: ".*Project.*"
 - assertVisible: ".*Orchard.*"
-# A tap opens the project's list through the one router; the search is behind it. An empty list
-# draws its empty state in place of the rows (`tasks-project`), so the page is named by either id.
+# A tap opens the list's page; the search is behind it.
 - tapOn:
-    id: "search-container-project-.*"
+    id: "search/container/.*"
 - extendedWaitUntil:
-    visible:
-      id: "tasks-project|tasks-project-edit"
+    visible: ".*Orchard.*"
     timeout: 5000
 - assertNotVisible:
-    id: "home-search-field"
-# Agenda's own search draws the same project, kind named, and a tap opens the
-# same page (#1128, Q-1128-1).
-- launchApp
-- tapOn:
-    id: "home-tile-reminders"
-- tapOn:
-    id: "band-search"
-- inputText: "orchard"
-- extendedWaitUntil:
-    visible:
-      id: "search-container-project-.*"
-    timeout: 5000
-- assertVisible: ".*Project.*"
-- tapOn:
-    id: "search-container-project-.*"
-- extendedWaitUntil:
-    visible:
-      id: "tasks-project|tasks-project-edit"
-    timeout: 5000
+    id: "search"
