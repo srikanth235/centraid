@@ -234,3 +234,74 @@ fn a_refused_permission_is_open_settings_alone_on_the_app_and_never_the_status_l
         snapshot::assert_room(snap, &room);
     }
 }
+
+struct Silent {
+    inner: Phone,
+    asked: Mutex<Vec<String>>,
+}
+
+impl Door for Silent {
+    fn act(&self, act: &Act) -> Result<Done, Refused> {
+        self.asked.lock().unwrap().push(format!("act {act:?}"));
+        Err(Refused("no writes here".to_owned()))
+    }
+
+    fn undo(&self) -> Result<Done, Refused> {
+        self.inner.undo()
+    }
+
+    fn now_ms(&self) -> i64 {
+        NOW
+    }
+
+    fn device_get(&self, key: &str) -> Option<String> {
+        self.inner.device_get(key)
+    }
+
+    fn device_put(&self, key: &str, value: &str) -> Result<(), Refused> {
+        self.inner.device_put(key, value)
+    }
+
+    fn reader(&self) -> Result<centraid_domain::read::Reader, Refused> {
+        self.inner.reader()
+    }
+
+    fn enrol_store(&self, store: &str) -> Result<Done, Refused> {
+        self.asked.lock().unwrap().push(format!("enrol {store}"));
+        Err(Refused("asked".to_owned()))
+    }
+
+    fn open_settings(&self, store: &str) -> Result<Done, Refused> {
+        self.asked.lock().unwrap().push(format!("settings {store}"));
+        Err(Refused("asked".to_owned()))
+    }
+}
+
+#[test]
+fn first_launch_asks_the_phone_for_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_handle, path) = vault(dir.path());
+    let door = Silent {
+        inner: phone(&path, true, vec![]),
+        asked: Mutex::default(),
+    };
+    let mut rooms = Rooms::new(shell::registry());
+    let shown = rooms
+        .open(&door, "home", "home", true)
+        .expect("welcome opens");
+    let instance = shown.instance;
+    let event = wire::RoomEvent {
+        kind: Some(wire::room_event::Kind::Tap(wire::RoomTap {
+            selector_id: "welcome/start".to_owned(),
+        })),
+    };
+    rooms
+        .event(&door, instance, &event)
+        .expect("start lands")
+        .expect("home shows");
+    assert!(
+        door.asked.lock().unwrap().is_empty(),
+        "first launch asked the phone for something: {:?}",
+        door.asked.lock().unwrap()
+    );
+}

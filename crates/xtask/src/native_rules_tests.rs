@@ -413,38 +413,6 @@ fn a_library_original_is_copied_only_by_a_hand_off() {
     assert!(text.contains("in Roll.swift"), "{text}");
 }
 
-// ---- first-launch-asks-nothing ----
-
-#[test]
-fn a_first_launch_view_that_asks_or_types_app_ids_is_caught() {
-    let root = fixture_dir("native-first-launch-red");
-    write(
-        &root,
-        "mobile/iosApp/Sources/FirstLaunchView.swift",
-        "let apps = [\"tasks\", \"docs\"]\nfunc go() { store.requestAuthorization(toShare: [], read: []) }\n",
-    );
-    let report = first_launch_asks_nothing(&root);
-    let text = findings(&report);
-    assert_eq!(report.findings.len(), 2, "{text}");
-    assert!(text.contains("requestAuthorization") && text.contains("\"tasks\""));
-}
-
-#[test]
-fn a_first_launch_view_that_draws_the_roster_is_clean_and_no_view_is_pending() {
-    let root = fixture_dir("native-first-launch-green");
-    write(
-        &root,
-        "mobile/iosApp/Sources/FirstLaunchView.swift",
-        "ForEach(view.apps) { app in Tile(app) }\n",
-    );
-    assert!(first_launch_asks_nothing(&root).findings.is_empty());
-    let empty = fixture_dir("native-first-launch-none");
-    assert!(matches!(
-        first_launch_asks_nothing(&empty).state,
-        RuleState::Pending(_)
-    ));
-}
-
 // ---- native-effect-reasons ----
 
 fn reasons_tree(name: &str, kotlin: &str, swift: &str) -> std::path::PathBuf {
