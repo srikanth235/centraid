@@ -738,6 +738,10 @@ final class ScreenStore: ObservableObject {
         holdings.loaded
     }
 
+    static func chatCardApp(_ card: Centraid_Core_V1_ChatCard) -> String {
+        card.app
+    }
+
     static func chatCardEntity(_ card: Centraid_Core_V1_ChatCard) -> String {
         card.entity
     }
