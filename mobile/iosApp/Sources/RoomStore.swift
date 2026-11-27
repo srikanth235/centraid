@@ -39,6 +39,7 @@ final class RoomStore: ObservableObject {
             }
         }
         await refreshAppearance()
+        await drainShareInbox()
         await TodayGlanceWriter.sync(rooms: self)
         await open(key: "home", tab: RustScreens.homeTab, root: true)
     }
@@ -175,6 +176,19 @@ final class RoomStore: ObservableObject {
         guard let raw = await deviceGet("settings.appearance") else { return }
         let scheme = Self.parseAppearance(raw)
         onAppearanceChanged?(scheme)
+    }
+
+    @discardableResult
+    func drainShareInbox(inboxURL: URL? = ShareInboxWriter.inboxDirectoryURL()) async -> [Centraid_Core_V1_ShareInItem] {
+        guard let inboxURL, ShareInboxWriter.hasPendingItems(in: inboxURL) else { return [] }
+        var shareIn = Centraid_Core_V1_ShareInRequest()
+        shareIn.inboxDir = inboxURL.path
+        var request = Centraid_Core_V1_Request()
+        request.kind = .shareIn(shareIn)
+        guard let response = try? await core.call(request),
+              case .shareIn(let answer)? = response.kind
+        else { return [] }
+        return answer.items
     }
 
     static func parseAppearance(_ raw: String) -> ColorScheme? {

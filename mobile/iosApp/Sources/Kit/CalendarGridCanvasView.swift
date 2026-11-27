@@ -265,7 +265,7 @@ struct CalendarGridCanvasView: View {
     private func overdueStrip(items: [Centraid_Core_V1_RoomCalendarItem]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                agendaItemRow(item: item)
+                calendarItemRow(item: item)
             }
         }
         .padding(.vertical, 6)
@@ -540,7 +540,7 @@ struct CalendarGridCanvasView: View {
                             .padding(.top, 14)
                             .padding(.bottom, 6)
                         ForEach(Array(selected.day.items.enumerated()), id: \.offset) { _, item in
-                            agendaItemRow(item: item)
+                            calendarItemRow(item: item)
                         }
                     }
                     .readableColumn()
@@ -640,7 +640,7 @@ struct CalendarGridCanvasView: View {
                         .buttonStyle(.plain)
 
                         ForEach(Array(dayLayout.day.items.enumerated()), id: \.offset) { _, item in
-                            agendaItemRow(item: item)
+                            calendarItemRow(item: item)
                         }
                     }
                 }
@@ -650,7 +650,7 @@ struct CalendarGridCanvasView: View {
         }
     }
 
-    private func agendaItemRow(item: Centraid_Core_V1_RoomCalendarItem) -> some View {
+    private func calendarItemRow(item: Centraid_Core_V1_RoomCalendarItem) -> some View {
         let color = CanvasHue.color(for: item.hueKey, scheme: scheme, accent: accent)
         return Button { onTap(item.selectorID) } label: {
             HStack(spacing: 12) {

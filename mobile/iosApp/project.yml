@@ -113,6 +113,7 @@ targets:
       # (#1173): the app's `ScreenStore` writes the file, the extension and Siri
       # read it, and one decoder serves all three.
       - path: Shared
+      - path: ShareExtension/ShareInboxWriter.swift
       # THE FACES, AS A BUILD PHASE — AND `resources:` IS NOT AN XCODEGEN KEY.
       #
       # This target carried `resources: - path: Resources` for its whole life
@@ -175,6 +176,9 @@ targets:
       - target: CentraidWidgets
         embed: true
         codeSign: true
+      - target: CentraidShareExtension
+        embed: true
+        codeSign: true
     # WITHOUT THIS THE KEYCHAIN IS DEAD AND PAIRING CANNOT PERSIST (#1025).
     #
     # `IosSecureStore` is where this device's endpoint secret lives, and every
@@ -207,11 +211,9 @@ targets:
         # a non-empty access list, or a `toShare` that is not `[]`.
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
-        # THE APP GROUP THE WIDGETS READ THROUGH (#1173). The app writes Agenda's
-        # snapshot into this group's container and `CentraidWidgets` reads it; it is
-        # the only thing the two processes share. A DEVICE BUILD NEEDS A PROVISIONING
-        # PROFILE THAT CARRIES THE GROUP, on both bundle ids; a simulator build signed
-        # ad-hoc needs none.
+        # THE APP GROUP THE WIDGETS AND SHARE EXTENSION USE. The app writes Today's
+        # snapshot into this group's container and `CentraidWidgets` reads it; the share
+        # extension writes shared items to `share-inbox/` inside the same container.
         com.apple.security.application-groups:
           - group.dev.centraid
     # `Resources/Info.plist` IS XCODEGEN'S OUTPUT, NOT A SOURCE FILE (#1020).
@@ -334,10 +336,10 @@ targets:
         # declaration that goes with it.
         ITSAppUsesNonExemptEncryption: false
 
-  # AGENDA'S WIDGETS (#1173, wave 3): a WidgetKit extension, embedded in the app.
+  # TODAY AND HEALTH WIDGETS: a WidgetKit extension, embedded in the app.
   #
   # THE PRIVACY RULE: READ-ONLY, AND NEVER THE VAULT. The extension draws one JSON
-  # file the app keeps in the App Group container (`Shared/AgendaGlanceSnapshot`:
+  # file the app keeps in the App Group container (`Shared/TodayGlanceSnapshot`:
   # titles, times and counts Rust chose to disclose, finished in the member's
   # language). It does NOT link the Rust core (no `OTHER_LDFLAGS`, no `CoreBridge`),
   # does NOT depend on SwiftProtobuf, holds no keychain group and no HealthKit, and
@@ -392,6 +394,39 @@ targets:
         UIAppFonts:
           - InstrumentSans_470Book.ttf
           - InstrumentSans-SemiBold.ttf
+
+  CentraidShareExtension:
+    type: app-extension
+    platform: iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.centraid.Centraid.share
+        SWIFT_VERSION: "6.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+    sources:
+      - path: ShareExtension
+        excludes:
+          - Info.plist
+          - ShareExtension.entitlements
+    entitlements:
+      path: ShareExtension/ShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.dev.centraid
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Centraid
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsFileWithMaxCount: 20
+              NSExtensionActivationSupportsImageWithMaxCount: 20
+              NSExtensionActivationSupportsMovieWithMaxCount: 10
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 10
 
   CentraidTests:
     type: bundle.unit-test

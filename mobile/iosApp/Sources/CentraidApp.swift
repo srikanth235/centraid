@@ -82,6 +82,7 @@ struct CentraidApp: App {
                 case .active:
                     shell.unmask()
                     shell.lifecycle(foreground: true)
+                    Task { await shell.rooms?.drainShareInbox() }
                 // `.background` ONLY, never `.inactive` (R-1047-L1's rule for
                 // the lock, applied to the mask): the Locker's own Face ID
                 // prompt makes the scene inactive, and a mask there blacked out

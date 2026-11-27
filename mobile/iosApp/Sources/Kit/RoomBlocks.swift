@@ -82,7 +82,7 @@ struct RoomBlockView: View {
         case .calendarGrid(let grid)?:
             CalendarGridCanvasView(grid: grid, onTap: callbacks.tap, onCanvas: callbacks.canvas)
         case .photoGrid(let grid)?:
-            RoomCanvasPlaceholder(title: grid.sections.first?.heading ?? "", selectorID: grid.nextPageSelectorID)
+            PhotoGridCanvasView(grid: grid, callbacks: callbacks)
         case .noteEditor(let editor)?:
             NoteEditorCanvasView(editor: editor, onTap: callbacks.tap, onCanvas: callbacks.canvas)
         case .chart(let chart)?:
@@ -90,26 +90,6 @@ struct RoomBlockView: View {
         case nil:
             EmptyView()
         }
-    }
-}
-
-struct RoomCanvasPlaceholder: View {
-    let title: String
-    let selectorID: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !title.isEmpty {
-                Text(title)
-                    .kitType(.row)
-                    .foregroundStyle(Surface.meta)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-        .padding(CentraidGeometry.pageMargin)
-        .kitCard()
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .modifier(OptionalIdentifier(identifier: selectorID))
     }
 }
 

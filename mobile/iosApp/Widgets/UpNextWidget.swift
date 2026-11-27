@@ -66,7 +66,7 @@ struct UpNextView: View {
     private func row(_ line: TodayGlanceSnapshot.Line) -> some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(WidgetPalette.agenda)
+                .fill(WidgetPalette.calendar)
                 .frame(width: 3, height: 16)
             Text(line.text)
                 .font(WidgetType.rowTitle)

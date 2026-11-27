@@ -23,7 +23,7 @@ struct RemindersView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(entry.snapshot?.title ?? "Reminders")
                 .font(WidgetType.heading)
-                .foregroundStyle(WidgetPalette.agenda)
+                .foregroundStyle(WidgetPalette.calendar)
                 .lineLimit(1)
             if let snapshot = entry.snapshot {
                 let tasks = snapshot.lines.filter { $0.kind == "task" }
@@ -55,7 +55,7 @@ struct RemindersView: View {
     private func row(_ line: TodayGlanceSnapshot.Line) -> some View {
         HStack(spacing: 8) {
             Circle()
-                .stroke(WidgetPalette.agenda, lineWidth: 1.5)
+                .stroke(WidgetPalette.calendar, lineWidth: 1.5)
                 .frame(width: 14, height: 14)
             Text(line.text)
                 .font(WidgetType.rowTitle)
