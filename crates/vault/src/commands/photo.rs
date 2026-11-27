@@ -151,7 +151,7 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }
     if let Some(form) = ctx.optional_str("form") {
         let known: bool = ctx.connection().query_row(
-            "SELECT EXISTS (SELECT 1 FROM photo_form WHERE code = ?1)",
+            "SELECT EXISTS (SELECT 1 FROM vocab WHERE domain = 'photo_form' AND code = ?1)",
             [form],
             |row| row.get(0),
         )?;

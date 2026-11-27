@@ -356,7 +356,8 @@ CREATE INDEX workout_by_type  ON workout(type_id);
 CREATE TABLE account (
   id            TEXT PRIMARY KEY,
   kind          TEXT GENERATED ALWAYS AS ('account') VIRTUAL,
-  type          TEXT NOT NULL REFERENCES account_type(code) ON DELETE NO ACTION,
+  type          TEXT NOT NULL,
+  type_domain   TEXT GENERATED ALWAYS AS ('account_type') VIRTUAL,
   currency      TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
   -- Where the account stood on `opening_on`, SIGNED (a card owes: negative). The balance on any day is
   -- this plus the posted lines AFTER `opening_on`, derived at read time.
@@ -365,13 +366,9 @@ CREATE TABLE account (
   on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   -- An opening balance that is not nothing is as of a day: without it no one can say which lines it already holds.
-  CHECK (opening_minor = 0 OR opening_on IS NOT NULL)
+  CHECK (opening_minor = 0 OR opening_on IS NOT NULL),
+  FOREIGN KEY (type, type_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
-
--- table account_type on account_type
-CREATE TABLE account_type (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
-) STRICT, WITHOUT ROWID;
 
 -- table action_key on action_key
 CREATE TABLE action_key (
@@ -380,16 +377,13 @@ CREATE TABLE action_key (
   at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', at) IS at)
 ) STRICT, WITHOUT ROWID;
 
--- table arrival_via on arrival_via
-CREATE TABLE arrival_via (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
-) STRICT, WITHOUT ROWID;
-
 -- table arrival_via_kind on arrival_via_kind
 CREATE TABLE arrival_via_kind (
-  via         TEXT NOT NULL REFERENCES arrival_via(code) ON DELETE NO ACTION,
+  via         TEXT NOT NULL,
+  via_domain  TEXT GENERATED ALWAYS AS ('arrival_via') VIRTUAL,
   entity_kind TEXT NOT NULL REFERENCES entity_kind(code) ON DELETE NO ACTION,
-  PRIMARY KEY (via, entity_kind)
+  PRIMARY KEY (via, entity_kind),
+  FOREIGN KEY (via, via_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT, WITHOUT ROWID;
 
 -- table blob on blob
@@ -423,11 +417,13 @@ CREATE TABLE concept (
   id      TEXT PRIMARY KEY,
   kind    TEXT NOT NULL REFERENCES concept_kind(code) ON DELETE NO ACTION,
   key     TEXT NOT NULL,
-  color   TEXT REFERENCES palette(key) ON DELETE NO ACTION,
+  color   TEXT,
+  color_domain TEXT GENERATED ALWAYS AS ('palette') VIRTUAL,
   colored INTEGER GENERATED ALWAYS AS (CASE WHEN color IS NOT NULL THEN 1 END) VIRTUAL,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (kind, colored) REFERENCES concept_kind(code, takes_color) ON DELETE NO ACTION,
-  UNIQUE (kind, key)
+  UNIQUE (kind, key),
+  FOREIGN KEY (color, color_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 
 -- table concept_kind on concept_kind
@@ -441,35 +437,31 @@ CREATE TABLE concept_kind (
 CREATE TABLE contact_point (
   id         TEXT PRIMARY KEY,
   person_id  TEXT NOT NULL REFERENCES person(id) ON DELETE CASCADE,
-  kind       TEXT NOT NULL REFERENCES contact_point_kind(code) ON DELETE NO ACTION,
+  kind       TEXT NOT NULL,
+  kind_domain TEXT GENERATED ALWAYS AS ('contact_point_kind') VIRTUAL,
   value      TEXT NOT NULL CHECK (length(trim(value)) > 0),
   normalized TEXT NOT NULL,
   label      TEXT,
   preferred  INTEGER NOT NULL DEFAULT 0 CHECK (preferred IN (0,1)),
   position   REAL NOT NULL,
-  UNIQUE (person_id, kind, normalized)
+  UNIQUE (person_id, kind, normalized),
+  FOREIGN KEY (kind, kind_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
-
--- table contact_point_kind on contact_point_kind
-CREATE TABLE contact_point_kind (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
-) STRICT, WITHOUT ROWID;
 
 -- table container on container
 CREATE TABLE container (
   id       TEXT PRIMARY KEY,
-  kind     TEXT NOT NULL REFERENCES container_kind(code) ON DELETE NO ACTION,
-  color    TEXT REFERENCES palette(key) ON DELETE NO ACTION,
+  kind     TEXT NOT NULL,
+  kind_domain TEXT GENERATED ALWAYS AS ('container_kind') VIRTUAL,
+  color    TEXT,
+  color_domain TEXT GENERATED ALWAYS AS ('palette') VIRTUAL,
   icon     TEXT CHECK (icon IS NULL OR length(trim(icon)) > 0),
   cover    TEXT REFERENCES blob(hash) ON DELETE NO ACTION,
   position REAL NOT NULL DEFAULT 0,
-  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  FOREIGN KEY (kind, kind_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION,
+  FOREIGN KEY (color, color_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
-
--- table container_kind on container_kind
-CREATE TABLE container_kind (
-  code TEXT PRIMARY KEY REFERENCES entity_kind(code) ON DELETE NO ACTION
-) STRICT, WITHOUT ROWID;
 
 -- table derivative on derivative
 CREATE TABLE derivative (
@@ -551,7 +543,8 @@ CREATE TABLE entity (
   starred_at  TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', starred_at) IS starred_at),
   pinned_at   TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', pinned_at) IS pinned_at),
   archived_at TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', archived_at) IS archived_at),
-  arrived_via   TEXT REFERENCES arrival_via(code) ON DELETE NO ACTION,
+  arrived_via   TEXT,
+  arrived_via_domain TEXT GENERATED ALWAYS AS ('arrival_via') VIRTUAL,
   arrived_label TEXT CHECK (arrived_label IS NULL OR length(trim(arrived_label)) > 0),
   -- 1 when the row has no home, 1 when its title is non-empty, else NULL: the keys below check them
   -- against the kind's `may_be_top` and `may_be_named`.
@@ -570,7 +563,8 @@ CREATE TABLE entity (
   FOREIGN KEY (kind, parent_kind) REFERENCES home_shape(kind, home_kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, topless) REFERENCES entity_kind(code, may_be_top) ON DELETE NO ACTION,
   FOREIGN KEY (kind, named) REFERENCES entity_kind(code, may_be_named) ON DELETE NO ACTION,
-  FOREIGN KEY (kind, unnamed) REFERENCES entity_kind(code, may_be_unnamed) ON DELETE NO ACTION
+  FOREIGN KEY (kind, unnamed) REFERENCES entity_kind(code, may_be_unnamed) ON DELETE NO ACTION,
+  FOREIGN KEY (arrived_via, arrived_via_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 
 -- table entity_kind on entity_kind
@@ -661,13 +655,15 @@ CREATE TABLE link (
 CREATE TABLE locker_item (
   id          TEXT PRIMARY KEY,
   kind        TEXT GENERATED ALWAYS AS ('locker_item') VIRTUAL,
-  type        TEXT NOT NULL REFERENCES locker_type(code) ON DELETE NO ACTION,
+  type        TEXT NOT NULL,
+  type_domain TEXT GENERATED ALWAYS AS ('locker_type') VIRTUAL,
   compromised INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
   -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit: stamping
   -- it does not move the entity's `updated_at` and makes no revision. (I3: `password_set_at` and
   -- `memo` are gone: a secret's age is `locker_item_field.value_set_at`, the memo is the `notes` field.)
   last_used_at TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', last_used_at) IS last_used_at),
-  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  FOREIGN KEY (type, type_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 
 -- table locker_item_field on locker_item_field
@@ -726,11 +722,6 @@ CREATE TABLE locker_key (
   failed_unlock_at TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', failed_unlock_at) IS failed_unlock_at)
 ) STRICT;
 
--- table locker_type on locker_type
-CREATE TABLE locker_type (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
-) STRICT, WITHOUT ROWID;
-
 -- table measurement on measurement
 CREATE TABLE measurement (
   person_id TEXT NOT NULL REFERENCES person(id) ON DELETE CASCADE,
@@ -765,14 +756,18 @@ CREATE TABLE message (
   outcome    TEXT NOT NULL CHECK (outcome IN (
                'sent','answered','stopped','refused',
                'proposed','applied','dismissed','stale','failed')),
-  refusal    TEXT REFERENCES message_refusal(code) ON DELETE NO ACTION,
-  notice     TEXT REFERENCES message_notice(code) ON DELETE NO ACTION,
+  refusal    TEXT,
+  refusal_domain TEXT GENERATED ALWAYS AS ('message_refusal') VIRTUAL,
+  notice     TEXT,
+  notice_domain TEXT GENERATED ALWAYS AS ('message_notice') VIRTUAL,
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   updated_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
   PRIMARY KEY (thread_id, ordinal),
   CHECK ((role = 'user') = (outcome = 'sent')),
   CHECK ((outcome = 'refused') = (refusal IS NOT NULL)),
-  CHECK (role = 'assistant' OR notice IS NULL)
+  CHECK (role = 'assistant' OR notice IS NULL),
+  FOREIGN KEY (refusal, refusal_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION,
+  FOREIGN KEY (notice, notice_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 
 -- table message_attachment on message_attachment
@@ -801,16 +796,6 @@ CREATE TABLE message_card (
   PRIMARY KEY (thread_id, ordinal, position),
   FOREIGN KEY (thread_id, ordinal) REFERENCES message(thread_id, ordinal) ON DELETE CASCADE
 ) STRICT;
-
--- table message_notice on message_notice
-CREATE TABLE message_notice (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
-) STRICT, WITHOUT ROWID;
-
--- table message_refusal on message_refusal
-CREATE TABLE message_refusal (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
-) STRICT, WITHOUT ROWID;
 
 -- table note on note
 CREATE TABLE note (
@@ -896,16 +881,12 @@ CREATE TABLE origin_system (
   UNIQUE (code, on_device)
 ) STRICT, WITHOUT ROWID;
 
--- table palette on palette
-CREATE TABLE palette (
-  key TEXT PRIMARY KEY CHECK (key GLOB '[a-z]*' AND key NOT GLOB '*[^a-z]*')
-) STRICT, WITHOUT ROWID;
-
 -- table person on person
 CREATE TABLE person (
   id           TEXT PRIMARY KEY,
   kind         TEXT GENERATED ALWAYS AS ('person') VIRTUAL,
-  form         TEXT NOT NULL DEFAULT 'person' REFERENCES person_form(code) ON DELETE NO ACTION,
+  form         TEXT NOT NULL DEFAULT 'person',
+  form_domain  TEXT GENERATED ALWAYS AS ('person_form') VIRTUAL,
   sort_name    TEXT,
   given        TEXT,
   family       TEXT,
@@ -916,7 +897,8 @@ CREATE TABLE person (
   met          TEXT,
   avatar       TEXT REFERENCES blob(hash) ON DELETE NO ACTION,
   cadence_days INTEGER CHECK (cadence_days IS NULL OR cadence_days > 0),
-  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  FOREIGN KEY (form, form_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 
 -- table person_date on person_date
@@ -942,18 +924,14 @@ CREATE TABLE person_date_kind (
   UNIQUE (code, single)
 ) STRICT, WITHOUT ROWID;
 
--- table person_form on person_form
-CREATE TABLE person_form (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
-) STRICT, WITHOUT ROWID;
-
 -- table photo on photo
 CREATE TABLE photo (
   id          TEXT PRIMARY KEY,
   kind        TEXT GENERATED ALWAYS AS ('photo') VIRTUAL,
   blob        TEXT NOT NULL REFERENCES blob(hash) ON DELETE NO ACTION,
   media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0 AND lower(media_type) NOT GLOB 'audio/*'),
-  form        TEXT NOT NULL REFERENCES photo_form(code) ON DELETE NO ACTION,
+  form        TEXT NOT NULL,
+  form_domain TEXT GENERATED ALWAYS AS ('photo_form') VIRTUAL,
   taken_at    TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', taken_at) IS taken_at),
   offset_min  INTEGER CHECK (offset_min IS NULL OR offset_min BETWEEN -1080 AND 1080),
   width       INTEGER CHECK (width IS NULL OR width > 0),
@@ -970,13 +948,9 @@ CREATE TABLE photo (
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   CHECK ((lat IS NULL) = (lon IS NULL)),
   CHECK (motion_duration_s IS NULL OR motion_blob IS NOT NULL),
-  CHECK (edited_from IS NULL OR edited_from <> id)
+  CHECK (edited_from IS NULL OR edited_from <> id),
+  FOREIGN KEY (form, form_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
-
--- table photo_form on photo_form
-CREATE TABLE photo_form (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
-) STRICT, WITHOUT ROWID;
 
 -- table place on place
 CREATE TABLE place (
@@ -1244,6 +1218,13 @@ CREATE TABLE vault (
   written_at TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', written_at) IS written_at),
   FOREIGN KEY (self_id, self_kind) REFERENCES entity(id, kind) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
+
+-- table vocab on vocab
+CREATE TABLE vocab (
+  domain TEXT NOT NULL CHECK (domain GLOB '[a-z]*' AND domain NOT GLOB '*[^a-z_]*'),
+  code   TEXT NOT NULL CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*'),
+  PRIMARY KEY (domain, code)
+) STRICT, WITHOUT ROWID;
 
 -- table workout on workout
 CREATE TABLE workout (

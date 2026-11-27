@@ -29,8 +29,8 @@ use super::custody::{
     invalid, sentence_of,
 };
 use super::schema::{
-    FIELD_KINDS, SEALED_PLACEHOLDER, built_in, field_id_of, is_month_key, is_sealed_kind,
-    normalise_date, position_of,
+    FIELD_KINDS, SEALED_PLACEHOLDER, built_in, field_id_of, is_derived_field_id, is_month_key,
+    is_sealed_kind, normalise_date, position_of,
 };
 use super::{count, definition};
 
@@ -282,9 +282,12 @@ pub(super) fn plan(
     if found.is_none() {
         match id.as_deref() {
             Some(new) => {
-                // A single built-in's derived id is free by construction (no row has it); a
-                // caller's own must be fresh across every table a value is sealed against.
-                if !single && let Err(sentence) = id_is_free(ctx, new)? {
+                if !single && is_derived_field_id(new) {
+                    refuse!(
+                        "that id is the one a built-in field of an item takes; mint a fresh one"
+                    );
+                }
+                if let Err(sentence) = id_is_free(ctx, new)? {
                     refuse!("{sentence}");
                 }
             }

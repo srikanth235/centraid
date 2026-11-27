@@ -448,7 +448,10 @@ fn messages_are_appended_in_order_and_each_outcome_is_kept() {
 #[test]
 fn a_refusal_names_a_seeded_reason_and_a_notice_a_seeded_notice() {
     let w = world("chat_lookups");
-    let reasons = w.strings("SELECT code FROM message_refusal ORDER BY code", &[]);
+    let reasons = w.strings(
+        "SELECT code FROM vocab WHERE domain = 'message_refusal' ORDER BY code",
+        &[],
+    );
     assert_eq!(reasons.len(), 9, "{reasons:?}");
     for reason in &reasons {
         turn(
@@ -497,7 +500,10 @@ fn a_refusal_names_a_seeded_reason_and_a_notice_a_seeded_notice() {
         .contains("names its reason")
     );
     // A notice likewise.
-    let notice = w.strings("SELECT code FROM message_notice", &[]);
+    let notice = w.strings(
+        "SELECT code FROM vocab WHERE domain = 'message_notice'",
+        &[],
+    );
     assert_eq!(notice, ["doc_truncated"]);
     let thread = turn(
         &w,
@@ -530,7 +536,7 @@ fn a_refusal_names_a_seeded_reason_and_a_notice_a_seeded_notice() {
         w.vault()
             .commit(|tx| {
                 tx.connection().execute(
-                    "INSERT INTO message_refusal (code) VALUES ('brand_new')",
+                    "INSERT INTO vocab (domain, code) VALUES ('message_refusal', 'brand_new')",
                     [],
                 )?;
                 Ok(())

@@ -267,6 +267,18 @@ pub fn field_id_of(item_id: &str, field_key: &str) -> String {
     format!("{item_id}:{field_key}")
 }
 
+/// Whether `id` has the shape of a single-instance built-in's derived id (`<anything>:<key>` for a
+/// single key of any type): such an id belongs to that item's built-in field, never to a custom one.
+#[must_use]
+pub fn is_derived_field_id(id: &str) -> bool {
+    id.rsplit_once(':').is_some_and(|(_, key)| {
+        ITEM_TYPES
+            .iter()
+            .flat_map(|item_type| own(item_type).iter().chain(EVERY_TYPE.iter()))
+            .any(|field| field.single && field.key == key)
+    })
+}
+
 /// Every built-in key that holds a secret (`sealed`, `otp` or `file`) in any type, each once.
 #[must_use]
 pub fn secret_keys() -> Vec<&'static str> {
@@ -351,7 +363,7 @@ mod tests {
         let declared: Vec<String> = vault
             .read(|connection| {
                 Ok(connection
-                    .prepare("SELECT code FROM locker_type ORDER BY code")?
+                    .prepare("SELECT code FROM vocab WHERE domain = 'locker_type' ORDER BY code")?
                     .query_map([], |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<_>>()?)
             })

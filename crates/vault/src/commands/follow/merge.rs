@@ -263,7 +263,11 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
         .map(str::trim)
         .filter(|color| {
             connection
-                .query_row("SELECT 1 FROM palette WHERE key = ?1", [color], |_| Ok(()))
+                .query_row(
+                    "SELECT 1 FROM vocab WHERE domain = 'palette' AND code = ?1",
+                    [color],
+                    |_| Ok(()),
+                )
                 .optional()
                 .ok()
                 .flatten()

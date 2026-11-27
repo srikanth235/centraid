@@ -327,6 +327,11 @@ pub const TABLES: &[(&str, &str, &str)] = &[
     ),
     (
         "vocabulary",
+        "vocab",
+        "The closed lists of codes a column may take: container kinds, colours, ways an arrival came in, contact point kinds, photo forms, account types, Locker item types, assistant refusals and notices, person forms.",
+    ),
+    (
+        "vocabulary",
         "home_shape",
         "Which kind of home each kind may sit in.",
     ),
@@ -334,21 +339,6 @@ pub const TABLES: &[(&str, &str, &str)] = &[
         "vocabulary",
         "concept_kind",
         "The kinds of word a member names, and whether each takes a colour.",
-    ),
-    (
-        "vocabulary",
-        "container_kind",
-        "The kinds of thing that holds other things.",
-    ),
-    (
-        "vocabulary",
-        "palette",
-        "The colours a tag, list or calendar may wear.",
-    ),
-    (
-        "vocabulary",
-        "arrival_via",
-        "The ways a one-time arrival came in: vCard, CSV, upload, picker, Markdown, scan.",
     ),
     (
         "vocabulary",
@@ -369,41 +359,6 @@ pub const TABLES: &[(&str, &str, &str)] = &[
         "vocabulary",
         "derivative_variant",
         "The kinds of derivative, and whether each is a file or text.",
-    ),
-    (
-        "vocabulary",
-        "contact_point_kind",
-        "The kinds of contact point a person may have.",
-    ),
-    (
-        "vocabulary",
-        "photo_form",
-        "What a photograph row is: a photograph, a video or a scan.",
-    ),
-    (
-        "vocabulary",
-        "account_type",
-        "The kinds of account money may be held in.",
-    ),
-    (
-        "vocabulary",
-        "locker_type",
-        "The kinds of Locker item, each with its built-in fields.",
-    ),
-    (
-        "vocabulary",
-        "message_refusal",
-        "The reasons the assistant gives for declining.",
-    ),
-    (
-        "vocabulary",
-        "message_notice",
-        "The notices an assistant turn may carry.",
-    ),
-    (
-        "vocabulary",
-        "person_form",
-        "What a person row may be: a person, an organisation, a group or a pet.",
     ),
     (
         "vocabulary",

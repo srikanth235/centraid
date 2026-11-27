@@ -33,22 +33,21 @@ CREATE TABLE concept_kind (
   UNIQUE (code, takes_color)
 ) STRICT, WITHOUT ROWID;
 
-CREATE TABLE container_kind (
-  code TEXT PRIMARY KEY REFERENCES entity_kind(code) ON DELETE NO ACTION
-) STRICT, WITHOUT ROWID;
-
-CREATE TABLE palette (
-  key TEXT PRIMARY KEY CHECK (key GLOB '[a-z]*' AND key NOT GLOB '*[^a-z]*')
-) STRICT, WITHOUT ROWID;
-
-CREATE TABLE arrival_via (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
+-- One table for every closed vocabulary that is only a list of codes; the rest of a vocabulary's shape
+-- lives in its own table above. A column that takes a code carries a generated `<col>_domain` constant
+-- and a composite key into `(domain, code)`, the way a kind row keys into `entity`.
+CREATE TABLE vocab (
+  domain TEXT NOT NULL CHECK (domain GLOB '[a-z]*' AND domain NOT GLOB '*[^a-z_]*'),
+  code   TEXT NOT NULL CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*'),
+  PRIMARY KEY (domain, code)
 ) STRICT, WITHOUT ROWID;
 
 CREATE TABLE arrival_via_kind (
-  via         TEXT NOT NULL REFERENCES arrival_via(code) ON DELETE NO ACTION,
+  via         TEXT NOT NULL,
+  via_domain  TEXT GENERATED ALWAYS AS ('arrival_via') VIRTUAL,
   entity_kind TEXT NOT NULL REFERENCES entity_kind(code) ON DELETE NO ACTION,
-  PRIMARY KEY (via, entity_kind)
+  PRIMARY KEY (via, entity_kind),
+  FOREIGN KEY (via, via_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX arrival_via_kind_by_kind ON arrival_via_kind(entity_kind, via);
 
@@ -77,34 +76,6 @@ CREATE TABLE derivative_variant (
   code    TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*'),
   has_out INTEGER NOT NULL CHECK (has_out IN (0,1)),
   UNIQUE (code, has_out)
-) STRICT, WITHOUT ROWID;
-
-CREATE TABLE contact_point_kind (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
-) STRICT, WITHOUT ROWID;
-
-CREATE TABLE photo_form (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
-) STRICT, WITHOUT ROWID;
-
-CREATE TABLE account_type (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
-) STRICT, WITHOUT ROWID;
-
-CREATE TABLE locker_type (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
-) STRICT, WITHOUT ROWID;
-
-CREATE TABLE message_refusal (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
-) STRICT, WITHOUT ROWID;
-
-CREATE TABLE message_notice (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
-) STRICT, WITHOUT ROWID;
-
-CREATE TABLE person_form (
-  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
 ) STRICT, WITHOUT ROWID;
 
 CREATE TABLE person_date_kind (
@@ -172,7 +143,8 @@ CREATE TABLE entity (
   starred_at  TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', starred_at) IS starred_at),
   pinned_at   TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', pinned_at) IS pinned_at),
   archived_at TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', archived_at) IS archived_at),
-  arrived_via   TEXT REFERENCES arrival_via(code) ON DELETE NO ACTION,
+  arrived_via   TEXT,
+  arrived_via_domain TEXT GENERATED ALWAYS AS ('arrival_via') VIRTUAL,
   arrived_label TEXT CHECK (arrived_label IS NULL OR length(trim(arrived_label)) > 0),
   -- 1 when the row has no home, 1 when its title is non-empty, else NULL: the keys below check them
   -- against the kind's `may_be_top` and `may_be_named`.
@@ -191,7 +163,8 @@ CREATE TABLE entity (
   FOREIGN KEY (kind, parent_kind) REFERENCES home_shape(kind, home_kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, topless) REFERENCES entity_kind(code, may_be_top) ON DELETE NO ACTION,
   FOREIGN KEY (kind, named) REFERENCES entity_kind(code, may_be_named) ON DELETE NO ACTION,
-  FOREIGN KEY (kind, unnamed) REFERENCES entity_kind(code, may_be_unnamed) ON DELETE NO ACTION
+  FOREIGN KEY (kind, unnamed) REFERENCES entity_kind(code, may_be_unnamed) ON DELETE NO ACTION,
+  FOREIGN KEY (arrived_via, arrived_via_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 CREATE INDEX entity_by_title   ON entity(kind, deleted_at, title, id);
 CREATE INDEX entity_by_updated ON entity(kind, deleted_at, updated_at, id);
@@ -354,23 +327,29 @@ CREATE TABLE concept (
   id      TEXT PRIMARY KEY,
   kind    TEXT NOT NULL REFERENCES concept_kind(code) ON DELETE NO ACTION,
   key     TEXT NOT NULL,
-  color   TEXT REFERENCES palette(key) ON DELETE NO ACTION,
+  color   TEXT,
+  color_domain TEXT GENERATED ALWAYS AS ('palette') VIRTUAL,
   colored INTEGER GENERATED ALWAYS AS (CASE WHEN color IS NOT NULL THEN 1 END) VIRTUAL,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (kind, colored) REFERENCES concept_kind(code, takes_color) ON DELETE NO ACTION,
-  UNIQUE (kind, key)
+  UNIQUE (kind, key),
+  FOREIGN KEY (color, color_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 CREATE INDEX concept_by_color ON concept(color) WHERE color IS NOT NULL;
 
 -- What a holder holds is `entity.parent_id` (a folder's documents) or `contains` edges (an item may be in several).
 CREATE TABLE container (
   id       TEXT PRIMARY KEY,
-  kind     TEXT NOT NULL REFERENCES container_kind(code) ON DELETE NO ACTION,
-  color    TEXT REFERENCES palette(key) ON DELETE NO ACTION,
+  kind     TEXT NOT NULL,
+  kind_domain TEXT GENERATED ALWAYS AS ('container_kind') VIRTUAL,
+  color    TEXT,
+  color_domain TEXT GENERATED ALWAYS AS ('palette') VIRTUAL,
   icon     TEXT CHECK (icon IS NULL OR length(trim(icon)) > 0),
   cover    TEXT REFERENCES blob(hash) ON DELETE NO ACTION,
   position REAL NOT NULL DEFAULT 0,
-  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  FOREIGN KEY (kind, kind_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION,
+  FOREIGN KEY (color, color_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 CREATE INDEX container_by_kind  ON container(kind, id);
 CREATE INDEX container_by_color ON container(color) WHERE color IS NOT NULL;
@@ -543,7 +522,8 @@ CREATE TABLE search_owed (
 CREATE TABLE person (
   id           TEXT PRIMARY KEY,
   kind         TEXT GENERATED ALWAYS AS ('person') VIRTUAL,
-  form         TEXT NOT NULL DEFAULT 'person' REFERENCES person_form(code) ON DELETE NO ACTION,
+  form         TEXT NOT NULL DEFAULT 'person',
+  form_domain  TEXT GENERATED ALWAYS AS ('person_form') VIRTUAL,
   sort_name    TEXT,
   given        TEXT,
   family       TEXT,
@@ -554,7 +534,8 @@ CREATE TABLE person (
   met          TEXT,
   avatar       TEXT REFERENCES blob(hash) ON DELETE NO ACTION,
   cadence_days INTEGER CHECK (cadence_days IS NULL OR cadence_days > 0),
-  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  FOREIGN KEY (form, form_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 CREATE INDEX person_by_form ON person(form, id);
 CREATE INDEX person_by_avatar ON person(avatar) WHERE avatar IS NOT NULL;
@@ -588,13 +569,15 @@ CREATE UNIQUE INDEX person_date_one_of_a_single_kind ON person_date(person_id, k
 CREATE TABLE contact_point (
   id         TEXT PRIMARY KEY,
   person_id  TEXT NOT NULL REFERENCES person(id) ON DELETE CASCADE,
-  kind       TEXT NOT NULL REFERENCES contact_point_kind(code) ON DELETE NO ACTION,
+  kind       TEXT NOT NULL,
+  kind_domain TEXT GENERATED ALWAYS AS ('contact_point_kind') VIRTUAL,
   value      TEXT NOT NULL CHECK (length(trim(value)) > 0),
   normalized TEXT NOT NULL,
   label      TEXT,
   preferred  INTEGER NOT NULL DEFAULT 0 CHECK (preferred IN (0,1)),
   position   REAL NOT NULL,
-  UNIQUE (person_id, kind, normalized)
+  UNIQUE (person_id, kind, normalized),
+  FOREIGN KEY (kind, kind_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 CREATE INDEX contact_point_by_value ON contact_point(kind, normalized, person_id);
 CREATE UNIQUE INDEX contact_point_preferred ON contact_point(person_id, kind) WHERE preferred = 1;
@@ -945,7 +928,8 @@ CREATE TABLE photo (
   kind        TEXT GENERATED ALWAYS AS ('photo') VIRTUAL,
   blob        TEXT NOT NULL REFERENCES blob(hash) ON DELETE NO ACTION,
   media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0 AND lower(media_type) NOT GLOB 'audio/*'),
-  form        TEXT NOT NULL REFERENCES photo_form(code) ON DELETE NO ACTION,
+  form        TEXT NOT NULL,
+  form_domain TEXT GENERATED ALWAYS AS ('photo_form') VIRTUAL,
   taken_at    TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', taken_at) IS taken_at),
   offset_min  INTEGER CHECK (offset_min IS NULL OR offset_min BETWEEN -1080 AND 1080),
   width       INTEGER CHECK (width IS NULL OR width > 0),
@@ -962,7 +946,8 @@ CREATE TABLE photo (
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   CHECK ((lat IS NULL) = (lon IS NULL)),
   CHECK (motion_duration_s IS NULL OR motion_blob IS NOT NULL),
-  CHECK (edited_from IS NULL OR edited_from <> id)
+  CHECK (edited_from IS NULL OR edited_from <> id),
+  FOREIGN KEY (form, form_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 CREATE INDEX photo_by_taken       ON photo(taken_at, id);
 CREATE INDEX photo_by_blob        ON photo(blob);
@@ -988,7 +973,8 @@ CREATE TRIGGER photo_lineage_is_acyclic BEFORE UPDATE OF edited_from ON photo
 CREATE TABLE account (
   id            TEXT PRIMARY KEY,
   kind          TEXT GENERATED ALWAYS AS ('account') VIRTUAL,
-  type          TEXT NOT NULL REFERENCES account_type(code) ON DELETE NO ACTION,
+  type          TEXT NOT NULL,
+  type_domain   TEXT GENERATED ALWAYS AS ('account_type') VIRTUAL,
   currency      TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
   -- Where the account stood on `opening_on`, SIGNED (a card owes: negative). The balance on any day is
   -- this plus the posted lines AFTER `opening_on`, derived at read time.
@@ -997,7 +983,8 @@ CREATE TABLE account (
   on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   -- An opening balance that is not nothing is as of a day: without it no one can say which lines it already holds.
-  CHECK (opening_minor = 0 OR opening_on IS NOT NULL)
+  CHECK (opening_minor = 0 OR opening_on IS NOT NULL),
+  FOREIGN KEY (type, type_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 CREATE INDEX account_by_type ON account(type, id);
 
@@ -1140,14 +1127,18 @@ CREATE TABLE message (
   outcome    TEXT NOT NULL CHECK (outcome IN (
                'sent','answered','stopped','refused',
                'proposed','applied','dismissed','stale','failed')),
-  refusal    TEXT REFERENCES message_refusal(code) ON DELETE NO ACTION,
-  notice     TEXT REFERENCES message_notice(code) ON DELETE NO ACTION,
+  refusal    TEXT,
+  refusal_domain TEXT GENERATED ALWAYS AS ('message_refusal') VIRTUAL,
+  notice     TEXT,
+  notice_domain TEXT GENERATED ALWAYS AS ('message_notice') VIRTUAL,
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   updated_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
   PRIMARY KEY (thread_id, ordinal),
   CHECK ((role = 'user') = (outcome = 'sent')),
   CHECK ((outcome = 'refused') = (refusal IS NOT NULL)),
-  CHECK (role = 'assistant' OR notice IS NULL)
+  CHECK (role = 'assistant' OR notice IS NULL),
+  FOREIGN KEY (refusal, refusal_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION,
+  FOREIGN KEY (notice, notice_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 CREATE INDEX message_by_refusal ON message(refusal, thread_id) WHERE refusal IS NOT NULL;
 CREATE INDEX message_by_notice  ON message(notice, thread_id)  WHERE notice  IS NOT NULL;
@@ -1205,13 +1196,15 @@ CREATE INDEX message_card_by_entity ON message_card(entity_id) WHERE entity_id I
 CREATE TABLE locker_item (
   id          TEXT PRIMARY KEY,
   kind        TEXT GENERATED ALWAYS AS ('locker_item') VIRTUAL,
-  type        TEXT NOT NULL REFERENCES locker_type(code) ON DELETE NO ACTION,
+  type        TEXT NOT NULL,
+  type_domain TEXT GENERATED ALWAYS AS ('locker_type') VIRTUAL,
   compromised INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
   -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit: stamping
   -- it does not move the entity's `updated_at` and makes no revision. (I3: `password_set_at` and
   -- `memo` are gone: a secret's age is `locker_item_field.value_set_at`, the memo is the `notes` field.)
   last_used_at TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', last_used_at) IS last_used_at),
-  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  FOREIGN KEY (type, type_domain) REFERENCES vocab(code, domain) ON DELETE NO ACTION
 ) STRICT;
 CREATE INDEX locker_item_by_type ON locker_item(type, id);
 
@@ -1317,14 +1310,34 @@ INSERT INTO home_shape (kind, home_kind, shallow) VALUES
 
 INSERT INTO concept_kind (code, takes_color) VALUES
   ('tag',1), ('category',0), ('workout_kind',0), ('touch_kind',0), ('relation',0);
-INSERT INTO container_kind (code) VALUES
-  ('notebook'), ('folder'), ('album'), ('list'), ('task_list'), ('calendar');
+INSERT INTO vocab (domain, code) VALUES
+  ('container_kind','notebook'), ('container_kind','folder'), ('container_kind','album'),
+  ('container_kind','list'), ('container_kind','task_list'), ('container_kind','calendar'),
+  ('palette','blue'), ('palette','mustard'), ('palette','violet'), ('palette','petrol'),
+  ('palette','indigo'), ('palette','graphite'), ('palette','raspberry'), ('palette','orchid'),
+  ('palette','rose'), ('palette','amber'), ('palette','ochre'), ('palette','forest'), ('palette','teal'),
+  ('palette','slate'),
+  ('arrival_via','vcard'), ('arrival_via','csv'), ('arrival_via','upload'), ('arrival_via','picker'),
+  ('arrival_via','markdown'), ('arrival_via','scan'), ('arrival_via','share'), ('arrival_via','ics'),
+  ('contact_point_kind','phone'), ('contact_point_kind','email'), ('contact_point_kind','address'),
+  ('contact_point_kind','url'), ('contact_point_kind','handle'),
+  ('photo_form','photo'), ('photo_form','video'), ('photo_form','scan'),
+  ('account_type','checking'), ('account_type','savings'), ('account_type','credit_card'),
+  ('account_type','cash'), ('account_type','loan'), ('account_type','investment'),
+  ('account_type','asset'),
+  ('locker_type','login'), ('locker_type','card'), ('locker_type','note'), ('locker_type','identity'),
+  ('locker_type','wifi'), ('locker_type','password'), ('locker_type','ssh_key'),
+  ('locker_type','api_credential'), ('locker_type','passport'), ('locker_type','bank_account'),
+  ('locker_type','driving_licence'), ('locker_type','software_licence'), ('locker_type','crypto_wallet'),
+  ('locker_type','membership'), ('locker_type','document'),
+  ('message_refusal','no_tool_fits'), ('message_refusal','query_failed'), ('message_refusal','unparsable'),
+  ('message_refusal','model_absent'), ('message_refusal','model_failed'),
+  ('message_refusal','vision_absent'), ('message_refusal','attachment_unsupported'),
+  ('message_refusal','attachment_unreadable'), ('message_refusal','attachment_too_large'),
+  ('message_notice','doc_truncated'),
+  ('person_form','person'), ('person_form','org'), ('person_form','group'), ('person_form','pet');
 
-INSERT INTO palette (key) VALUES
-  ('blue'), ('mustard'), ('violet'), ('petrol'), ('indigo'), ('graphite'), ('raspberry'), ('orchid'),
-  ('rose'), ('amber'), ('ochre'), ('forest'), ('teal'), ('slate');
 
-INSERT INTO arrival_via (code) VALUES ('vcard'), ('csv'), ('upload'), ('picker'), ('markdown'), ('scan'), ('share'), ('ics');
 INSERT INTO arrival_via_kind (via, entity_kind) VALUES
   ('picker','photo'), ('vcard','person'), ('markdown','note'), ('csv','person'), ('csv','locker_item'),
   ('csv','txn'), ('scan','document'), ('upload','document'),
@@ -1347,19 +1360,6 @@ INSERT INTO source_shape (system, entity_kind) VALUES
 INSERT INTO derivative_variant (code, has_out) VALUES
   ('thumb',1), ('preview',1), ('poster',1), ('text',0), ('caption',0), ('phash',0), ('thumbhash',0);
 
-INSERT INTO contact_point_kind (code) VALUES ('phone'), ('email'), ('address'), ('url'), ('handle');
-INSERT INTO photo_form (code) VALUES ('photo'), ('video'), ('scan');
-INSERT INTO account_type (code) VALUES
-  ('checking'), ('savings'), ('credit_card'), ('cash'), ('loan'), ('investment'), ('asset');
-INSERT INTO locker_type (code) VALUES
-  ('login'), ('card'), ('note'), ('identity'), ('wifi'), ('password'), ('ssh_key'), ('api_credential'),
-  ('passport'), ('bank_account'), ('driving_licence'), ('software_licence'), ('crypto_wallet'),
-  ('membership'), ('document');
-INSERT INTO message_refusal (code) VALUES
-  ('no_tool_fits'), ('query_failed'), ('unparsable'), ('model_absent'), ('model_failed'),
-  ('vision_absent'), ('attachment_unsupported'), ('attachment_unreadable'), ('attachment_too_large');
-INSERT INTO message_notice (code) VALUES ('doc_truncated');
-INSERT INTO person_form (code) VALUES ('person'), ('org'), ('group'), ('pet');
 INSERT INTO person_date_kind (code, single) VALUES ('birthday', 1), ('anniversary', 0), ('other', 0);
 INSERT INTO reminder_target (kind, via_child) VALUES ('event', 0), ('task', 0), ('person', 1), ('locker_item', 1);
 

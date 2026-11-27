@@ -494,7 +494,8 @@ impl Vault {
 
 /// Is `index` an index whose leading columns are a foreign key's child columns of `table` (whole,
 /// or partial on `<column> IS NOT NULL`)? A partial index serves the key when its predicate is the
-/// one a lookup by the key implies.
+/// one a lookup by the key implies. A vocabulary key's `<col>_domain` is a constant, so only its code
+/// column counts.
 fn serves_a_foreign_key(
     connection: &rusqlite::Connection,
     index: &str,
@@ -516,7 +517,8 @@ fn serves_a_foreign_key(
         .collect::<std::result::Result<_, _>>()?;
     let mut keys: std::collections::BTreeMap<i64, Vec<(i64, String)>> = Default::default();
     let mut foreign = connection.prepare(&format!(
-        "SELECT id, seq, \"from\" FROM pragma_foreign_key_list('{table}')"
+        "SELECT id, seq, \"from\" FROM pragma_foreign_key_list('{table}')
+          WHERE NOT (\"table\" = 'vocab' AND \"from\" LIKE '%\\_domain' ESCAPE '\\')"
     ))?;
     for row in foreign.query_map([], |row| {
         Ok((

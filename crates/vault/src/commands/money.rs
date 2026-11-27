@@ -104,7 +104,7 @@ pub(crate) fn fileable(connection: &Connection, id: &str) -> Result<Option<Strin
 /// Whether the text names a kind of account (a row of the `account_type` lookup).
 fn is_account_type(connection: &Connection, code: &str) -> Result<bool> {
     Ok(connection.query_row(
-        "SELECT EXISTS (SELECT 1 FROM account_type WHERE code = ?1)",
+        "SELECT EXISTS (SELECT 1 FROM vocab WHERE domain = 'account_type' AND code = ?1)",
         [code],
         |row| row.get(0),
     )?)

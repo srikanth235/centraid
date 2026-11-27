@@ -467,7 +467,30 @@ fn no_check_or_trigger_names_a_value_a_lookup_table_holds() {
                 // A shape table's own keys are the lookup; its seed is not a rule.
                 continue;
             }
-            let columns: Vec<&str> = fk.from.split(',').collect();
+            let mut columns: Vec<&str> = fk.from.split(',').collect();
+            let mut domain_codes = None;
+            if fk.to_table == "vocab" {
+                // A vocabulary column keys `(<col>, <col>_domain)`: its codes are its domain's.
+                let (code_column, domain_column) = (columns[0], columns[1]);
+                let sql = table_sql(connection, &fk.table);
+                let at = sql
+                    .find(&format!("\n  {domain_column} "))
+                    .expect("a domain constant");
+                let constant = &sql[at..];
+                let constant = &constant[constant.find("AS ('").expect("a constant")..];
+                let domain = literals(&constant[..constant.find(')').expect("a close")])
+                    .into_iter()
+                    .next()
+                    .expect("a domain");
+                let set = connection
+                    .prepare("SELECT code FROM vocab WHERE domain = ?1")?
+                    .query_map([&domain], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<BTreeSet<_>>>()?;
+                assert!(!set.is_empty(), "the `{domain}` domain is seeded");
+                domain_codes = Some(set);
+                columns = vec![code_column];
+            }
+            let codes = domain_codes.as_ref().unwrap_or(codes);
             looked_at += 1;
             let mut rules: Vec<(String, String)> = checks(&table_sql(connection, &fk.table))
                 .into_iter()
@@ -536,7 +559,7 @@ fn the_lookup_seeds_equal_the_rust_lists_that_mirror_them() {
             map.kind.as_str()
         );
     }
-    let colours = words(&w, "SELECT key FROM palette");
+    let colours = words(&w, "SELECT code FROM vocab WHERE domain = 'palette'");
     for colour in centraid_vault::commands::container::LIST_COLORS
         .iter()
         .chain(&centraid_vault::commands::container::PHONE_CALENDAR_COLORS)
@@ -544,7 +567,7 @@ fn the_lookup_seeds_equal_the_rust_lists_that_mirror_them() {
     {
         assert!(colours.contains(*colour), "{colour} is not a palette key");
     }
-    let locker_types = words(&w, "SELECT code FROM locker_type");
+    let locker_types = words(&w, "SELECT code FROM vocab WHERE domain = 'locker_type'");
     assert_eq!(
         locker_types,
         centraid_vault::commands::locker::schema::ITEM_TYPES
