@@ -1,6 +1,6 @@
 Photos owner-ref and native layout source checks
 
-Source: the frozen code changes committed with this receipt; the native Mac outcome below still belongs to 096e04cb until the next hosted run completes.
+Source: be6c4d0edd65ad4bc80b0cd916284b74ec023521; native evidence is from completed hosted run 46084049333.
 
 Commands actually run:
 - cargo test -p centraid-screens --no-fail-fast: 629 passed, 0 failed, 0 ignored, 48 reported suites.
@@ -15,4 +15,4 @@ Commands actually run:
 
 Android resolver: 5/5 Robolectric tests, valid PNG decoding, stale replies and overlapping scopes; see android-photo-content.txt. Net tone: four focused golden tests passed; the one row fixture/golden change was visually reviewed; see android-net-tone.txt.
 
-New iOS source is not yet SDK-verified. Source096 passed 174 unit tests and unsigned iPhone build, but UI audit failed with 55 failures. No audit baseline/exemption or font-size ruling changed. Store-only image paths are supported; OS-library-only preview decoding remains absent. The excluded demo world and assistant data are unchanged.
+Current iOS source passed both real Rust targets, Swift compilation, all 175 unit tests and unsigned generic iPhone build. Normal UI audits failed with 53 assertions (8 tests, 1 expected skip); the dedicated Reduce Motion audit ran and failed with 26 assertions (1 test). All three focus-order tests passed. Ten required original native PNGs plus two XXXL repair PNGs were hash-verified and visually reviewed; see ../snapshots/ios/provenance.json. No audit baseline/exemption or font-size ruling changed. Store-only image paths are supported; OS-library-only preview decoding remains absent. The excluded demo world and assistant data are unchanged.

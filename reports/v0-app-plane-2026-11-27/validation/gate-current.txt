@@ -1,17 +1,22 @@
-Full PR gate at source 096e04cb2354aef9b4ab42002e240bb1e02306ec
+Full PR gate at source be6c4d0edd65ad4bc80b0cd916284b74ec023521
 
-Run: https://github.com/srikanth235/centraid/actions/runs/46071464163
-Gate job:140749131952; evidence artifact:15234387745.
+Run: https://github.com/srikanth235/centraid/actions/runs/46084049333
+Gate job: 140789379969. Evidence artifact: gate-pr-artifacts 15239591044 (103435B).
+Downloaded ZIP SHA256: 82f9e1929f0729b0017c88213f1132b7f1a25db5b998703573e25f62d19f6466
+Local evidence: /tmp/centraid-gate-be6/pr
 Result: failed; no full-gate success is claimed.
 
-Nextest failures:
+Exact nextest summary:
+3424 tests run: 3421 passed (20 slow), 3 failed, 4 skipped
+Failing cases:
 - centraid-assist::model_record::a_drifted_adapter_is_refused
 - centraid-assist::model_record::every_pinned_model_matches_the_runtime_it_runs_on
 - centraid-nativetools::export_fixture::the_committed_export_is_what_the_binary_writes
-These relate to the model/data/export work excluded by the owner. The failure list contains no Core or Screens regression cases.
+These are the excluded model/data/export work. No Core or Screens regression case failed in this hosted run. No fixture or pin was regenerated to pass them.
 
-Other failed checks:
-- rules: DATA-PIN stale-at mismatch; excluded assistant data maintenance remains untouched. Native-shell-parity passed.
-- buf: crates/api-proto/proto/centraid/core/v1/room.proto:934:5, FOREGROUND enum value must have PHASE_ prefix. Broader CI/protocol cleanup remains outside this task.
-- model-record: the same two model-record test failures above.
-- ci-policy: ShellCheck SC2155 at gate.yml:63, the added unsigned-device step declared and assigned a variable in one export. The local fix separates assignment from export; it is held for the next evidence push to avoid cancelling the active iOS run. Local actionlint is available, but ShellCheck is not installed locally.
+Other failures:
+- rules: DATA-PIN stale-at mismatch; every other structural rule passed.
+- buf lint: room.proto:934 FOREGROUND and :935 BACKGROUND must have PHASE_ prefix. Protocol/CI cleanup remains out of scope.
+- model-record: the same two model-record tests above.
+
+CI policy passed: all14 GitHub YAML files use pinned actions and pass actionlint. The SC2155 export-assignment warning in the added device step is fixed and no longer fails this check. No audit baseline, exemption or test threshold was changed.

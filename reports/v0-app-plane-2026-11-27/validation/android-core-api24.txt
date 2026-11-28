@@ -1,19 +1,11 @@
 Android API 24 ARM64 Core rebuild
 
-Source: `50510fd0befe4002643d5553d76af652e7064551`
-Command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && CENTRAID_ANDROID_API=24 flock /tmp/centraid-cargo.lock mobile/scripts/android-core.sh arm64-v8a`
-Result: successful incremental Rust build with the production `llama` feature enabled; output copied to `mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so`.
+Source commit: `be6c4d0edd65ad4bc80b0cd916284b74ec023521`.
+Command: `. /tmp/centraid-env.sh && flock /tmp/centraid-cargo.lock mobile/scripts/android-core.sh arm64-v8a`
+The script defaulted to Android API 24 and built the production `llama` feature. It rebuilt `centraid-screens` and `centraid-core-ffi`, then copied the resulting library to `mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so`.
 
-Core SHA-256: `e20e17a0ca3c42779d75d97994edd1d18ee6e6c6dbe2b2760f01a9da346f1d16`.
-`file` identifies ELF64 ARM aarch64, Android 24, NDK r27. `readelf` confirms AArch64 and only `libdl.so`, `libm.so`, and `libc.so` dependencies. All expected C ABI exports are present: `centraid_call`, `centraid_close`, `centraid_free`, `centraid_next_event`, and `centraid_open`.
+Result: successful incremental build (`Finished dev profile`); the command output was captured in the task execution transcript, not a standalone log file.
+Library SHA-256: `1ac5cd8e35d0214137f6aa1f83c0e40f20df150af4ce9ba31c74078f9821c8f7`.
+ELF is 64-bit AArch64 for Android 24, built with NDK r27 (27.0.12077973). Required C ABI exports are present: `centraid_call`, `centraid_close`, `centraid_free`, `centraid_next_event`, `centraid_open`. Dynamic dependencies are limited to `libdl.so`, `libm.so`, and `libc.so`.
 
-Build log: `/tmp/centraid-android-arm64-api24-build.log`. No device run was performed.
-
-Captured command output:
-
-==> building aarch64-linux-android
-   Compiling centraid-core v1.0.0-alpha.0 (/workspace/centraid/crates/core)
-   Compiling centraid-screens v1.0.0-alpha.0 (/workspace/centraid/crates/screens)
-   Compiling centraid-core-ffi v1.0.0-alpha.0 (/workspace/centraid/crates/core-ffi)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 27.74s
-==> /workspace/centraid/mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so
+This receipt verifies the native library build, not a device execution.

@@ -1,91 +1,107 @@
 {
-  "source_commit": "096e04cb2354aef9b4ab42002e240bb1e02306ec",
-  "run_url": "https://github.com/srikanth235/centraid/actions/runs/46071464163",
-  "job_id": 140749131892,
-  "artifact_id": 15236093703,
-  "artifact_zip_bytes": 14785933,
-  "artifact_zip_sha256": "0f12fbad4ea8ce1e4450e2286f6fc1596ce7828328e2c5e3f9a4ed358fa3a869",
-  "review": "All ten original PNGs inspected. People purple and Money indigo header accents correct in both appearances. Money positive amount is red: adapter repair follows this tested commit. Calendar captures the day/hour grid, Notes a blank new editor with keyboard, Photos two tint placeholders, not decoded photo previews. These images do not establish completed OS effects or physical-device behavior.",
+  "source_commit": "be6c4d0edd65ad4bc80b0cd916284b74ec023521",
+  "run_url": "https://github.com/srikanth235/centraid/actions/runs/46084049333",
+  "job_id": 140789379909,
+  "artifact_id": 15241456479,
+  "artifact_zip_bytes": 20491866,
+  "artifact_zip_sha256": "b11cd4eeb930286271a7c1c7b116f7114e05d22d73471b91a8b1f966aeebe96a",
+  "review": "All ten required original PNGs and the two XXXL repair PNGs inspected without image edits. People purple and Money indigo headers match the apps; positive Money amount is now green in both appearances. Calendar shows the day/hour grid and overdue reminders; Notes a blank new editor with keyboard; Photos two tint placeholders, not decoded photo previews. XXXL Calendar segments reflow without the previous overlap, and Reminders Due stacks above its date picker. The separate Reminders Title field still has a clipped-text audit finding. Simulator unit tests 175/0 and unsigned generic iPhone build passed; normal UI 53 and Reduce Motion 26 audit failures remain. These images do not establish completed OS effects or physical-device behavior.",
   "captures": [
     {
       "path": "dark/calendar_grid.png",
-      "bytes": 205605,
+      "bytes": 206468,
       "width": 1206,
       "height": 2622,
-      "sha256": "208207a37760e6161d3ff22cf6683984a8d99b0328ac56ab6bdbe517d991d198",
-      "attachment": "Centraid-dark-calendar_grid_0_4949D99A-A289-4F4F-8CEC-ACDEAF477F19.png"
+      "sha256": "4c6bbdf81b9ebfd5a0540a6869a340e17897fcea630c215d0d285030f9014e4d",
+      "attachment": "Centraid-dark-calendar_grid_0_98AD2D02-DC3D-4308-98CA-CB1D6DDACCA9.png"
     },
     {
       "path": "dark/money_root.png",
-      "bytes": 151609,
+      "bytes": 151781,
       "width": 1206,
       "height": 2622,
-      "sha256": "808d5cc43c63f14930265ada575500b9f2a50eee37615678bc0d17f2b60210a0",
-      "attachment": "Centraid-dark-money_root_0_8D89A106-13F7-4F40-B2BD-1BD6F43F7B93.png"
+      "sha256": "a5b6217888fc718e49f0dcb033bd8552b057cd617988f88c0c5ffb972085108b",
+      "attachment": "Centraid-dark-money_root_0_1024D635-9D42-4ABA-B6A5-A5F33EA9F6D9.png"
     },
     {
       "path": "dark/note_editor.png",
-      "bytes": 139395,
+      "bytes": 137718,
       "width": 1206,
       "height": 2622,
-      "sha256": "9fae72caba4c6ec979c5d16cdd2d4db04dd044ea55f0972fac8989a635e16c39",
-      "attachment": "Centraid-dark-note_editor_0_A455E628-5F7D-4519-B6FD-11979002E862.png"
+      "sha256": "591bf462d41378d94dc47487be0053e99ffdd0187d8a4f82f6263543cabc2e06",
+      "attachment": "Centraid-dark-note_editor_0_F446FA73-3AAE-41CD-9669-0C20E0F09A99.png"
     },
     {
       "path": "dark/people_root.png",
-      "bytes": 153123,
+      "bytes": 152731,
       "width": 1206,
       "height": 2622,
-      "sha256": "c3ad154c7e6e27a6b9f21bf398809973f43e70127242f4667d5fd139d749dafd",
-      "attachment": "Centraid-dark-people_root_0_25CCD834-8BF5-4DC0-9C67-A6EA42A91A62.png"
+      "sha256": "7f91756bf7e009df8dac78f7b10c64016f4647115f07fd6c393af285aecc58a5",
+      "attachment": "Centraid-dark-people_root_0_01D60AC6-A9AB-4E22-8FBB-E82F34F7E1C7.png"
     },
     {
       "path": "dark/photo_grid.png",
-      "bytes": 142511,
+      "bytes": 142138,
       "width": 1206,
       "height": 2622,
-      "sha256": "2c717b198a5473ed3213d3ad02349ee636c1e9605f2e39db00bbd1a5b78aa9a1",
-      "attachment": "Centraid-dark-photo_grid_0_B6675DD4-4EF3-4679-99BC-6D8A714DB977.png"
+      "sha256": "6998134e77fe2db03df3058c57bda81188a7293937a47c7e061d71a0298f4366",
+      "attachment": "Centraid-dark-photo_grid_0_421C0011-D341-46D8-8B81-93D284C94133.png"
     },
     {
       "path": "light/calendar_grid.png",
-      "bytes": 234373,
+      "bytes": 232592,
       "width": 1206,
       "height": 2622,
-      "sha256": "265a9bcf34249e50fe7add432aeebe935bf79c88cc5c941302b36e0a52f98113",
-      "attachment": "Centraid-light-calendar_grid_0_827D8269-66A0-4097-BBEC-B03957001396.png"
+      "sha256": "232bc75e9dd2afd0bae5c021655651457bfe0894b1246bcaf9d3f4bec5e25ddc",
+      "attachment": "Centraid-light-calendar_grid_0_8B206A3C-0B08-498D-8BB7-859D644189F4.png"
     },
     {
       "path": "light/money_root.png",
-      "bytes": 185072,
+      "bytes": 184817,
       "width": 1206,
       "height": 2622,
-      "sha256": "cb8763cb4c3bbc9c7f7af245401342145c9d5f67ac2d28eec2b98d578ec71c33",
-      "attachment": "Centraid-light-money_root_0_42C2D74A-15BB-449B-848A-63AD5A135942.png"
+      "sha256": "59deefa314879ca52715c508b2bbdcf0f0646ea737292138c2dd132e3da051d4",
+      "attachment": "Centraid-light-money_root_0_169EC28C-BD76-40A4-9419-3B84538483E2.png"
     },
     {
       "path": "light/note_editor.png",
-      "bytes": 152075,
+      "bytes": 148855,
       "width": 1206,
       "height": 2622,
-      "sha256": "8c842f712c0f019aa03085b64d6a5e146c82892a360719b20e09d84ac206f737",
-      "attachment": "Centraid-light-note_editor_0_2DC4917F-EDB3-437E-9D24-4D71C15C38F2.png"
+      "sha256": "6ecf83af9347dc535b319aa464c2cae431ce48c80553d92c9ff76d99f7b3e74e",
+      "attachment": "Centraid-light-note_editor_0_9306FE14-167B-4FAC-BCBC-09CB8785CE1F.png"
     },
     {
       "path": "light/people_root.png",
-      "bytes": 192697,
+      "bytes": 191807,
       "width": 1206,
       "height": 2622,
-      "sha256": "f7f0f344ed839aa478d74936cf78447b30e235cbdf90ef8ec3bdca9ed6a3e576",
-      "attachment": "Centraid-light-people_root_0_9BDC93E2-D1DF-4382-ABDA-39D250E2CD34.png"
+      "sha256": "7b8fd6bf0deefb98eb625172edb14891472e90ae9606a1806dd41c80690eea12",
+      "attachment": "Centraid-light-people_root_0_DDF588A9-8E05-4AB5-9432-8C5AE62366CE.png"
     },
     {
       "path": "light/photo_grid.png",
-      "bytes": 178575,
+      "bytes": 178561,
       "width": 1206,
       "height": 2622,
-      "sha256": "8b1618b35f9eb0e47d628872c993b9707417c4ab871ad9cb194d7b21d529f121",
-      "attachment": "Centraid-light-photo_grid_0_C7EAAA83-2BD8-4C63-A718-61F88EA3FBC0.png"
+      "sha256": "5922a51bca95ae7b1326285ce27a6a2a6e36ee54d0b3ae7d66d756e303ae8159",
+      "attachment": "Centraid-light-photo_grid_0_926093B7-78FC-4961-9141-5A134B712B7A.png"
+    },
+    {
+      "path": "accessibility-xxxl/accessibility-xxxl-Calendar.png",
+      "bytes": 284141,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "d3341fb65ab04af78dcc925ecf4e2aa86cd06fff8894147398508a5c298434a6",
+      "attachment": "pages/accessibility-xxxl-Calendar.png"
+    },
+    {
+      "path": "accessibility-xxxl/accessibility-xxxl-Reminders-Add.png",
+      "bytes": 369549,
+      "width": 1206,
+      "height": 2622,
+      "sha256": "0dea7ac40b28aed45f560db6aa9403223c32b472fd01751efdfb139d39bc8b53",
+      "attachment": "pages/accessibility-xxxl-Reminders-Add.png"
     }
   ]
 }

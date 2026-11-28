@@ -1,10 +1,11 @@
 {
   "artifact": "Debug APK",
-  "source_commit": "096e04cb2354aef9b4ab42002e240bb1e02306ec",
+  "source_commit": "be6c4d0edd65ad4bc80b0cd916284b74ec023521",
+  "core_source_commit": "be6c4d0edd65ad4bc80b0cd916284b74ec023521",
   "path": "mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
-  "download_path": "mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-096e04cb.apk",
-  "sha256": "12489c7e2431cc3d61d61c2860b48192aff1b23ba8e132bd223246cf027861a1",
-  "bytes": 197707943,
+  "download_path": "mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-be6c4d0e.apk",
+  "sha256": "be739c7348e7a51641095d7d2d96e6f0c790e0e2aafdce3e72ac1a883e258663",
+  "bytes": 197724327,
   "min_sdk": 24,
   "target_sdk": 36,
   "compile_sdk": 36,
@@ -13,9 +14,9 @@
   ],
   "native_api_level": 24,
   "core_library": "mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so",
-  "core_sha256": "e20e17a0ca3c42779d75d97994edd1d18ee6e6c6dbe2b2760f01a9da346f1d16",
-  "embedded_core_sha256": "e20e17a0ca3c42779d75d97994edd1d18ee6e6c6dbe2b2760f01a9da346f1d16",
-  "host_ffi_sha256": "9fc58e9695514b2c4251e8cba3f5abf492a10a2bd9522a763a4a99eb2edd0ef8",
+  "core_sha256": "1ac5cd8e35d0214137f6aa1f83c0e40f20df150af4ce9ba31c74078f9821c8f7",
+  "embedded_core_sha256": "1ac5cd8e35d0214137f6aa1f83c0e40f20df150af4ce9ba31c74078f9821c8f7",
+  "host_ffi_sha256": "4da92af2ba99d0d33cc81e3fddee58c4693860b04d664d7035cb579310fc20e4",
   "core_exports": [
     "centraid_call",
     "centraid_close",
@@ -36,9 +37,8 @@
   "signing_certificate_sha256": "90c42bb21431aa4523e0b5e97ae5e739f5bc5d3454c3b8d98aea9ab67783d0be",
   "signer_matches_previous_debug_apk": true,
   "download_and_default_files_identical": true,
+  "zip_alignment_verified": true,
   "device_run": false,
   "embedded_core_path": "lib/arm64-v8a/libcentraid_core_ffi.so",
-  "zip_alignment_verified": true,
-  "status": "Repackaged Android Debug APK at source commit 096e04cb; app-only generated copy adds two unused KitWords constants. Embedded Core is unchanged from the verified functional Core build at 50510fd0.",
-  "core_source_commit": "50510fd0befe4002643d5553d76af652e7064551"
+  "status": "Built and verified the API 24 ARM64 Debug APK from be6c4d0edd65ad4bc80b0cd916284b74ec023521; the embedded Core hash matches the library built from the same source commit."
 }

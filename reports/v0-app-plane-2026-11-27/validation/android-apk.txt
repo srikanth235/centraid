@@ -1,13 +1,15 @@
 Android Debug APK receipt
 
-Source commit: `096e04cb2354aef9b4ab42002e240bb1e02306ec`
-Core source commit: `50510fd0befe4002643d5553d76af652e7064551`
-Build command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:assembleDebug --no-daemon`
-Result: `BUILD SUCCESSFUL` (`/tmp/centraid-android-repackage.log`). The only change after the Core source commit adds two unused generated `KitWords` constants; member-visible behavior and the native Core library are unchanged.
+Source and Core source commit: `be6c4d0edd65ad4bc80b0cd916284b74ec023521`.
+Build command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:assembleDebug --no-daemon`.
+Result: `BUILD SUCCESSFUL`; log: `/tmp/centraid-android-be6c4d0e-assemble.log`.
 
-The artifact is package `dev.centraid`, minSdk 24 / targetSdk 36, arm64-v8a only. The embedded Core SHA-256 equals the API 24 arm64 library: `e20e17a0ca3c42779d75d97994edd1d18ee6e6c6dbe2b2760f01a9da346f1d16`. All five expected C ABI exports are present. `zipalign -c -v 4` and `apksigner verify` pass; the signing certificate SHA-256 `90c42bb21431aa4523e0b5e97ae5e739f5bc5d3454c3b8d98aea9ab67783d0be` matches the prior debug APK signer. The default and named download files are identical (197,707,943 bytes), SHA-256 `12489c7e2431cc3d61d61c2860b48192aff1b23ba8e132bd223246cf027861a1`.
+The compact Debug APK is package `dev.centraid`, minSdk 24, targetSdk 36, arm64-v8a only. APK size is 197,724,327 bytes; SHA-256 is `be739c7348e7a51641095d7d2d96e6f0c790e0e2aafdce3e72ac1a883e258663`. The named download and default output are hard links with identical contents.
 
-Download: `mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-096e04cb.apk`
-Default output: `mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk`
+- Download: `mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-be6c4d0e.apk`
+- Default output: `mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk`
+- Embedded Core SHA-256 equals the rebuilt Android library: `1ac5cd8e35d0214137f6aa1f83c0e40f20df150af4ce9ba31c74078f9821c8f7`.
+- All five expected C ABI exports are present. Core dependencies are `libdl.so`, `libm.so`, and `libc.so`.
+- `zipalign -c -v 4` and `apksigner verify` passed. Signing certificate SHA-256 `90c42bb21431aa4523e0b5e97ae5e739f5bc5d3454c3b8d98aea9ab67783d0be` matches the previous Debug APK.
 
-No device or emulator was used (`device_run: false`). No Core/FFI/Screens runtime source changed since `50510fd0`; no Core or JVM rebuild was needed.
+No device or emulator was used (`device_run: false`).

@@ -10,9 +10,9 @@ The [durable Room fixture manifest](room-fixtures.json) currently lists 20 fixtu
 
 ## Native simulator evidence
 
-The hosted macOS run [46071464163](https://github.com/srikanth235/centraid/actions/runs/46071464163) captured the actual Money root in [light](snapshots/ios/light/money_root.png) and [dark](snapshots/ios/dark/money_root.png) at source `096e04cb2354aef9b4ab42002e240bb1e02306ec`. Both original PNGs were downloaded, hash-verified and visually reviewed; the [native provenance](snapshots/ios/provenance.json) records the immutable source and artifact. Header accents match the app. The 174 unit tests passed; the UI suite remains red with 55 audit failures. These two native root images supplement the promise-specific Compose previews below; they do not establish every promise on iOS or any physical-device flow.
+The hosted macOS run [46084049333](https://github.com/srikanth235/centraid/actions/runs/46084049333) captured the actual Money root in [light](snapshots/ios/light/money_root.png) and [dark](snapshots/ios/dark/money_root.png) at source `be6c4d0edd65ad4bc80b0cd916284b74ec023521`. Both original PNGs were downloaded, hash-verified and visually reviewed; the [native provenance](snapshots/ios/provenance.json) records the immutable source and artifact. Header accents match the app. All 175 unit tests and the unsigned generic iPhone build passed. Normal UI audits retain 53 failures and the separate Reduce Motion audit retains 26 failures; all three focus-order tests passed. These native root images supplement the promise-specific Compose previews below; they do not establish every promise on iOS or any physical-device flow.
 
-The native capture also exposes an incorrect red positive amount; its adapter repair follows the tested source and needs its own native verification.
+The current light and dark native Money captures verify the positive amount is green after the adapter repair; negative spending remains black in light mode. The earlier source `096e04cb` captured the incorrect red positive amount.
 
 ## P1–P10 review
 
@@ -44,6 +44,8 @@ The native capture also exposes an incorrect red positive amount; its adapter re
 
 For each light preview, the dark counterpart is available at `snapshots/dark/<same filename>`.
 
+The reimport preview intentionally has separate hand-entered and statement lines named Monthly Utility on November 26. They are a match proposal pair; reimport deduplication uses the statement source identity and does not silently merge the hand line.
+
 ## Test record and limits
 
 - `CENTRAID_REVIEW_CAPTURE=1 cargo test -p centraid-screens --test review_room_artifacts -- --nocapture` — 1 passed; latest run emitted 20 real Room fixtures, including the date-order question and two-row selection state.
@@ -55,7 +57,7 @@ For each light preview, the dark counterpart is available at `snapshots/dark/<sa
 - `cargo test -p centraid-screens --test room_exports -- --nocapture` — 1 passed, 0 failed; exercises ten real formatter exports, including three Health export choices.
 - `cargo test -p centraid-screens --test room_people_import -- --nocapture` — 1 passed; actual staged vCard bytes appear in a count preview before explicit confirmation, then import with Undo.
 - `cargo test -p centraid-screens --test room_day_one -- --nocapture` — 11 passed, 0 failed after updating the reviewed current snapshots.
-- `cargo test -p centraid-screens --test room_notes_docs_photos -- --nocapture` — 3 passed, 0 failed after updating the reviewed current snapshots.
+- `cargo test -p centraid-screens --test room_notes_docs_photos -- --nocapture` — 4 passed, 0 failed after updating the reviewed current snapshots.
 - Android Compose/Robolectric rendered 20 light and 20 dark previews. An Android API 24 arm64 cross-build and debug APK assembly completed; no device run is claimed. Native simulator root captures are linked above; no physical-device, hardware owner authentication, OS save sheet, clipboard, or share sheet approval is claimed.
 
 The full screen test output is available at [validation/screens.txt](validation/screens.txt); focused Money results are [validation/money-current.txt](validation/money-current.txt), the latest artifact capture is [validation/room-fixture-capture.txt](validation/room-fixture-capture.txt), and screens Clippy is [validation/money-clippy.txt](validation/money-clippy.txt). The full vault output is at [validation/vault.txt](validation/vault.txt). The test commands were serialized with the repository's Cargo lock. No owner approval or #1214 progress checkbox is claimed by this packet.

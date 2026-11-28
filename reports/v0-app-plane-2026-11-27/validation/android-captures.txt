@@ -1,6 +1,11 @@
-Band contrast repair Robolectric capture
+Android real-Core Room review renders
 
-Command: CENTRAID_REVIEW_CAPTURE=1 /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true -Droborazzi.test.record=true :androidApp:testDebugUnitTest --tests '*RustRoomReviewCaptureTest' --no-daemon
-Result: BUILD SUCCESSFUL. Captured all 20 real Rust People/Money Room fixtures in light and dark (40 PNGs), plus the 40-row glass-scroll proof in both schemes (2 PNGs). Every capture asserted nonzero PNG bytes and readable dimensions. These are Compose/Robolectric renders, not device GPU-blur evidence. Updated durable images under snapshots/light, snapshots/dark, and snapshots/glass-scroll.
+Source commit: `be6c4d0edd65ad4bc80b0cd916284b74ec023521`.
+Fixtures: the current Rust exporter manifest contains 20 real People/Money Room protobufs; the separate `money_glass_scroll.pb` fixture is a Core-generated 40-row room and is not counted among those 20 review fixtures.
 
-Focused contrast test: BandGlassContrastTest passed (2 tests). It composites the renderer's shared tint parameter over black/white and checks generated Android ink/meta color resources at >= 4.5:1.
+Command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && CENTRAID_REVIEW_CAPTURE=1 /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true -Droborazzi.test.record=true :androidApp:testDebugUnitTest --tests '*RustRoomReviewCaptureTest' --no-daemon`.
+Result: `BUILD SUCCESSFUL`; 2 capture/layout tests passed, 0 failures/errors/skips. Log: `/tmp/centraid-android-be6c4d0e-captures.log`.
+
+The test generated 20 light and 20 dark PNGs from actual Rust Room fixtures, plus a light and dark scroll-pressure PNG from the separate 40-row fixture. It asserted each output was a readable PNG and verified the final transaction row clears the overlaid footer after scrolling to the end. Durable copies are in `snapshots/light/`, `snapshots/dark/`, and `snapshots/glass-scroll/{light,dark}/`; `snapshots/android-manifest.json` records the fixture manifest. All renders are Compose/Robolectric, not physical-device screenshots. Robolectric does not verify device GPU blur.
+
+Visual spot check: `money_root` and `money_detail` keep negative expenses neutral; `money_transfer` keeps the transfer amount neutral. The corrected `row_default` positive Net fixture renders green in `mobile/androidApp/src/test/snapshots/blocks/row_default.png`. The dense scroll capture shows transaction content beneath the translucent footer; the test confirms the last row scrolls fully above it.

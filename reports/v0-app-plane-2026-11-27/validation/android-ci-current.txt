@@ -1,47 +1,16 @@
-Hosted Android verification at source 50510fd0befe4002643d5553d76af652e7064551
-Run: https://github.com/srikanth235/centraid/actions/runs/46059161071
-Job: 140708923015; artifact: 15228695069; archive bytes: 181950; SHA256: 55be286eeae6ec4ac024e1fd743330fe9df626fd5b83435eba37450cd1057d76
+Hosted Android verification at be6c4d0edd65ad4bc80b0cd916284b74ec023521
 
-Kotlin compile and shared-fixture tests passed. Full unit verification ran 214 tests, 1 failure, 2 opt-in skips. Both new RoomClientGlobalEffectTest cases passed.
+Run: https://github.com/srikanth235/centraid/actions/runs/46084049333
+Job: 140789379900
+Result: failed; no clean-checkout all-green Android claim.
 
-Failure: java.lang.AssertionError: Roborazzi: The original file(/home/runner/work/centraid/centraid/mobile/androidApp/build/outputs/roborazzi/screens/room_home.png) was not found.
-This is the same pre-existing ignored full-screen reference failure documented in android-ci.txt; broader CI cleanup remains excluded. It is not waived or reported as a passing suite.
+Kotlin compilation and shared-fixture tests passed. Full Android run: 219 tests completed, 1 failed, 2 skipped. The new RoomClientPhotoContentTest passed all 5 tests with no failures/skips. All 34 tracked block golden comparisons reported changed:false.
 
-The 34 tracked block comparisons have pixelDifferences=0. The final room_home comparison is the missing ignored reference, so its full-image difference is retained below.
+The only failure remains the pre-existing ignored full-screen reference:
+java.lang.AssertionError: Roborazzi: The original file(/home/runner/work/centraid/centraid/mobile/androidApp/build/outputs/roborazzi/screens/room_home.png) was not found.
 
-Emitted comparisons:
-Roborazzi: hero_person.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=923130, width=1170, height=789) changed:false
-Roborazzi: section_rows.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=632970, width=1170, height=541) changed:false
-Roborazzi: row_default.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=221130, width=1170, height=189) changed:false
-Roborazzi: row_check_states.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=628290, width=1170, height=537) changed:false
-Roborazzi: facts_contact_and_sealed.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=680940, width=1170, height=582) changed:false
-Roborazzi: form_explicit.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=1092780, width=1170, height=934) changed:false
-Roborazzi: form_autosave.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=542880, width=1170, height=464) changed:false
-Roborazzi: choice_segmented.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=243360, width=1170, height=208) changed:false
-Roborazzi: choice_chips.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=236340, width=1170, height=202) changed:false
-Roborazzi: choice_list.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=450450, width=1170, height=385) changed:false
-Roborazzi: figure_month.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=408330, width=1170, height=349) changed:false
-Roborazzi: prose_links.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=177840, width=1170, height=152) changed:false
-Roborazzi: media_video.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=858780, width=1170, height=734) changed:false
-Roborazzi: progress_determinate.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=301860, width=1170, height=258) changed:false
-Roborazzi: empty_action.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=965250, width=1170, height=825) changed:false
-Roborazzi: wall_locked.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=1033110, width=1170, height=883) changed:false
-Roborazzi: tiles_home.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=353340, width=1170, height=302) changed:false
-Roborazzi: glance_today.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=353340, width=1170, height=302) changed:false
-Roborazzi: trash_list.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=616590, width=1170, height=527) changed:false
-Roborazzi: confirm_outlined.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=939510, width=1170, height=803) changed:false
-Roborazzi: menu_sections.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=508950, width=1170, height=435) changed:false
-Roborazzi: attachments_footer.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=402480, width=1170, height=344) changed:false
-Roborazzi: linked_footer.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=402480, width=1170, height=344) changed:false
-Roborazzi: mentioned_in_footer.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=304200, width=1170, height=260) changed:false
-Roborazzi: says_phone.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=365040, width=1170, height=312) changed:false
-Roborazzi: earlier_versions_footer.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=182520, width=1170, height=156) changed:false
-Roborazzi: origin_footer.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=154440, width=1170, height=132) changed:false
-Roborazzi: slot_header.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=356850, width=1170, height=305) changed:false
-Roborazzi: slot_band.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=291330, width=1170, height=249) changed:false
-Roborazzi: slot_status_line.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=252720, width=1170, height=216) changed:false
-Roborazzi: slot_search.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=366210, width=1170, height=313) changed:false
-Roborazzi: slot_selection.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=312390, width=1170, height=267) changed:false
-Roborazzi: canvas_placeholders.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=1712880, width=1170, height=1464) changed:false
-Roborazzi: tiles_home_dark.png The differ result :ComparisonResult(pixelDifferences=0, pixelCount=353340, width=1170, height=302) changed:false
-Roborazzi: room_home.png The differ result :ComparisonResult(pixelDifferences=2962440, pixelCount=2962440, width=1170, height=2532) changed:true
+That reference belongs to the ignored build-output directory and is absent on a clean checkout. Broader CI/capture-harness cleanup remains excluded; no reference, baseline or threshold was invented to pass it. Earlier local full-suite verification reused an existing ignored image. See android-ci.txt for introduction provenance.
+
+Evidence artifact: roborazzi-compare, 15238612214, 183327 bytes. Downloaded archive SHA256: ff2a1ba195908e6816b125317980d21ad5a4c64978f682cfe5fe3c97294fb1b5
+Local extract: /tmp/centraid-android-ci-be6
+The hosted HTML reports contain the failure, the five successful resolver cases, and all 34 unchanged tracked comparison lines. No Android phone run is claimed.
