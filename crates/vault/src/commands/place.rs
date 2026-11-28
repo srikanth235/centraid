@@ -1,133 +1,81 @@
-//! `place.*`: somewhere the vault knows, and the offline gazetteer's word for it.
+//! `place.*`: somewhere the member keeps, and the offline gazetteer's word for it.
 //!
-//! A place is an entity of kind `place`: its name is the entity's title (so
-//! `entity.retitle` names one, and a photograph or an event at it follows the
-//! name into its search text), its coordinates and address are columns of the
-//! row, and `locality` is **derived** — the nearest city the offline gazetteer
-//! matched — and written by [`locate`] alone, so a rename cannot undo it and a
-//! member's address is never mistaken for it.
+//! **A place is one the member made** (D5, H3). It is an entity of kind `place` with a name (the
+//! entity's title, so `entity.retitle` names one and a photograph or an event at it follows the
+//! name into its search text), and coordinates, an address and a zone, all optional. Nothing
+//! else creates one: a photograph carries where it was taken in its own `lat`/`lon` and never
+//! makes a place titled with a coordinate, and the words a phone gives an event's location are
+//! the event's `location`, not a place. A photograph, an event, a workout or a touch is attached
+//! to a place by the member's choice.
 //!
-//! A photograph that carries coordinates founds its place through
-//! [`find_or_found`]: a place the member has already named within ~170 m is
-//! adopted (a cabin covers its garden), else the place at the same ~11 m
-//! rounding, else a new one titled by its coordinates. A coordinate-as-name is
-//! never adopted as a name: adopting one would spread a placeholder over every
-//! later photograph taken nearby.
+//! `locality` is **derived** — the nearest city the offline gazetteer matched — and written by
+//! `place.locate` alone, so an edit cannot undo it and a member's address is never mistaken for
+//! it. A place's coordinates are one point in the spatial index (the map reads
+//! `index::viewport`); the commit maintains it from these rows.
+//!
+//! The trash and the purge are the shared verbs: a place in the trash is no longer drawn on the
+//! map, and a purge lets go of the photographs and events that named it (they keep their
+//! coordinates and their words).
 
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
+use crate::commands::entity::{self, lookup_live};
+use crate::commands::{
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, deserialize_patch,
+};
 use crate::error::Result;
 use crate::model::Kind;
 
-/// ~170 m in degrees: the radius at which a place the member named is adopted.
-const NAMED_RADIUS_DEG: f64 = 0.0015;
+/// The five columns that name a place: an event, one day of a series, a workout, a touch and a
+/// photograph.
+const PLACE_COLUMNS: [&str; 5] = ["event", "occurrence", "workout", "touch", "photo"];
 
-/// The title of a place nobody has named: its coordinates, at ~11 m.
-fn coordinate_label(lat: f64, lon: f64) -> String {
-    format!("{lat:.4}, {lon:.4}")
-}
-
-/// Whether a title is a coordinate pair rather than a name.
-fn is_coordinate_label(title: &str) -> bool {
-    let Some((lat, lon)) = title.trim().split_once(',') else {
-        return false;
-    };
-    let decimal = |text: &str| {
-        let text = text.trim();
-        let text = text.strip_prefix('-').unwrap_or(text);
-        text.split_once('.').is_some_and(|(whole, fraction)| {
-            (1..=3).contains(&whole.len())
-                && whole.bytes().all(|b| b.is_ascii_digit())
-                && !fraction.is_empty()
-                && fraction.bytes().all(|b| b.is_ascii_digit())
-        })
-    };
-    decimal(lat) && decimal(lon)
-}
-
-/// Insert the entity and the row of a place; the caller says what it holds.
-fn found(
-    ctx: &CommandCtx<'_, '_>,
-    id: Option<&str>,
-    title: &str,
-    coordinates: Option<(f64, f64)>,
-    address: Option<&str>,
-    zone: Option<&str>,
-) -> Result<String> {
-    let id = match id {
-        Some(id) => {
-            ctx.insert_entity_as(id, Kind::Place, title)?;
-            id.to_owned()
+fn pre_merge(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let (from, into) = (ctx.required_str("from")?, ctx.required_str("into")?);
+    if from == into {
+        return Ok(Some("a place cannot be merged into itself".to_owned()));
+    }
+    for id in [from, into] {
+        let found = match lookup_live(ctx.connection(), id)? {
+            Ok(found) => found,
+            Err(sentence) => return Ok(Some(sentence)),
+        };
+        if found.kind != Kind::Place {
+            return Ok(Some(format!(
+                "“{}” is a {}, and only places are merged",
+                found.title,
+                found.kind.noun()
+            )));
         }
-        None => ctx.insert_entity(Kind::Place, title)?,
-    };
-    ctx.connection().execute(
-        "INSERT INTO place (id, lat, lon, address, zone) VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![
-            id,
-            coordinates.map(|(lat, _)| lat),
-            coordinates.map(|(_, lon)| lon),
-            address,
-            zone
-        ],
+    }
+    Ok(None)
+}
+
+/// `place.merge`: the place `from` and the place `into` are one, and `into` stays. Everything that
+/// was at `from` is at `into`, and then `from` is purged. Where `into` has no coordinates, address
+/// or zone, it takes the ones `from` had.
+fn merge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let (loser, winner) = (ctx.required_str("from")?, ctx.required_str("into")?);
+    let connection = ctx.connection();
+    connection.execute(
+        "UPDATE place SET
+           lat = CASE WHEN place.lat IS NULL THEN l.lat ELSE place.lat END,
+           lon = CASE WHEN place.lat IS NULL THEN l.lon ELSE place.lon END,
+           address = COALESCE(place.address, l.address), zone = COALESCE(place.zone, l.zone)
+         FROM (SELECT * FROM place WHERE id = ?1) AS l
+         WHERE place.id = ?2",
+        [loser, winner],
     )?;
-    Ok(id)
-}
-
-/// The live place a phone's words name (its title, without regard to case), else a new one titled
-/// by them: a location a phone states is a string, and the same words are the same place.
-pub(crate) fn find_or_found_named(ctx: &CommandCtx<'_, '_>, name: &str) -> Result<String> {
-    use rusqlite::OptionalExtension;
-    let name = name.trim();
-    let known: Option<String> = ctx
-        .connection()
-        .query_row(
-            "SELECT p.id FROM place p JOIN entity e ON e.id = p.id
-              WHERE e.deleted_at IS NULL AND lower(e.title) = lower(?1)
-              ORDER BY p.id LIMIT 1",
-            [name],
-            |row| row.get(0),
-        )
-        .optional()?;
-    match known {
-        Some(id) => Ok(id),
-        None => found(ctx, None, name, None, None, None),
+    let mut moved = 0;
+    for table in PLACE_COLUMNS {
+        moved += connection.execute(
+            &format!("UPDATE {table} SET place_id = ?2 WHERE place_id = ?1"),
+            [loser, winner],
+        )?;
     }
-}
-
-/// The place at these coordinates: the member's own named place nearby, else
-/// the one at the same rounding, else a new one.
-pub(crate) fn find_or_found(ctx: &CommandCtx<'_, '_>, lat: f64, lon: f64) -> Result<String> {
-    // The box is widened by 1/cos(lat) so it stays roughly square away from the
-    // equator; SQLite has no trigonometry, so the shaping happens here.
-    let lon_radius = NAMED_RADIUS_DEG / lat.to_radians().cos().max(0.05);
-    let nearby: Vec<(String, String)> = ctx
-        .connection()
-        .prepare_cached(
-            "SELECT p.id, e.title FROM place p JOIN entity e ON e.id = p.id
-              WHERE e.deleted_at IS NULL AND p.lat BETWEEN ?1 AND ?2 AND p.lon BETWEEN ?3 AND ?4
-              ORDER BY (p.lat - ?5) * (p.lat - ?5) + (p.lon - ?6) * (p.lon - ?6), p.id
-              LIMIT 8",
-        )?
-        .query_map(
-            rusqlite::params![
-                lat - NAMED_RADIUS_DEG,
-                lat + NAMED_RADIUS_DEG,
-                lon - lon_radius,
-                lon + lon_radius,
-                lat,
-                lon
-            ],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?
-        .collect::<rusqlite::Result<_>>()?;
-    if let Some((id, _)) = nearby.iter().find(|(_, title)| !is_coordinate_label(title)) {
-        return Ok(id.clone());
-    }
-    let label = coordinate_label(lat, lon);
-    if let Some((id, _)) = nearby.iter().find(|(_, title)| *title == label) {
-        return Ok(id.clone());
-    }
-    found(ctx, None, &label, Some((lat, lon)), None, None)
+    let mut purged = Vec::new();
+    entity::purge_one(ctx, loser, &mut purged)?;
+    ctx.touch(winner)?;
+    ctx.mark_for_index(winner);
+    Ok(serde_json::json!({ "into": winner, "moved": moved }))
 }
 
 #[derive(serde::Deserialize)]
@@ -151,16 +99,93 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: AddInput = ctx.parse_input()?;
-    let coords = input.lat.zip(input.lon);
-    let id = found(
-        ctx,
-        input.id.as_deref(),
-        input.title.trim(),
-        coords,
-        input.address.as_deref(),
-        input.zone.as_deref(),
+    let title = input.title.trim();
+    let id = match input.id.as_deref() {
+        Some(id) => {
+            ctx.insert_entity_in(id, Kind::Place, title, None)?;
+            id.to_owned()
+        }
+        None => ctx.insert_entity_under(Kind::Place, title, None)?,
+    };
+    ctx.connection().execute(
+        "INSERT INTO place (id, lat, lon, address, zone) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![id, input.lat, input.lon, input.address, input.zone],
     )?;
     Ok(serde_json::json!({ "id": id }))
+}
+
+/// A live place: a place in the trash is frozen, restore it first.
+fn live_place(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    Ok(
+        match lookup_live(ctx.connection(), ctx.required_str("id")?)? {
+            Err(sentence) => Some(sentence),
+            Ok(found) if found.kind != Kind::Place => Some(format!(
+                "“{}” is a {}, not a place",
+                found.title,
+                found.kind.noun()
+            )),
+            Ok(_) => None,
+        },
+    )
+}
+
+fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if let Some(sentence) = live_place(ctx)? {
+        return Ok(Some(sentence));
+    }
+    if ctx
+        .optional_str("title")
+        .is_some_and(|title| title.trim().is_empty())
+    {
+        return Ok(Some("a place needs a name".to_owned()));
+    }
+    let given = |key: &str| ctx.input.get(key).is_some_and(|value| !value.is_null());
+    Ok((given("lat") != given("lon"))
+        .then(|| "a place's coordinates are a latitude and a longitude together".to_owned()))
+}
+
+#[derive(serde::Deserialize)]
+struct EditInput {
+    id: String,
+    title: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_patch")]
+    lat: Option<Option<f64>>,
+    #[serde(default, deserialize_with = "deserialize_patch")]
+    lon: Option<Option<f64>>,
+    #[serde(default, deserialize_with = "deserialize_patch")]
+    address: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_patch")]
+    zone: Option<Option<String>>,
+}
+
+/// `place.edit`: its name, where it is, its address, its zone. A name goes through the one rename
+/// path, so what waits for that title resolves.
+fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: EditInput = ctx.parse_input()?;
+    if let Some(title) = input.title.as_deref() {
+        entity::rename(ctx, &input.id, title.trim())?;
+    }
+    if let (Some(lat), Some(lon)) = (input.lat, input.lon) {
+        // One statement: the table holds a latitude and a longitude together after it.
+        ctx.connection().execute(
+            "UPDATE place SET lat = ?2, lon = ?3 WHERE id = ?1",
+            rusqlite::params![input.id, lat, lon],
+        )?;
+    }
+    if let Some(address) = input.address {
+        ctx.connection().execute(
+            "UPDATE place SET address = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, address],
+        )?;
+    }
+    if let Some(zone) = input.zone {
+        ctx.connection().execute(
+            "UPDATE place SET zone = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, zone],
+        )?;
+    }
+    ctx.touch(&input.id)?;
+    Ok(serde_json::json!({ "id": input.id }))
 }
 
 #[derive(serde::Deserialize)]
@@ -205,11 +230,38 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "place_has_a_name_and_whole_coordinates",
         check: pre_add,
     }];
+    const EDIT: &[CommandCondition] = &[CommandCondition {
+        predicate: "place_is_live_named_and_whole_coordinates",
+        check: pre_edit,
+    }];
     const LOCATE: &[CommandCondition] = &[CommandCondition {
         predicate: "entity_is_a_place",
         check: pre_locate,
     }];
+    const MERGE: &[CommandCondition] = &[CommandCondition {
+        predicate: "both_are_places",
+        check: pre_merge,
+    }];
+    let mut merge_place = CommandDefinition::plain(
+        "place.merge",
+        "place",
+        r#"{
+          "type": "object",
+          "required": ["from", "into"],
+          "additionalProperties": false,
+          "properties": {
+            "from": { "type": "string", "minLength": 1 },
+            "into": { "type": "string", "minLength": 1 }
+          }
+        }"#,
+        Idempotency::Once,
+        MERGE,
+        merge,
+    );
+    merge_place.risk = crate::commands::Risk::Medium;
+    merge_place.confirm = true;
     vec![
+        merge_place,
         CommandDefinition::plain(
             "place.add",
             "place",
@@ -231,6 +283,26 @@ pub fn definitions() -> Vec<CommandDefinition> {
             add,
         ),
         CommandDefinition::plain(
+            "place.edit",
+            "place",
+            r#"{
+              "type": "object",
+              "required": ["id"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "title": { "type": "string", "maxLength": 120 },
+                "lat": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+                "lon": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
+                "address": { "type": ["string", "null"], "maxLength": 1000 },
+                "zone": { "type": ["string", "null"] }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            EDIT,
+            edit,
+        ),
+        CommandDefinition::plain(
             "place.locate",
             "place",
             r#"{
@@ -247,18 +319,4 @@ pub fn definitions() -> Vec<CommandDefinition> {
             locate,
         ),
     ]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_coordinate_label;
-
-    #[test]
-    fn a_pair_of_decimals_is_a_label_and_a_name_is_not() {
-        assert!(is_coordinate_label("12.3400, 56.7800"));
-        assert!(is_coordinate_label("-33.8688, 151.2093"));
-        assert!(!is_coordinate_label("The cabin"));
-        assert!(!is_coordinate_label("Paris, France"));
-        assert!(!is_coordinate_label("12, 56"));
-    }
 }

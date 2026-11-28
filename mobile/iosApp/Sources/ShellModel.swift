@@ -38,7 +38,6 @@ final class ShellModel: ObservableObject {
     @Published var path: [Route] = [] {
         didSet {
             if path != oldValue {
-                importLineMoved()
                 rustPopped(from: oldValue)
                 // BACK FROM A ROW OPENED IN THE CHAT goes back to the chat, not to Home: the push
                 // selects Home's stack in Rust, so the place the member left is put back once the
@@ -63,8 +62,8 @@ final class ShellModel: ObservableObject {
     /// A page was opened while the Chat place showed: the stack's last pop returns there.
     private var returnsToChat = false
 
-    /// THE SCREEN RUNTIME'S STORE, once the core is open. Every view draws from it.
     @Published private(set) var screens: ScreenStore?
+    @Published private(set) var rooms: RoomStore?
     /// THE VAULT FILE IS DAMAGED (`CENTRAID_VAULT_DAMAGED` at open): no core exists, so the root
     /// draws `VaultDamagedView` in place of bare paper. Set once, at launch.
     @Published private(set) var vaultDamaged = false
@@ -110,39 +109,11 @@ final class ShellModel: ObservableObject {
         }
     }
 
-    /// THE ON-DEVICE CHAT, with its own observable (see `ChatModel`): a state
-    /// per streamed token must not re-evaluate Home.
-    let chat = ChatModel()
-
-    /// The app the member last had open and has not yet carried into Chat. The
-    /// next time the tab opens on an empty thread it is the scope, so asking
-    /// "what is due" right after Tasks is about Tasks.
-    private var lastVisitedApp = ""
-    /// The scope the chat is in now, so a tab switch re-opens the same thread.
-    private var chatScope = ""
-
     /// THE SCHEME THE WINDOW IS HELD TO, or nil to follow the phone: Home's
     /// `scheme` (R-CHROME-7), which Rust keeps in the Keychain.
     @Published var preferredScheme: ColorScheme?
     /// Bumped on each open of the Backup place: `BackupHomeView` scrolls to its top.
     @Published var backupScrollTop = 0
-    /// iOS's own contact picker is up: People's import met limited access (iOS 18).
-    @Published var contactAccessPickerShown = false
-    /// THE MADE VAULT'S LINE THE MEMBER PUT AWAY (its summary): the close key, its
-    /// action, or the member's next move once the work is done. Rust words the line.
-    @Published private(set) var importLinePutAway = ""
-
-    func putImportLineAway(_ summary: String) { importLinePutAway = summary }
-
-    /// The member moved: a settled line has been read, and goes. A running import
-    /// keeps its line, since the work it describes is not done. A line is settled once it is not
-    /// running, `finished` or not: the member's own Import reminders is never `finished` (it is not
-    /// a made vault's step), and its "No open reminders to import" stayed over Home and every app.
-    private func importLineMoved() {
-        guard let line = screens?.madeLine, !line.running, !line.summary.isEmpty else { return }
-        importLinePutAway = line.summary
-    }
-
     /// REOPEN FOR RESTORE: the single place the core's `restoreDamaged` key is sent. The damaged
     /// screen's button calls it: open again over the same shelf with the key, and on success attach
     /// the core and let Home enter the Rust restore entry. If the open fails again the damaged
@@ -306,18 +277,20 @@ final class ShellModel: ObservableObject {
             }
         }
         store.onClosed = { [weak self] instances in self?.rustClosed(instances) }
-        store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
-        store.linkReading = { [weak self] in self?.links.reading ?? Centraid_Core_V1_LinkReading() }
         store.onAnnounce = { [weak self] topic in
             // A GATEWAY WAS PAIRED (`pair.laptop`): the mover must hold its certificate.
             if topic == "backup.destinations" { self?.refreshUploadPins() }
         }
+        let roomStore = RoomStore(core: core)
+        roomStore.onAppearanceChanged = { [weak self] scheme in
+            if self?.preferredScheme != scheme { self?.preferredScheme = scheme }
+        }
         screens = store
+        rooms = roomStore
         // Attach performers directly so startup effects can settle. Cold platform
         // callbacks receive this store only after its first snapshot succeeds.
         UploadSettlement.shared.attach(ScreenUploadSink(store))
         links.start(store)
-        chat.attach(store: store)
         NotificationStartupTrace.mark(.coreAttachCompleted)
         Task {
             store.reportEnvironment()
@@ -331,8 +304,7 @@ final class ShellModel: ObservableObject {
             queuedFacts = []
             for fact in queued { store.report(fact) }
             refreshUploadPins()
-            // PRESSES THAT NEVER REACHED THE CORE (the app was suspended mid-press) go now, after the
-            // store is up and not holding it: each waits for Rust's answer.
+            await Notifications.launch(core: core)
             await Notifications.drain(store)
         }
     }
@@ -447,12 +419,6 @@ final class ShellModel: ObservableObject {
         screens?.popped(tab: old.tab, instance: instance)
     }
 
-    /// Tell a route it is on screen: the chat's scope follows the app last open.
-    func opened(_ route: Route) {
-        guard let app = ChatRouting.app(of: route), app != RustScreens.chatTab else { return }
-        lastVisitedApp = app
-    }
-
     /// `words.show` finished: "I'VE SAVED IT" quiets the recovery key's warning
     /// (R-ONBOARD-10), so the Backup place reads again.
     func wordsShowFinished() {
@@ -462,72 +428,19 @@ final class ShellModel: ObservableObject {
         screens.send(backup, .backupHome(event))
     }
 
-    // MARK: The band
-
-    /// A press on a place of the band: Rust selects it. Chat opens scoped to the
-    /// app the member last had open, but only onto an empty thread; pressed again
-    /// while it shows, it only shuts the drawer.
-    func select(place: String) {
-        importLineMoved()
-        returnsToChat = false
-        switch place {
-        case RustScreens.chatTab:
-            if tab == .chat {
-                chat.toggleDrawer(false)
-                return
-            }
-            screens?.selectTab(place)
-            if !lastVisitedApp.isEmpty, chat.state.messages.isEmpty { chatScope = lastVisitedApp }
-            lastVisitedApp = ""
-            chat.open(app: chatScope, vaultName: foregroundVaultName)
-        case RustScreens.backupTab:
-            // EVERY OPEN STARTS AT THE TOP, and the place pressed again scrolls back there.
-            backupScrollTop += 1
-            chat.toggleDrawer(false)
-            screens?.selectTab(place)
-        default:
-            // Chat keeps its thread, but not an open drawer.
-            chat.toggleDrawer(false)
-            screens?.selectTab(place)
-        }
-    }
-
-    /// The foreground vault's name, for the chat's header.
-    var foregroundVaultName: String {
-        screens?.homeView?.bar.vault.name ?? ""
-    }
-
-    /// THE COMPOSER'S SCOPE MENU: the chat opens on `app`, or on every app when
-    /// it is empty. A different scope starts a new thread.
-    func setChatScope(_ app: String) {
-        chatScope = app
-        chat.open(app: app, vaultName: foregroundVaultName, scopeChosen: true)
-    }
-
-    /// The foreground vault changed. The chat belongs to the one that was in
-    /// front, so it starts over; if it is showing, it opens again at once.
-    func vaultChanged(to id: String) {
-        let hadChat = chat.opened
-        chat.vaultChanged(to: id)
-        if hadChat, !chat.opened, tab == .chat { chat.open(app: chatScope, vaultName: foregroundVaultName) }
-    }
-
     // MARK: Lifecycle
 
     /// THE APP CAME FORWARD OR LEFT: Rust hears it (the Locker relocks on leaving,
     /// the pass service decides what coming back is worth, the follow coordinator
-    /// follows every phone store the member connected), and the photo library is
-    /// watched while the app is in view.
+    /// follows every phone store the member connected).
     func lifecycle(foreground: Bool) {
+        rooms?.lifecycle(foreground: foreground)
         guard let screens else { return }
         if foreground {
             screens.reportEnvironment()
             tellPhoneScheme()
         }
         screens.lifecycle(foreground: foreground)
-        #if os(iOS)
-        if foreground { LibraryWatcher.shared.registerIfAllowed() }
-        #endif
     }
 
     /// What the PHONE shows, under any hold this app puts on its own window.

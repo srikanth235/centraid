@@ -49,12 +49,23 @@ use crate::model::Kind;
 /// The typed text of an earlier state, by table: a kind's own columns and its children's. Each
 /// is a column of the live census (`Reach::Own`), which a test holds.
 pub const EARLIER_COLUMNS: &[(&str, &[&str])] = &[
-    ("person", &["nickname", "role", "met"]),
+    (
+        "person",
+        &[
+            "given", "family", "phonetic", "nickname", "role", "org", "met",
+        ],
+    ),
+    ("person_date", &["label"]),
     ("contact_point", &["value", "label"]),
     ("place", &["address", "locality"]),
+    ("txn", &["memo"]),
+    ("txn_split", &["memo"]),
     ("event", &["description", "url"]),
-    ("occurrence", &["title", "description", "url"]),
     ("task", &["description", "url"]),
+    // A Locker item's PLAIN fields and a passkey's site (K3): never `value_sealed`, `private_key`
+    // or any `lk1:` value ([`plain`]).
+    ("locker_item_field", &["value_text"]),
+    ("locker_item_passkey", &["rp_id"]),
 ];
 
 /// The bits of the rowid a version's number takes; a version numbered beyond them is not
@@ -79,7 +90,7 @@ pub fn past_rowid(n: i64, seq: i64) -> Option<i64> {
 /// An activity has no typed text column of its own (its kind, its place and its times are
 /// concepts, links and instants, and a workout's measures are numbers), so its past row holds
 /// the title the member gave it, and [`EARLIER_COLUMNS`] has no line for it.
-pub const EARLIER_KINDS: [Kind; 8] = [
+pub const EARLIER_KINDS: [Kind; 10] = [
     Kind::Note,
     Kind::Event,
     Kind::Task,
@@ -87,7 +98,9 @@ pub const EARLIER_KINDS: [Kind; 8] = [
     Kind::Document,
     Kind::Photo,
     Kind::Txn,
-    Kind::Activity,
+    Kind::Workout,
+    Kind::Touch,
+    Kind::LockerItem,
 ];
 
 fn has_past(kind: Kind) -> bool {
@@ -123,6 +136,7 @@ pub fn version_text(state: &Json, older: Option<&Json>, body: Option<&str>) -> (
             for column in *columns {
                 if let Some(text) = row.get(column).and_then(Json::as_str)
                     && !text.trim().is_empty()
+                    && plain(text)
                 {
                     lines.push(text);
                 }
@@ -135,26 +149,17 @@ pub fn version_text(state: &Json, older: Option<&Json>, body: Option<&str>) -> (
     (title, lines.join("\n"))
 }
 
+/// Whether a value may be tokenised: never a Locker ciphertext, wherever one turns up (a sealed
+/// cell kept in a state is `lk1:` text, and no plain column holds one).
+pub(super) fn plain(value: &str) -> bool {
+    !value.starts_with(crate::custody::locker_key::LOCKER_CIPHERTEXT_PREFIX)
+}
+
 fn parse(text: &str) -> Result<Json> {
     serde_json::from_str(text).map_err(|source| VaultError::Json {
         context: "a revision's state as the index reads it".to_owned(),
         source,
     })
-}
-
-/// The entity's row the past index needs: its `n` and its kind, `None` when it is gone, in the
-/// trash, or of a kind that has no past rows.
-fn eligible(connection: &Connection, id: &str) -> Result<Option<i64>> {
-    let row: Option<(i64, String, Option<String>)> = connection
-        .query_row(
-            "SELECT n, kind, deleted_at FROM entity WHERE id = ?1",
-            [id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .optional()?;
-    Ok(row.and_then(|(n, kind, deleted_at)| {
-        (deleted_at.is_none() && Kind::parse(&kind).is_some_and(has_past)).then_some(n)
-    }))
 }
 
 fn write(connection: &Connection, n: i64, seq: i64, title: &str, body: &str) -> Result<()> {
@@ -170,59 +175,69 @@ fn write(connection: &Connection, n: i64, seq: i64, title: &str, body: &str) -> 
     super::remember(connection, title, body)
 }
 
-/// A version was just kept (`history::keep`): index its row. `state` is the state as kept (a
-/// note's words are in `body`, not in it), `seq` the number it was given.
+/// A version was just kept (`history::keep`, in the commit that replaced it): owe the entity to
+/// the index file, whose pass writes the version's row ([`sync`]). The commit that kept a version
+/// changed the entity, so it is queued already; this is the same row, and says so at the place
+/// the version is born.
 ///
 /// # Errors
 /// SQLite's refusal.
 pub(crate) fn version_kept(
     connection: &Connection,
     id: &str,
-    seq: i64,
-    state: &Json,
-    body: Option<&str>,
+    _seq: i64,
+    _state: &Json,
+    _body: Option<&str>,
 ) -> Result<()> {
-    let Some(n) = eligible(connection, id)? else {
-        return Ok(());
-    };
-    let older: Option<String> = if seq > 1 {
-        connection
-            .prepare_cached("SELECT state FROM revision WHERE entity_id = ?1 AND seq = ?2")?
-            .query_row(rusqlite::params![id, seq - 1], |row| row.get(0))
-            .optional()?
-    } else {
-        None
-    };
-    let older = older.as_deref().map(parse).transpose()?;
-    let (title, text) = version_text(state, older.as_ref(), body);
-    write(connection, n, seq, &title, &text)
+    super::queue_id(connection, id)
 }
 
-/// Whether the entity has any past row.
-fn present(connection: &Connection, n: i64) -> Result<bool> {
+/// The newest version of an entity that has a row.
+fn newest_present(connection: &Connection, n: i64) -> Result<Option<i64>> {
     let (low, high) = (n << SEQ_BITS, (n << SEQ_BITS) | ((1 << SEQ_BITS) - 1));
-    Ok(connection
-        .prepare_cached("SELECT 1 FROM search_past WHERE rowid BETWEEN ?1 AND ?2 LIMIT 1")?
-        .exists(rusqlite::params![low, high])?)
+    let rowid: Option<i64> = connection
+        .prepare_cached(
+            "SELECT rowid FROM search_past WHERE rowid BETWEEN ?1 AND ?2 ORDER BY rowid DESC LIMIT 1",
+        )?
+        .query_row(rusqlite::params![low, high], |row| row.get(0))
+        .optional()?;
+    Ok(rowid.map(|rowid| rowid & ((1 << SEQ_BITS) - 1)))
 }
 
-/// The rows of a live entity are there: written when it has none (it came out of the trash, or
-/// the index was thrown away). Work is the entity's own versions, once.
+/// THE ROWS OF A LIVE ENTITY ARE THERE: every version after the newest one that has a row is
+/// written (all of them for an entity with none: it came out of the trash, or the index was
+/// thrown away). Work is the versions since the last pass, plus the one before them.
+///
+/// A version's row names the words that version introduced, so it never changes once written, and
+/// the rows are exactly the rows a rebuild writes.
 ///
 /// # Errors
 /// SQLite's refusal.
-pub(crate) fn ensure(connection: &Connection, id: &str) -> Result<()> {
-    let Some(n) = eligible(connection, id)? else {
-        return Ok(());
-    };
-    let has_versions = connection
-        .prepare_cached("SELECT 1 FROM revision WHERE entity_id = ?1 LIMIT 1")?
-        .exists([id])?;
-    if !has_versions || present(connection, n)? {
+pub(super) fn sync(connection: &Connection, n: i64, id: &str, kind: Kind) -> Result<()> {
+    if !has_past(kind) {
         return Ok(());
     }
-    for (seq, title, text) in texts(connection, id)? {
-        write(connection, n, seq, &title, &text)?;
+    let last = newest_present(connection, n)?;
+    let mut statement = connection.prepare_cached(
+        "SELECT seq, state, body FROM revision WHERE entity_id = ?1 AND seq >= ?2 ORDER BY seq",
+    )?;
+    let rows = statement
+        .query_map(rusqlite::params![id, last.unwrap_or(1)], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut older: Option<Json> = None;
+    for (seq, state, body) in rows {
+        let state = parse(&state)?;
+        if last.is_none_or(|last| seq > last) {
+            let (title, text) = version_text(&state, older.as_ref(), body.as_deref());
+            write(connection, n, seq, &title, &text)?;
+        }
+        older = Some(state);
     }
     Ok(())
 }

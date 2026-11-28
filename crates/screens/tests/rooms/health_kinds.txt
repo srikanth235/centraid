@@ -1,0 +1,45 @@
+room pushed_page key="health/kinds"
+  header title="Workout kinds"
+    back "Health" #back
+  ready
+    section #section/kinds "Workout kinds"
+      row #kind/workout_kind:cycle "Cycle" meta="0 workouts"
+        menu #kind/workout_kind:cycle/menu
+          section
+            item "Rename" #kind/workout_kind:cycle/rename
+            item "Merge into…" #kind/workout_kind:cycle/merge
+      row #kind/workout_kind:hike "Hike" meta="0 workouts"
+        menu #kind/workout_kind:hike/menu
+          section
+            item "Rename" #kind/workout_kind:hike/rename
+            item "Merge into…" #kind/workout_kind:hike/merge
+      row #kind/workout_kind:other "Other" meta="0 workouts"
+        menu #kind/workout_kind:other/menu
+          section
+            item "Rename" #kind/workout_kind:other/rename
+            item "Merge into…" #kind/workout_kind:other/merge
+      row #kind/workout_kind:run "Run" meta="1 workout"
+        menu #kind/workout_kind:run/menu
+          section
+            item "Rename" #kind/workout_kind:run/rename
+            item "Merge into…" #kind/workout_kind:run/merge
+      row #kind/workout_kind:strength "Strength" meta="0 workouts"
+        menu #kind/workout_kind:strength/menu
+          section
+            item "Rename" #kind/workout_kind:strength/rename
+            item "Merge into…" #kind/workout_kind:strength/merge
+      row #kind/workout_kind:swim "Swim" meta="0 workouts"
+        menu #kind/workout_kind:swim/menu
+          section
+            item "Rename" #kind/workout_kind:swim/rename
+            item "Merge into…" #kind/workout_kind:swim/merge
+      row #kind/workout_kind:walk "Walk" meta="0 workouts"
+        menu #kind/workout_kind:walk/menu
+          section
+            item "Rename" #kind/workout_kind:walk/rename
+            item "Merge into…" #kind/workout_kind:walk/merge
+      row #kind/workout_kind:yoga "Yoga" meta="0 workouts"
+        menu #kind/workout_kind:yoga/menu
+          section
+            item "Rename" #kind/workout_kind:yoga/rename
+            item "Merge into…" #kind/workout_kind:yoga/merge

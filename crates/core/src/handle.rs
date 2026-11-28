@@ -1,33 +1,4 @@
-//! The handle: `open`, `call`, `next_event`, `close`.
-//!
-//! Four functions and one type, because that is what the C ABI is allowed to
-//! be. Everything else in this crate exists to be reachable from one of them.
-//!
-//! ## Why one mutex over the vault, in wave 2 (D-1020-D2-9)
-//!
-//! [`centraid_vault::Vault`] holds its commit-guard depth in a `Cell`, so it is
-//! `!Sync` by construction — deliberately, because the guard's depth is a fact
-//! about one connection. The issue's "reads run concurrently under SQLite's own
-//! rules" therefore needs a *pool of read connections*, and a connection pool
-//! means `PRAGMA` statements, which means SQL, which the `sql-confinement` rule
-//! confines to `crates/{ontology,vault,seat,search}` and `crates/apps/kit`.
-//!
-//! Three options were considered:
-//!
-//! 1. **A reader pool in `crates/core`.** Refused: it puts SQL in a crate the
-//!    rule does not name, and weakening the rule to go green is exactly what
-//!    the repo forbids.
-//! 2. **A reader pool in `crates/vault`.** The right answer, and it is lane
-//!    D1's file. Filed as an owner hand-off rather than reached across a lane
-//!    boundary in wave 2.
-//! 3. **One mutex, every call serialised.** Adopted for wave 2.
-//!
-//! What option 3 costs is bounded: a bounded read is one page, which
-//! serialisation does not change, and a phone's shell makes one call per screen. What it does not cost
-//! is correctness — a serialised read is a correct read. The FFI's "two
-//! concurrent calls never block on the FFI itself" clause is still honestly
-//! met, because the FFI takes no lock of its own; the lock is the vault's, and
-//! `crates/core-ffi/CONTRACT.md` says so in those words.
+//! Core request handling for one vault.
 
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -43,6 +14,12 @@ use crate::config::CoreConfig;
 use crate::error::{CoreError, Result};
 
 static NEXT_VAULT_EXPORT_ID: AtomicU64 = AtomicU64::new(0);
+pub(crate) static NEXT_LOCKER_COMMAND_ID: AtomicU64 = AtomicU64::new(0);
+static NEXT_LOCKER_EPOCH: AtomicU64 = AtomicU64::new(1);
+
+pub(crate) fn next_locker_epoch() -> u64 {
+    NEXT_LOCKER_EPOCH.fetch_add(1, Ordering::SeqCst)
+}
 use crate::events::{EventQueue, Next};
 
 /// The capabilities this build requires of a peer.
@@ -273,7 +250,7 @@ pub struct HandleState {
     /// An `Arc` because a chat's native session outlives any one call and
     /// reaches the vault through [`crate::assist::door::CoreDoor`], which holds
     /// a clone of this very lock: one lock, one open file, whoever asks.
-    vault: Arc<Mutex<Option<Vault>>>,
+    pub(crate) vault: Arc<Mutex<Option<Vault>>>,
     registry: Arc<Registry>,
     ui_thread_name: Option<String>,
     events: Arc<EventQueue>,
@@ -361,15 +338,13 @@ pub struct HandleState {
     /// `None` is a core that reads and writes its vault and cannot back up,
     /// which is an honest state (see [`crate::phone`]'s header for why this
     /// library writes no key down).
-    keys: Option<crate::phone::Keyring>,
+    pub(crate) keys: Option<crate::phone::Keyring>,
+    pub(crate) locker_session: Mutex<Option<LockerSession>>,
+    pub(crate) locker_epoch: AtomicU64,
+    pub(crate) locker_command_nonce: u64,
     /// THE BACKUP PLANE'S FILES BESIDE THE VAULT (#1080), with the spool
     /// opened once for the life of the core (see [`crate::phone::Plane`]).
     plane: crate::phone::Plane,
-    /// THE LOCKER SESSION (#1047, D-5): a copy of `K` (derived into `keys`
-    /// from the seed, Q-1047-11) while the member has unlocked Locker on this
-    /// phone, zeroed on relock, and nothing otherwise. See
-    /// [`crate::locker::phone`].
-    locker: Arc<crate::locker::phone::Cell>,
     /// THE ON-DEVICE CHAT'S SESSIONS AND ITS VIEW OF THE MODEL SLOT. In memory
     /// only; see [`crate::assist`]. `pub(crate)` because that module is where
     /// `Request::Assist` is answered.
@@ -377,6 +352,13 @@ pub struct HandleState {
     /// THE SCREEN RUNTIME, once a shell-facing library has attached one
     /// (#1135, lane C2): see [`crate::screens`].
     screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
+    /// THE ROOM RUNTIME (app-plane §1), once a shell-facing library has attached one.
+    pub(crate) rooms: std::sync::OnceLock<Arc<dyn crate::rooms::RoomHost>>,
+    /// THE NOTIFICATION SERVICE (app-plane §9), once its words are attached.
+    pub(crate) notify: std::sync::OnceLock<crate::notify::Service>,
+    pub(crate) follower: crate::follow::Follower,
+    /// THE DEVICE STORE BESIDE THE VAULT FILE (app-plane §10), opened on first use.
+    device: std::sync::OnceLock<Arc<crate::device::Checked<crate::device::DirStore>>>,
     /// THE DIRECTORY OF VAULTS THIS CORE IS THE DOOR TO, when it is one
     /// (#1135, lane H2): see [`crate::vaults`]. Read once by whoever builds the
     /// shelf ([`Self::shelf_config`]).
@@ -397,6 +379,12 @@ pub struct HandleState {
     files_tidied: AtomicBool,
     /// Whether a thread is writing the search rows a commit left owed.
     index_draining: AtomicBool,
+}
+
+pub(crate) struct LockerSession {
+    pub(crate) key: centraid_identity::LockerKey,
+    pub(crate) key_id: String,
+    pub(crate) epoch: u64,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -504,6 +492,9 @@ impl Core {
             plane,
             path,
             keys,
+            locker_session: Mutex::new(None),
+            locker_epoch: AtomicU64::new(next_locker_epoch()),
+            locker_command_nonce: rand::random(),
             vault: Arc::new(Mutex::new(vault)),
             registry,
             ui_thread_name,
@@ -530,9 +521,12 @@ impl Core {
             check_progress: crate::phone::check::Progress::default(),
             checking: AtomicBool::new(false),
             owned_bytes: Mutex::new(None),
-            locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
             screens: std::sync::OnceLock::new(),
+            rooms: std::sync::OnceLock::new(),
+            notify: std::sync::OnceLock::new(),
+            follower: crate::follow::Follower::default(),
+            device: std::sync::OnceLock::new(),
             shelf_config,
             vaults: std::sync::OnceLock::new(),
             launched,
@@ -927,6 +921,41 @@ impl HandleState {
         &self.path
     }
 
+    /// The device store: one file per key in a folder beside the vault file, written only through
+    /// the key registry.
+    ///
+    /// # Errors
+    /// The folder cannot be made.
+    pub fn device(&self) -> Result<Arc<crate::device::Checked<crate::device::DirStore>>> {
+        if let Some(store) = self.device.get() {
+            return Ok(Arc::clone(store));
+        }
+        let mut name = self
+            .path
+            .file_name()
+            .map(std::ffi::OsString::from)
+            .unwrap_or_default();
+        name.push(".device");
+        let store = crate::device::DirStore::open(self.path.with_file_name(name))
+            .map_err(|detail| CoreError::Unavailable { reason: detail })?;
+        let _ = self
+            .device
+            .set(Arc::new(crate::device::Checked::new(store)));
+        Ok(Arc::clone(self.device.get().expect("just set")))
+    }
+
+    /// What a draft or a view preference is kept under for this vault.
+    #[must_use]
+    pub fn device_vault_id(&self) -> String {
+        self.vault_hex().unwrap_or_else(|| {
+            self.path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or("vault")
+                .to_owned()
+        })
+    }
+
     /// The backup plane's files beside the vault.
     #[must_use]
     pub const fn plane(&self) -> &crate::phone::Plane {
@@ -955,6 +984,7 @@ impl HandleState {
             active_export_directories().clear_stale(&staging);
             if no_export_running {
                 let _ = std::fs::remove_file(staging.join("export.zip"));
+                crate::screens::clear_stale_room_exports(&staging);
             }
         }
         if let Ok(mut held) = self.bytes.lock() {
@@ -1121,7 +1151,6 @@ impl HandleState {
             let response = crate::act::act(
                 &crate::act::Ctx {
                     vault,
-                    locker: &self.locker,
                     registry: &self.registry,
                     owner: &owner,
                     changes: &changes,
@@ -1158,6 +1187,16 @@ impl HandleState {
         let _ = self.screens.set(host);
     }
 
+    /// Attach the room runtime. Once per core.
+    pub fn attach_rooms(&self, host: Arc<dyn crate::rooms::RoomHost>) {
+        let _ = self.rooms.set(host);
+    }
+
+    /// Attach the notification service with the words it says. Once per core.
+    pub fn attach_notify(&self, words: Arc<dyn crate::notify::Words>) {
+        let _ = self.notify.set(crate::notify::Service::new(words));
+    }
+
     /// The directory of vaults this core is the door to, when it was opened as
     /// one ([`crate::CoreConfig::fronting`]).
     #[must_use]
@@ -1185,14 +1224,16 @@ impl HandleState {
     }
 
     /// Where `request` goes: the vault in front, unless it is the front's own
-    /// business — the screen runtime (it lives here and reads through the
-    /// vault in front), the words and a restore (they need no vault), the
+    /// business — the screen and room runtimes (they live here and read through
+    /// the vault in front), the words and a restore (they need no vault), the
     /// handshake, and the shelf's own read.
     fn foreground_for(&self, request: &wire::Request) -> Option<Handle> {
         use wire::request::Kind as K;
         self.vaults.get()?;
         match &request.kind {
-            None | Some(K::Hello(_) | K::Screen(_) | K::Phrase(_) | K::Restore(_)) => None,
+            None | Some(K::Hello(_) | K::Screen(_) | K::Room(_) | K::Phrase(_) | K::Restore(_)) => {
+                None
+            }
             Some(K::Load(load)) => self.foreground_for_load(load),
             Some(_) => self.foreground_if_shelved(),
         }
@@ -1287,8 +1328,14 @@ impl HandleState {
                             host.assist(self, assist);
                             return Ok(Some(event));
                         }
-                        (Some(wire::event::Kind::Change(change)), Some(host)) => {
-                            host.changed(self, std::slice::from_ref(&change.table));
+                        (Some(wire::event::Kind::Change(change)), host) => {
+                            self.notify_changed(&change.table);
+                            if let Some(rooms) = self.rooms.get() {
+                                rooms.changed(self, std::slice::from_ref(&change.table));
+                            }
+                            if let Some(host) = host {
+                                host.changed(self, std::slice::from_ref(&change.table));
+                            }
                             return Ok(Some(event));
                         }
                         _ => return Ok(Some(event)),
@@ -1352,12 +1399,6 @@ impl HandleState {
         }
     }
 
-    /// Zero the Locker session now, if one is unlocked: the rule for leaving the
-    /// foreground, and for a vault the member switched away from.
-    pub fn relock(&self) {
-        crate::locker::phone::relock(&self.locker);
-    }
-
     /// Whether this handle is closed.
     #[must_use]
     pub fn is_closed(&self) -> bool {
@@ -1393,31 +1434,16 @@ impl HandleState {
             .clone()
     }
 
-    /// THE LOCKER SESSION (#1047, D-5): one step of `Request.locker`. A shell
-    /// asks it over the ABI; the screen runtime asks it through
-    /// [`crate::screens::ScreenCtx::locker`], the same step on the same session.
+    /// Whether this core holds the vault's keys (a seed it was opened with), which a laptop
+    /// pairing needs. A vault that is not open refuses.
     ///
     /// # Errors
-    /// The session's own refusals; [`CoreError::Unpaired`] with no file.
-    pub fn locker_session(
-        &self,
-        request: &wire::LockerSessionRequest,
-    ) -> Result<wire::LockerSessionResponse> {
+    /// [`CoreError::Unpaired`] with no file.
+    pub fn keyed(&self) -> Result<bool> {
         if let Some(front) = self.foreground_if_shelved() {
-            return front.locker_session(request);
+            return front.keyed();
         }
-        let changes = crate::events::ChangeFeed::new(self.events());
-        self.with_vault(|vault| {
-            crate::locker::phone::answer(
-                vault,
-                &self.registry,
-                &self.owner(),
-                self.keys.as_ref(),
-                &self.locker,
-                request,
-                &changes,
-            )
-        })
+        self.with_vault(|_| Ok(self.keys.is_some()))
     }
 
     /// Run a body with the vault. The **one** way anything reaches the file.
@@ -1517,8 +1543,7 @@ impl HandleState {
     /// that names a command no app's manifest declares — the vault shelf's
     /// `vault.rename`, a seeding tool, a test laying the rows it reads — and it
     /// takes the one write path `act` and the chat's confirmed card take
-    /// (`crate::api::command`): a Locker secret is sealed under the open
-    /// session, the change feed is told after the commit. `invoke_key` is
+    /// (`crate::api::command`): the change feed is told after the commit. `invoke_key` is
     /// required and remembered by nothing: the same key twice runs twice
     /// (`tests/replay.rs`).
     ///
@@ -1547,15 +1572,8 @@ impl HandleState {
         let changes = crate::events::ChangeFeed::new(self.events());
         let owner = self.owner();
         self.with_vault(|vault| {
-            let outcome = crate::api::command(
-                vault,
-                &self.locker,
-                &self.registry,
-                &owner,
-                &call,
-                &changes,
-                None,
-            )?;
+            let outcome =
+                crate::api::command(vault, &self.registry, &owner, &call, &changes, None)?;
             self.fold_wal_if_oversized(vault);
             Ok(outcome)
         })
@@ -1573,7 +1591,6 @@ impl HandleState {
             Arc::clone(&self.registry),
             self.events(),
             self.owner(),
-            Arc::clone(&self.locker),
             crate::phone::Plane::of(&self.path),
         )
     }
@@ -1665,10 +1682,6 @@ impl HandleState {
             K::Found(request) => Ok(response(wire::response::Kind::Found(self.with_vault(
                 |vault| crate::api::found(vault, &self.registry, &self.owner(), request),
             )?))),
-            // THE LOCKER SESSION (#1047, D-5). See `crate::locker::phone`.
-            K::Locker(request) => Ok(response(wire::response::Kind::Locker(
-                self.locker_session(request)?,
-            ))),
             // THE PASS (#1080). Not through `with_vault` for its whole length:
             // the vault is held for the reads a pass makes and for the instant
             // a snapshot's copy begins, never for the copy or across the network, so a screen's reads go on while
@@ -1776,53 +1789,47 @@ impl HandleState {
                 let host = self.screens.get().ok_or_else(|| CoreError::Unsupported {
                     type_url: "centraid.core.v1.ScreenRequest".to_owned(),
                 })?;
-                // LEAVING THE FOREGROUND RELOCKS THE LOCKER (D-5), whether or
-                // not a Locker screen is open to hear it: the session is the
-                // core's, so the rule is too.
-                if let Some(wire::screen_request::Kind::Lifecycle(lifecycle)) = &request.kind
-                    && !lifecycle.foreground
-                {
-                    crate::locker::phone::relock(&self.locker);
-                    // EVERY HELD VAULT'S SESSION, not only the one in front.
-                    if let Some(vaults) = self.vaults.get() {
-                        for core in vaults.awake() {
-                            core.relock();
-                        }
-                    }
-                }
                 Ok(response(wire::response::Kind::Screen(Box::new(
                     host.call(self, request)?,
                 ))))
             }
+            // THE APP PLANE: a room by key and a room's events, and the notification service.
+            K::Room(request) => {
+                let host = self.rooms.get().ok_or_else(|| CoreError::Unsupported {
+                    type_url: "centraid.core.v1.RoomRequest".to_owned(),
+                })?;
+                let mut request = request.clone();
+                if let Some(wire::room_request::Kind::Open(open)) = request.kind.as_mut()
+                    && !open.deep_link.is_empty()
+                {
+                    open.key = crate::device::open_url::parse(&open.deep_link)
+                        .and_then(|open| open.route_key())
+                        .map_err(|error| CoreError::InvalidRequest {
+                            detail: error.to_string(),
+                        })?;
+                    open.deep_link.clear();
+                }
+                Ok(response(wire::response::Kind::Room(
+                    host.call(self, &request)?,
+                )))
+            }
+            K::Device(request) => Ok(response(wire::response::Kind::Device(
+                self.device_call(request)?,
+            ))),
+            K::Follow(request) => Ok(response(wire::response::Kind::Follow(
+                self.follow_call(request)?,
+            ))),
+            K::ShareIn(request) => Ok(response(wire::response::Kind::ShareIn(
+                self.share_in_call(request)?,
+            ))),
+            K::Notify(request) => Ok(response(wire::response::Kind::Notify(Box::new(
+                self.notify_call(request)?,
+            )))),
             // THE ONE WRITE (#1135): the app's manifest names the action; the
             // core runs the duplicate-tap, frozen-vault and schema rules.
             K::Act(request) => Ok(response(wire::response::Kind::Act(Box::new(
                 self.act(request)?,
             )))),
-            // MONEY'S IMPORT PLAN AND HOME'S TILE (#1099). See `money.proto`;
-            // `with_vault` like an app query, because they ARE page reads. The
-            // statement's bytes are read once and dropped with the request.
-            K::Money(request) => {
-                use wire::money_request::Kind as M;
-                let kind = match &request.kind {
-                    Some(M::ImportPlan(asked)) => {
-                        wire::money_response::Kind::ImportPlan(self.with_vault(|vault| {
-                            crate::app_query::money::import_plan(vault, asked)
-                        })?)
-                    }
-                    Some(M::HomeTile(asked)) => wire::money_response::Kind::HomeTile(
-                        self.with_vault(|vault| crate::app_query::money::home_tile(vault, asked))?,
-                    ),
-                    None => {
-                        return Err(CoreError::InvalidRequest {
-                            detail: "a money request names no kind".to_owned(),
-                        });
-                    }
-                };
-                Ok(response(wire::response::Kind::Money(wire::MoneyResponse {
-                    kind: Some(kind),
-                })))
-            }
             // THE BACKUP PLANE'S DOORS BESIDE THE PASS (#1080). See
             // `phone.proto` and `crate::phone`.
             // DEPRECATED (#1209): the plane before the bundle. A core ignores them and answers
@@ -3069,11 +3076,12 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::Act(_)
             // A SCREEN EVENT IS A HANDFUL OF `load`s and `act`s, each bounded.
             | K::Screen(_)
-            // MONEY'S PLAN IS BOUNDED: one file of at most 8 MiB and 20,000
-            // rows read once, and the same declared fan-outs an app query has.
-            | K::Money(_)
-            // A LOCKER STEP IS BOUNDED: one key load, one stamp, one cell.
-            | K::Locker(_)
+            // A ROOM EVENT IS A HANDFUL OF READS AND ONE ACTION; THE NOTIFICATION SERVICE'S
+            // DOORS READ THE ALERT INDEX AND RUN IDEMPOTENT COMMANDS, EACH BOUNDED.
+            | K::Room(_)
+            | K::Device(_)
+            | K::Follow(_)
+            | K::Notify(_)
             // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).
             | K::Phrase(_)
             // EIGHT OF THE BACKUP PLANE'S DOORS ARE BOUNDED (#1080).
@@ -3120,7 +3128,9 @@ fn request_kind(request: &wire::Request) -> RequestKind {
         Some(K::CheckBackup(request)) if request.progress_only || request.stop => {
             RequestKind::Bounded
         }
-        Some(K::Drain(_) | K::Restore(_) | K::FetchOriginal(_) | K::CheckBackup(_)) => {
+        Some(
+            K::Drain(_) | K::Restore(_) | K::FetchOriginal(_) | K::CheckBackup(_) | K::ShareIn(_),
+        ) => {
             RequestKind::Unbounded
         }
     }
@@ -3434,7 +3444,11 @@ mod tests {
                 },
             );
 
+        let state = Arc::downgrade(&handle.state);
         drop(handle);
+        while state.strong_count() > 0 {
+            std::thread::yield_now();
+        }
         assert!(
             !path.exists(),
             "the receipt owns plaintext until commit or drop"
@@ -3666,11 +3680,19 @@ mod tests {
     fn the_launch_pass_purges_what_is_overdue_and_spares_the_rest() {
         let scratch = Scratch::founded();
         let handle = &scratch.handle;
-        trashed_note(handle, "kept", false);
-        trashed_note(handle, "doomed", true);
+        trashed_note(handle, "note:kept", false);
+        trashed_note(handle, "note:doomed", true);
         handle.tidy_trash().expect("the pass runs");
-        assert_eq!(rows(handle, "doomed"), 0, "the overdue note was purged");
-        assert_eq!(rows(handle, "kept"), 1, "the one inside its window was not");
+        assert_eq!(
+            rows(handle, "note:doomed"),
+            0,
+            "the overdue note was purged"
+        );
+        assert_eq!(
+            rows(handle, "note:kept"),
+            1,
+            "the one inside its window was not"
+        );
     }
 
     /// The pass is started by `open` itself, on a thread of its own: a vault
@@ -3678,13 +3700,13 @@ mod tests {
     #[test]
     fn open_starts_the_pass_without_a_request() {
         let scratch = Scratch::founded();
-        trashed_note(&scratch.handle, "doomed", true);
+        trashed_note(&scratch.handle, "note:doomed", true);
         let path = scratch.handle.path().to_path_buf();
         scratch.handle.close();
         drop(scratch.handle.clone());
         let reopened = Core::open(CoreConfig::new(&path)).expect("reopens");
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        while rows(&reopened, "doomed") != 0 {
+        while rows(&reopened, "note:doomed") != 0 {
             assert!(
                 std::time::Instant::now() < deadline,
                 "the launch pass never ran"
@@ -3951,12 +3973,7 @@ mod tests {
         }
     }
 
-    /// OPEN TOUCHES NOTHING BUT THE FILE (#1029 §6).
-    ///
-    /// The proof used to be that `start_endpoint` was a separate call that
-    /// answered `NotYetAvailable`. There is no endpoint to start any more — the
-    /// phone has no inbound surface at all — so the proof is that a core opens,
-    /// founds and answers from the file it was given and nothing else.
+    /// Opening and founding use only the supplied file; the phone has no inbound endpoint.
     #[test]
     fn open_returns_with_a_vault_and_no_second_surface() {
         let scratch = Scratch::founded();

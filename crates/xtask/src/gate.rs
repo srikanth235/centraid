@@ -129,6 +129,11 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         //
         step("restore-drill", run_restore_drill),
         step("rules", run_rules),
+        // THE KIND REGISTRY, THE ACTION CATALOGUE AND THE READ REGISTRY (app-plane §2, §4, §8):
+        // the promises every kind keeps and the rules every action and read follows, held to the
+        // vault's own tables. It is the test that took the place of `promises.rs`, and it is named
+        // so that a missing promise reads as one and not as "the workspace is red".
+        step("registry", run_registry),
         // THE DOCS DOCTRINE'S STATUTE (Q-1005-1): "broken internal links are
         // bugs", decidable and fast (every markdown file, no network), so it is
         // a `local` step and therefore a step of every profile.
@@ -144,7 +149,7 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("deny", run_deny),
         step("ci-policy", run_ci_policy),
         step("release-build", run_release_build),
-        step("ts-static", run_ts_static),
+        step("sites", run_sites),
         // THE GENERATED TREES NO `changes` FILTER CLAIMED (#1020, close pass,
         // D-1020-CL7). The shells' design tables (Tokens, Catalog, Theme, the kit's
         // words, the colour sets and Android resources), the two sites' token
@@ -563,11 +568,23 @@ fn process(ctx: &Ctx, step: &str, program: &str, args: &[&str]) -> Result<Outcom
     fs::write(dir.join("stdout.log"), &output.stdout)?;
     fs::write(dir.join("stderr.log"), &output.stderr)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
     let why = stderr
         .lines()
         .rev()
         .find(|candidate| !candidate.trim().is_empty())
-        .unwrap_or("(no stderr)");
+        .map(str::to_owned)
+        .or_else(|| {
+            let mut lines = stdout.lines().filter(|line| !line.trim().is_empty());
+            let first = lines.next()?;
+            let more = lines.count();
+            Some(if more == 0 {
+                first.to_owned()
+            } else {
+                format!("[{} lines in stdout.log] {first}", more + 1)
+            })
+        })
+        .unwrap_or_else(|| "(no output)".to_owned());
     let why: String = why.chars().take(160).collect();
     Ok(Outcome::Failed(format!(
         "`{label}` exited {} — {why} · artifact: {}",
@@ -929,6 +946,34 @@ fn run_rules(ctx: &Ctx) -> Result<Outcome> {
     )))
 }
 
+/// `registry` — every kind declares every promise of app-plane §8; every action has an inverse or
+/// asks first and is reached from chat; every read passes its authorizer and its plan gate. The
+/// two test binaries of `crates/domain`, named across the workspace for the reason `restore-drill`
+/// names its own: the same feature resolution the `test` step warmed.
+fn run_registry(ctx: &Ctx) -> Result<Outcome> {
+    let outcome = process(
+        ctx,
+        "registry",
+        "cargo",
+        &[
+            "test",
+            "--workspace",
+            "--test",
+            "kind_action_registry",
+            "--test",
+            "read_registry",
+        ],
+    )?;
+    if !matches!(outcome, Outcome::Ok(_)) {
+        return Ok(outcome);
+    }
+    Ok(Outcome::Ok(
+        "every kind keeps its promises, every action has an inverse or asks first and chat \
+         reaches it, every read passes its plan"
+            .to_owned(),
+    ))
+}
+
 /// `doc-links` — every relative markdown link and in-repo anchor resolves.
 /// What it checks, skips and why is the module doc of [`doc_links`].
 fn run_doc_links(ctx: &Ctx) -> Result<Outcome> {
@@ -1251,10 +1296,82 @@ fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
     )
 }
 
-/// The TypeScript workspace (`packages/test-kit`), the docs and home sites and
-/// the release scripts: format, lint, typecheck and tests, through `bun run check`.
-fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
-    process(ctx, "ts-static", "bun", &["run", "check"])
+fn is_site_path(path: &str) -> bool {
+    if path.starts_with("docs/") || path.starts_with("contracts/schema/") {
+        return true;
+    }
+    if let Some(rest) = path.strip_prefix("scripts/") {
+        let first = rest.split('/').next().unwrap_or("");
+        if first.ends_with("-site") {
+            return true;
+        }
+    }
+    false
+}
+
+fn sites_changed(root: &Path) -> Option<bool> {
+    let base = ["origin/main", "main", "origin/master", "master"]
+        .iter()
+        .find_map(|candidate| {
+            let out = Command::new("git")
+                .args(["merge-base", "HEAD", candidate])
+                .current_dir(root)
+                .output()
+                .ok()?;
+            if !out.status.success() {
+                return None;
+            }
+            let sha = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+            (!sha.is_empty()).then_some(sha)
+        })?;
+    let diff = Command::new("git")
+        .args(["diff", "--name-only", &format!("{base}...HEAD")])
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if !diff.status.success() {
+        return None;
+    }
+    let committed = String::from_utf8_lossy(&diff.stdout);
+    if committed.lines().any(is_site_path) {
+        return Some(true);
+    }
+    let status = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if status.status.success() {
+        let dirty = String::from_utf8_lossy(&status.stdout);
+        for line in dirty.lines() {
+            if let Some(path) = line.get(3..)
+                && is_site_path(path.trim())
+            {
+                return Some(true);
+            }
+        }
+    }
+    Some(false)
+}
+
+fn run_sites(ctx: &Ctx) -> Result<Outcome> {
+    if ctx.profile == Profile::Pr
+        && ctx.lane.as_deref() != Some("sites")
+        && sites_changed(&ctx.root) == Some(false)
+    {
+        return Ok(Outcome::Skipped(
+            "no docs/**, contracts/schema/**, or scripts/*-site/** changes; run `cargo xtask gate --profile pr --lane sites` to force".to_owned(),
+        ));
+    }
+    process(
+        ctx,
+        "sites",
+        "sh",
+        &[
+            "-c",
+            "bun install --frozen-lockfile && bun run docs:build && bun run docs:smoke",
+        ],
+    )
 }
 
 /// Both lockfiles (D-1020-G3). See `crate::ci::lockfile`.
@@ -1857,7 +1974,7 @@ mod tests {
     /// its two targets would. A drill placed before `test` would put a compile
     /// on the loop's critical path and read as a slow drill.
     #[test]
-    fn local_carries_the_seven_cheap_steps_with_the_drill_after_the_tests() {
+    fn local_carries_the_eight_cheap_steps_with_the_drill_after_the_tests() {
         assert_eq!(
             names(Profile::Local),
             [
@@ -1866,6 +1983,7 @@ mod tests {
                 "test",
                 "restore-drill",
                 "rules",
+                "registry",
                 "doc-links",
                 "ledgers"
             ]

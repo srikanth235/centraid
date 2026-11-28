@@ -1,122 +1,107 @@
 package dev.centraid.android.a11y
 
 import androidx.compose.runtime.Composable
-import centraid.core.v1.EmptyState
-import centraid.core.v1.HomeBackupLine
-import centraid.core.v1.HomeBar
-import centraid.core.v1.HomeData
-import centraid.core.v1.HomeSpringboard
-import centraid.core.v1.HomeState
-import centraid.core.v1.HomeTile
-import centraid.core.v1.HomeTileSize
-import centraid.core.v1.HomeTileStatus
-import centraid.core.v1.HomeTone
-import centraid.core.v1.HomeVault
-import centraid.core.v1.HomeVaultState
-import centraid.core.v1.LockerBandTab
-import centraid.core.v1.LockerHomeChrome
-import centraid.core.v1.LockerHomeState
-import centraid.core.v1.LockerWall
-import centraid.core.v1.NotesBandTab
-import centraid.core.v1.NotesHomeChrome
-import centraid.core.v1.NotesHomeState
-import centraid.core.v1.NotesLibraryData
-import centraid.core.v1.NotesLibrarySection
-import centraid.core.v1.NotesMoreRow
-import centraid.core.v1.NotesNoteRow
-import centraid.core.v1.NotesPlace
-import centraid.core.v1.NotesSectionHead
-import centraid.core.v1.NotesSheet
-import centraid.core.v1.NotesSearchState
-import centraid.core.v1.PageState
 import centraid.core.v1.PairLaptopState
-import centraid.core.v1.Route
-import centraid.core.v1.ShellBand
-import centraid.core.v1.ShellBandTab
-import dev.centraid.android.screens.HomeScreen
-import dev.centraid.android.screens.notes.NotesHomeScreen
-import dev.centraid.android.screens.locker.LockerHomeScreen
+import centraid.core.v1.Room
+import centraid.core.v1.RoomBack
+import centraid.core.v1.RoomBand
+import centraid.core.v1.RoomBlock
+import centraid.core.v1.RoomChoice
+import centraid.core.v1.RoomChoiceStyle
+import centraid.core.v1.RoomGlyph
+import centraid.core.v1.RoomHeader
+import centraid.core.v1.RoomKind
+import centraid.core.v1.RoomOption
+import centraid.core.v1.RoomReady
+import centraid.core.v1.RoomRow
+import centraid.core.v1.RoomSection
+import centraid.core.v1.RoomTab
+import centraid.core.v1.RoomTile
+import centraid.core.v1.RoomTiles
+import dev.centraid.android.room.RoomView
 import dev.centraid.android.screens.pairing.PairLaptopPage
 
-/** One screen of the suite: where it is, what it draws, and the words a reader should meet in order (if the flow is checked). */
 internal class Scene(val id: String, val app: String, val content: @Composable () -> Unit)
 
-private fun route(screen: String) = Route(screen = screen)
-
-/** Every root, and every root's main sheet, from representative wire state (what Rust sends, filled in by hand). */
 internal object Scenes {
-    val shellBand = ShellBand(
-        tabs = listOf(
-            ShellBandTab(tab = "home", label = "Home", spoken = "Home", icon_key = "Home", selected = true),
-            ShellBandTab(tab = "chat", label = "Chat", spoken = "Chat", icon_key = "Chat"),
-            ShellBandTab(tab = "backup", label = "Backup", spoken = "Backup", icon_key = "Backup"),
+    private val homeRoom = Room(
+        kind = RoomKind.ROOM_KIND_HOME,
+        key = "home",
+        header_ = RoomHeader(title = "Centraid"),
+        band = RoomBand(
+            tabs = listOf(
+                RoomTab(selector_id = "tab/home", label = "Home", icon = "Home", selected = true),
+                RoomTab(selector_id = "tab/backup", label = "Backup", icon = "Backup", selected = false),
+            ),
         ),
-    )
-
-    private val apps = listOf(
-        "calendar" to "Calendar", "reminders" to "Reminders", "photos" to "Photos", "money" to "Money",
-        "health" to "Health", "people" to "People", "locker" to "Locker", "notes" to "Notes", "docs" to "Docs",
-    )
-
-    val home = HomeState(
-        bar = HomeBar(
-            vault = HomeVault(vault_id = "v1", name = "Home vault", state = HomeVaultState.HOME_VAULT_STATE_ONLINE, initial = "H"),
-            backup = HomeBackupLine(status = "Backed up today", tone = HomeTone.HOME_TONE_QUIET, route = route("backup.home")),
-            search_route = route("home.search"),
-            settings_route = route("settings"),
-        ),
-        data_ = HomeData(
-            springboard = HomeSpringboard.HOME_SPRINGBOARD_CONTENT,
-            tiles = apps.map { (id, name) ->
-                HomeTile(
-                    app_id = id, name = name, status = HomeTileStatus.HOME_TILE_STATUS_EMPTY,
-                    size = HomeTileSize.HOME_TILE_SIZE_SMALL, empty_copy = "Nothing here yet", route = route("$id.home"),
-                    count_label = "0 items",
-                )
-            },
-        ),
-        scheme = centraid.core.v1.HomeScheme.HOME_SCHEME_LIGHT,
-        page = PageState(),
-    ).labelled()
-
-    val notes = NotesHomeState(
-        place = NotesPlace.NOTES_PLACE_NOTES,
-        title = "Notes",
-        band = listOf(
-            NotesBandTab(key = "notes", label = "Notes", icon_key = "Notes", current = true),
-            NotesBandTab(key = "notebooks", label = "Notebooks", icon_key = "Folder"),
-            NotesBandTab(key = "journal", label = "Journal", icon_key = "Book"),
-        ),
-        chrome = NotesHomeChrome(),
-        library = NotesLibraryData(
-            count_label = "3 notes",
-            sections = listOf(
-                NotesLibrarySection(
-                    head = NotesSectionHead(title = "Recent", count = 3),
-                    rows = listOf(
-                        NotesNoteRow(note_id = "n1", title = "Groceries", snippet = "Milk, eggs, bread", meta = "Edited today", route = route("notes.editor")),
-                        NotesNoteRow(note_id = "n2", title = "Trip plan", snippet = "Book the train", meta = "Edited yesterday", pinned = true, route = route("notes.editor")),
-                        NotesNoteRow(note_id = "n3", title = "Ideas", snippet = "A garden shed", meta = "Edited 3 March", route = route("notes.editor")),
+        ready = RoomReady(
+            blocks = listOf(
+                RoomBlock(
+                    tiles = RoomTiles(
+                        tiles = listOf(
+                            RoomTile(selector_id = "tile/backup", label = "Backup", subtitle = "Backed up", glyph = RoomGlyph(icon = "Backup")),
+                            RoomTile(selector_id = "tile/settings", label = "Settings", glyph = RoomGlyph(icon = "Settings")),
+                        ),
                     ),
                 ),
             ),
         ),
-        search = NotesSearchState(),
-        new_note = route("notes.editor"),
-        page = PageState(),
-    ).labelled()
+    )
 
-    val notesMore = notes.copy(
-        sheet = NotesSheet.NOTES_SHEET_MORE,
-        more_rows = listOf(
-            NotesMoreRow(key = "trash", label = "Trash", icon_key = "Trash", route = route("trash"), meta = "2 notes"),
-            NotesMoreRow(key = "export", label = "Export", icon_key = "Export", route = route("transfer")),
+    private val settingsRoom = Room(
+        kind = RoomKind.ROOM_KIND_SYSTEM_PLACE,
+        key = "settings",
+        header_ = RoomHeader(
+            title = "Settings",
+            back = RoomBack(label = "Home", selector_id = "back"),
         ),
-    ).labelled()
+        ready = RoomReady(
+            blocks = listOf(
+                RoomBlock(
+                    section = RoomSection(
+                        selector_id = "section/appearance",
+                        heading = "Appearance",
+                        blocks = listOf(
+                            RoomBlock(
+                                choice = RoomChoice(
+                                    selector_id = "choice/appearance",
+                                    style = RoomChoiceStyle.ROOM_CHOICE_STYLE_SEGMENTED,
+                                    options = listOf(
+                                        RoomOption(id = "system", label = "System", selected = true),
+                                        RoomOption(id = "light", label = "Light", selected = false),
+                                        RoomOption(id = "dark", label = "Dark", selected = false),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
 
-    val pairWaiting = PairLaptopState(
+    private val backupRoom = Room(
+        kind = RoomKind.ROOM_KIND_SYSTEM_PLACE,
+        key = "backup",
+        header_ = RoomHeader(title = "Backup"),
+        ready = RoomReady(
+            blocks = listOf(
+                RoomBlock(
+                    section = RoomSection(
+                        selector_id = "section/line",
+                        heading = "Backup",
+                        blocks = listOf(
+                            RoomBlock(row = RoomRow(selector_id = "row/line", title = "Backed up", meta = "2 minutes ago")),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    private val pairWaiting = PairLaptopState(
         phase = PairLaptopState.Phase.PHASE_WAITING,
-        title = "Pair a laptop",
+        title = "Pair a backup device",
         body = "Run this on the laptop, then scan or paste the code.",
         command = "centraid-gateway pair",
         scan_label = "Scan the code",
@@ -124,24 +109,12 @@ internal object Scenes {
         primary_label = "Pair",
         primary_enabled = true,
         secondary_label = "Cancel",
-    ).labelled()
-
-    val lockerWall = LockerHomeState(
-        wall = LockerWall(phase = LockerWall.Phase.PHASE_LOCKED, title = "Locker is locked", body = "Unlock with your fingerprint.", unlock_label = "Unlock", unlock_icon = "Lock", words_label = "Use the 24 words"),
-        chrome = LockerHomeChrome(title = "Locker"),
-        band = listOf(
-            LockerBandTab(key = "items", label = "Items", icon_key = "Lock", current = true),
-            LockerBandTab(key = "review", label = "Review", icon_key = "Check"),
-        ),
-        band_locked = true,
-        page = PageState(),
-    ).labelled()
+    ).labelled(PairLaptopState::class.java)
 
     val all: List<Scene> = listOf(
-        Scene("home", "home") { HomeScreen(home, shellBand, {}, {}, {}) },
-        Scene("notes", "notes") { NotesHomeScreen(notes, {}, {}, {}) },
-        Scene("notes.more", "notes") { NotesHomeScreen(notesMore, {}, {}, {}) },
+        Scene("home", "home") { RoomView(homeRoom, {}, {}) },
+        Scene("settings", "home") { RoomView(settingsRoom, {}, {}) },
+        Scene("backup", "backup") { RoomView(backupRoom, {}, {}) },
         Scene("pair.laptop", "backup") { PairLaptopPage(pairWaiting, {}, {}) },
-        Scene("locker.wall", "locker") { LockerHomeScreen(lockerWall, {}, {}, {}, {}, {}) },
-    ) + ScenesApps.all
+    )
 }

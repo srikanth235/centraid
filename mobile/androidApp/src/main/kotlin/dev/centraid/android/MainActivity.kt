@@ -21,10 +21,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
-import dev.centraid.android.backup.MediaStoreDeleter
-import dev.centraid.android.glance.AgendaIntents
-import dev.centraid.android.glance.HealthIntents
-import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.notify.Notify
 import dev.centraid.android.notify.NotifyTaps
@@ -49,16 +45,7 @@ import kotlinx.coroutines.withContext
 // A `FragmentActivity` AND NOT A PLAIN `ComponentActivity` for one reason: Locker's unlock raises
 // `BiometricPrompt`, which hosts itself in a fragment of the activity it is given (#1047, D-5).
 public class MainActivity : FragmentActivity() {
-    /** HEALTH CONNECT (#1129): the reader and the phone's facts Health's screens are stamped with. Read only. */
-    private val health: AndroidHealth by lazy { AndroidHealth(this) }
-
-    /**
-     * FREE UP SPACE'S HAND ON MEDIASTORE (#1080 A20). A FIELD, NEVER `lazy`: its activity result
-     * launcher must be registered before this activity starts.
-     */
-    private val libraryDeleter: MediaStoreDeleter = MediaStoreDeleter(this)
-
-    private val rust: RustRoot by lazy { RustRoot(health, libraryDeleter) }
+    private val rust: RustRoot by lazy { RustRoot() }
 
     /**
      * THE OS ASKING FOR MEMORY BACK (#1025 S7-13). Every held vault's core is open so a switch is a
@@ -85,10 +72,8 @@ public class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         NotifyTaps.note(intent)
-        AgendaIntents.accept(intent)
-        HealthIntents.accept(intent)
         val open = AppSession.current.value ?: return
-        open.scope.launch { NotifyTaps.flush(open.screens) }
+        open.scope.launch { NotifyTaps.flush(open.rooms, open.screens) }
     }
 
     override fun onDestroy() {
@@ -111,12 +96,7 @@ public class MainActivity : FragmentActivity() {
         if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             placeDemoVaults()
         }
-        // THE LAUNCHER SHORTCUT'S "ADD A REMINDER" AND A WIDGET'S TAPS (#1173), queued until the session
-        // reports it. A recreated activity (a rotation) is handed the same intent again: not twice.
-        if (savedInstanceState == null) {
-            AgendaIntents.accept(intent)
-            HealthIntents.accept(intent)
-        }
+        // Demo vaults placed above for debug builds.
         // THE DEMO VAULT'S SEED, HANDED TO A DEBUG BUILD AT LAUNCH (#1047 W2):
         // `mobile/scripts/demo-vault.sh android` starts the activity with the public all-`abandon`
         // words' seed as an extra, and the shelf stores it where a real seed lives. A build that is
@@ -142,8 +122,7 @@ public class MainActivity : FragmentActivity() {
                     try {
                         rust.attach(opened, scope)
                         value = opened
-                        NotifyTaps.flush(opened.screens)
-                        // PRESSES THAT NEVER REACHED THE CORE (a receiver the process outlived) go now.
+                        NotifyTaps.flush(opened.rooms, opened.screens)
                         opened.scope.launch { Notify.drain(applicationContext) }
                         awaitCancellation()
                     } finally {

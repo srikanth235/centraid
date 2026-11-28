@@ -1,0 +1,2 @@
+$ node scripts/docs-site/smoke.mjs
+docs-site smoke: 12 pages OK, all internal links resolve

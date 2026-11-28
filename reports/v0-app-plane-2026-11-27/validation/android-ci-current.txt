@@ -1,0 +1,16 @@
+Hosted Android verification at be6c4d0edd65ad4bc80b0cd916284b74ec023521
+
+Run: https://github.com/srikanth235/centraid/actions/runs/46084049333
+Job: 140789379900
+Result: failed; no clean-checkout all-green Android claim.
+
+Kotlin compilation and shared-fixture tests passed. Full Android run: 219 tests completed, 1 failed, 2 skipped. The new RoomClientPhotoContentTest passed all 5 tests with no failures/skips. All 34 tracked block golden comparisons reported changed:false.
+
+The only failure remains the pre-existing ignored full-screen reference:
+java.lang.AssertionError: Roborazzi: The original file(/home/runner/work/centraid/centraid/mobile/androidApp/build/outputs/roborazzi/screens/room_home.png) was not found.
+
+That reference belongs to the ignored build-output directory and is absent on a clean checkout. Broader CI/capture-harness cleanup remains excluded; no reference, baseline or threshold was invented to pass it. Earlier local full-suite verification reused an existing ignored image. See android-ci.txt for introduction provenance.
+
+Evidence artifact: roborazzi-compare, 15238612214, 183327 bytes. Downloaded archive SHA256: ff2a1ba195908e6816b125317980d21ad5a4c64978f682cfe5fe3c97294fb1b5
+Local extract: /tmp/centraid-android-ci-be6
+The hosted HTML reports contain the failure, the five successful resolver cases, and all 34 unchanged tracked comparison lines. No Android phone run is claimed.

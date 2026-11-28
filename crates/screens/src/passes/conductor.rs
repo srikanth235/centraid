@@ -504,6 +504,11 @@ impl Conductor {
     // ---- what the service tells it --------------------------------------------
 
     /// The pass on `vault` was asked with `request`.
+    /// What the screens asked since the service last looked.
+    pub(crate) fn take_asks(&self) -> Vec<wire::pass_asked::Ask> {
+        self.lock().inbox.drain(..).collect()
+    }
+
     pub(crate) fn record_pass(&self, vault: &str, request: &wire::DrainRequest) {
         self.lock().in_flight.insert(vault.to_owned(), *request);
     }
@@ -599,11 +604,6 @@ impl Conductor {
     #[must_use]
     pub fn is_asked(&self, ask: wire::pass_asked::Ask) -> bool {
         self.lock().inbox.contains(&ask)
-    }
-
-    /// What the screens asked since the service last looked.
-    pub(crate) fn take_asks(&self) -> Vec<wire::pass_asked::Ask> {
-        self.lock().inbox.drain(..).collect()
     }
 
     // ---- what the screens read -------------------------------------------------

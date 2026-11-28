@@ -18,19 +18,20 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 mod artifact;
 mod ci;
+mod copy_rules;
 mod data_pin;
 mod ddl_rules;
+mod design_boards;
 #[cfg(test)]
 mod design_checks;
-mod design_dark;
 mod design_emit;
-mod design_glance;
 mod design_icon;
 mod design_site;
 mod design_words;
 mod dev_paths;
 mod doc_links;
 mod gate;
+mod journey_rules;
 mod ledger;
 mod lists;
 mod model_pin;
@@ -38,10 +39,11 @@ mod native_parity;
 mod native_parity_register;
 mod native_rules;
 mod page_state;
-mod promises;
+mod release;
 mod rules;
 mod screens_catalog;
 mod select;
+mod skill_rules;
 #[cfg(test)]
 mod testing;
 
@@ -70,8 +72,16 @@ enum Command {
         #[arg(long)]
         lane: Option<String>,
     },
-    /// Run only the structural rules (the cheap half of every profile).
-    Rules,
+    /// Run only the structural rules (the cheap half of every profile), or one named rule.
+    Rules {
+        #[command(subcommand)]
+        sub: Option<RulesCommand>,
+    },
+    /// Release management tasks (classify, matrix, prepare, publish, restamp, sync-versions, verify-secrets, notes).
+    Release {
+        #[command(subcommand)]
+        sub: release::ReleaseCommand,
+    },
     /// Check that every relative markdown link and in-repo anchor resolves —
     /// the `doc-links` step on its own. See `crates/xtask/src/doc_links.rs`
     /// for what it checks, what it skips and why.
@@ -176,6 +186,23 @@ enum Command {
         #[arg(long)]
         explain: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum RulesCommand {
+    /// Copy ratchet gate over Rust string catalogues and copy/*.json.
+    Copy {
+        /// Emit the measured counts as TOML.
+        #[arg(long)]
+        print: bool,
+        /// List every offending key.
+        #[arg(long)]
+        list: bool,
+    },
+    /// Check the journey ledger (`tests/journeys.json`).
+    Journeys,
+    /// Check `.claude/skills/*/SKILL.md` frontmatter, links and router tables.
+    Skills,
 }
 
 /// The four profiles, in ascending cost. Each is a superset of the one before.
@@ -305,7 +332,39 @@ fn main() -> ExitCode {
                 false
             }
         },
-        Command::Rules => rules::print_report(&root),
+        Command::Rules { sub } => match sub {
+            None => rules::print_report(&root),
+            Some(RulesCommand::Copy { print, list }) => {
+                match copy_rules::run_cli(&root, print, list) {
+                    Ok(ok) => ok,
+                    Err(error) => {
+                        eprintln!("xtask: {error:#}");
+                        false
+                    }
+                }
+            }
+            Some(RulesCommand::Journeys) => match journey_rules::run_cli(&root) {
+                Ok(ok) => ok,
+                Err(error) => {
+                    eprintln!("xtask: {error:#}");
+                    false
+                }
+            },
+            Some(RulesCommand::Skills) => match skill_rules::run_cli(&root) {
+                Ok(ok) => ok,
+                Err(error) => {
+                    eprintln!("xtask: {error:#}");
+                    false
+                }
+            },
+        },
+        Command::Release { sub } => match release::run(&root, sub) {
+            Ok(ok) => ok,
+            Err(error) => {
+                eprintln!("xtask: {error:#}");
+                false
+            }
+        },
         Command::ScreensCatalog { check } => match screens_catalog::run(&root, check) {
             Ok(()) => true,
             Err(error) => {

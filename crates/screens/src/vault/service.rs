@@ -343,7 +343,6 @@ impl Screen for Service {
                 Vec::new()
             }
             Some(E::DataChanged(changed)) => {
-                let mut offer = false;
                 // THE LEDGER MOVED (a pairing, a pass, a forget, a refreshed address): Home's
                 // line is the backup lane's reading of it, so it is read again, as the Backup
                 // page and Settings read it. A pairing wakes no pass, so nothing else would.
@@ -366,16 +365,8 @@ impl Screen for Service {
                         self.secrets
                             .conductor()
                             .ask(ctx, wire::pass_asked::Ask::RestoreFinished);
-                        offer = crate::follow::reconnect::vault_followed_stores(ctx);
                     }
                     self.tell_home(ctx);
-                }
-                // THE RESTORED VAULT FOLLOWED STORES ON ANOTHER PHONE: the Reconnect page is
-                // offered, never run (every Connect is the member's tap).
-                if offer {
-                    return vec![Self::open(crate::follow::reconnect::route(
-                        &crate::strings::home::band_home(ctx.locale()),
-                    ))];
                 }
                 Vec::new()
             }

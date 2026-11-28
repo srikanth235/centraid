@@ -1,295 +1,25 @@
-//! THE LOCKER PLAINTEXT GATE — *nothing the vault serves, backs up or keeps on
-//! disk carries the plaintext of an `lk1:` cell* (#1020, D-1020-L5; #1047,
-//! D-6).
+//! THE LOCKER PLAINTEXT GATE: nothing the vault serves, backs up, indexes, notifies or keeps on
+//! disk carries the plaintext of a sealed value (#1020, #1047, #1214 K4).
 //!
-//! `K` is the 24 words' own leaf, derived by the core at open and held only in
-//! its memory; this crate never holds it, and the laptop's gateway stores only
-//! sealed backup objects. So the claim that the gateway cannot produce Locker
-//! plaintext rests on two legs: `K` is nowhere on disk (asserted in
-//! `crates/core/src/app_query/locker_tests.rs` and
-//! `crates/identity/src/derive.rs`), and **the artefacts that leave the vault
-//! carry only ciphertext even once their own sealing is opened** — which is
-//! this file.
-//!
-//! ## What "cannot produce plaintext" is asserted over
-//!
-//! A real founded vault with real sealed cells, sealed here with a key that is
-//! never written anywhere, and then: `keyset_page` over every sealed table,
-//! the `locker.*` command surface including `export` and the two derivations,
-//! the backup snapshot's parts (sealed **and**
-//! opened), and the vault file with its WAL and SHM. Every answer is searched for every planted
-//! plaintext as a raw byte run, because a structured payload could carry one
-//! without spelling it.
-//!
-//! #1020's structural and binary halves — a source scan for member-key-file
-//! readers and an `nm` over the operator binary — are deleted with the
-//! multi-seat file custody they policed (#1047 slice D1): there is no key file
-//! for a reader to open.
-//!
-//! ## The search index
-//!
-//! A Locker item is indexed by its plain fields (its title, username, address,
-//! aliases, notes ...), so the gate is not "the index holds nothing of Locker"
-//! but "the index holds nothing SEALED": no word of a planted sealed cell is in
-//! `search_vocab`, `search_word`, the FTS5 shadow tables' bytes or `text_of`,
-//! while the planted plain fields are (a positive control, so the scan cannot be
-//! passing by looking nowhere).
-//!
-//! ## The falsification
-//!
-//! A search that finds nothing is the same output as a search that looks
-//! nowhere, so [`the_search_fires_when_the_key_is_present`] opens the same
-//! cells with `K` and asserts the searcher fires on them.
+//! `K` is a test constant written nowhere; the vault holds ciphertext only. A real vault is built
+//! THROUGH THE COMMANDS with a planted plaintext in EVERY built-in secret key of all fifteen
+//! types ([`locker::secret_keys`], so a key added to the table is planted the moment it exists), a
+//! custom sealed field, a custom one-time-code field, a passkey's private key, and a sealed file
+//! (its name, its media type and its bytes). Then every door that returns bytes, the index and
+//! its word lists, the history, a notification, the backup's parts (sealed and opened), the vault
+//! file with its WAL and the content store are searched for every planted plaintext as a raw byte
+//! run (and, for the index, as the words a tokenizer would make of it). Positive controls and a
+//! falsification (the cells DO open under `K`) show the scan is not looking nowhere.
 
 mod common;
 
-use centraid_vault::access::Principal;
-use centraid_vault::commands::{Command, CommandStatus, Registry};
-use centraid_vault::custody::locker_key::{
-    LOCKER_ENCRYPTED_COLUMNS, decrypt_under_locker_key, encrypt_under_locker_key,
-    is_locker_ciphertext,
-};
-use centraid_vault::model::Kind;
+use std::collections::BTreeSet;
 
-/// The plaintexts planted, and the strings the gate hunts for.
-///
-/// Chosen to be **findable**: long, unique, and not a substring of anything a
-/// payload would legitimately carry. A short plaintext that happened to appear
-/// in a base64 blob would make this test pass for the wrong reason.
-const PLANTED: [(&str, &str, &str, &str); 6] = [
-    (
-        "locker_item_field",
-        "item-1:password",
-        "value_sealed",
-        "PLANTED-PASSWORD-zq7xk4-not-in-any-payload",
-    ),
-    (
-        "locker_item_field",
-        "item-1:otp_seed",
-        "value_sealed",
-        "PLANTED-OTPSEED-mv9wr2-not-in-any-payload",
-    ),
-    (
-        "locker_item_field",
-        "item-2:card_number",
-        "value_sealed",
-        "PLANTED-CARDNUMBER-td3hb8-not-in-any-payload",
-    ),
-    (
-        "locker_item_field",
-        "field-1",
-        "value_sealed",
-        "PLANTED-CUSTOMFIELD-kp5ny1-not-in-any-payload",
-    ),
-    (
-        "locker_item_field",
-        "field-2",
-        "value_sealed",
-        "PLANTED-OTPFIELD-bn8qc3-not-in-any-payload",
-    ),
-    (
-        "locker_item_passkey",
-        "item-1",
-        "private_key",
-        "PLANTED-PRIVATEKEY-fw2js6-not-in-any-payload",
-    ),
-];
-
-/// A `K` that is written NOWHERE. It exists only inside this test process, so
-/// that the cells are real ciphertext and there is something for the gate to
-/// fail to produce.
-fn locker_key() -> Vec<u8> {
-    vec![0x5a_u8; 32]
-}
-
-struct Sealed {
-    scratch: common::Scratch,
-    registry: Registry,
-}
-
-impl Sealed {
-    /// A founded vault with real `lk1:` cells and **no key anywhere on disk**.
-    ///
-    /// The cells are sealed here, in the test, with a key that is never
-    /// written — which is the phone's state of affairs: the core sealed them
-    /// with the `K` it derived, and the vault stores what it was given.
-    fn founded() -> Self {
-        let scratch =
-            common::Scratch::founded("locker-plaintext-gate").expect("a vault is founded");
-        let registry = Registry::with_system_commands().expect("the registry builds");
-        let key = locker_key();
-        scratch
-            .vault
-            .commit(|tx| {
-                tx.set_producer("test.fixture");
-                let connection = tx.connection();
-                connection.execute(
-                    "INSERT INTO locker_key (key_id, created_at)
-                     VALUES ('key-1', '2026-01-01T00:00:00.000Z')",
-                    [],
-                )?;
-                tx.insert_entity("item-1", Kind::LockerItem, "The bank", "2026-01-01T00:00:00.000Z")?;
-                connection.execute(
-                    "INSERT INTO locker_item (id, type) VALUES ('item-1', 'login')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO locker_item_field
-                       (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
-                     VALUES ('item-1:username', 'item-1', 'username', '', 'Username', 'text',
-                             'plainuser-xylophone9', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO locker_item_field
-                       (id, item_id, field_key, section, label, kind, created_at, updated_at, key_id)
-                     VALUES ('item-1:password', 'item-1', 'password', '', 'Password', 'sealed',
-                             '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO locker_item_field
-                       (id, item_id, field_key, section, label, kind, value_sealed, created_at, updated_at, key_id)
-                     VALUES ('item-1:otp_seed', 'item-1', 'otp_seed', '', 'One-time code', 'otp',
-                             'lk1:placeholder', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
-                    [],
-                )?;
-                tx.insert_entity("item-2", Kind::LockerItem, "The card", "2026-01-01T00:00:00.000Z")?;
-                connection.execute(
-                    "INSERT INTO locker_item (id, type, memo)
-                     VALUES ('item-2', 'card', 'plainname-quokka7')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO locker_item_field
-                       (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
-                     VALUES ('item-2:brand', 'item-2', 'brand', '', 'Brand', 'text',
-                             'plainbrand-zeppelin3', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO locker_item_field
-                       (id, item_id, field_key, section, label, kind, created_at, updated_at, key_id)
-                     VALUES ('item-2:card_number', 'item-2', 'card_number', '', 'Card number', 'sealed',
-                             '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO locker_item_alias (id, item_id, created_at)
-                     VALUES ('plainalias-narwhal5', 'item-1', '2026-01-01T00:00:00.000Z')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO locker_item_field
-                       (id, item_id, section, label, kind, created_at, updated_at, key_id)
-                     VALUES ('field-1', 'item-1', '', 'Recovery code', 'sealed',
-                             '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
-                    [],
-                )?;
-                // A one-time-code custom field: kind `otp`, and its seed sealed like the rest (the
-                // schema requires a sealed value and forbids a plain one).
-                connection.execute(
-                    "INSERT INTO locker_item_field
-                       (id, item_id, section, label, kind, value_sealed, created_at,
-                        updated_at, key_id)
-                     VALUES ('field-2', 'item-1', '', 'Backup code', 'otp', 'lk1:placeholder',
-                             '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO locker_item_passkey
-                       (item_id, rp_id, created_at, updated_at, key_id)
-                     VALUES ('item-1', 'bank.example', '2026-01-01T00:00:00.000Z',
-                             '2026-01-01T00:00:00.000Z', 'key-1')",
-                    [],
-                )?;
-                for (table, row_id, column, plaintext) in PLANTED {
-                    let sealed = encrypt_under_locker_key(&key, "key-1", row_id, plaintext)
-                        .expect("the core seals");
-                    assert!(is_locker_ciphertext(&sealed));
-                    let pk = LOCKER_ENCRYPTED_COLUMNS
-                        .iter()
-                        .find(|(known, _, _)| *known == table)
-                        .map(|(_, pk, _)| *pk)
-                        .expect("the registry names the table");
-                    connection.execute(
-                        &format!("UPDATE {table} SET {column} = ?1 WHERE {pk} = ?2"),
-                        rusqlite::params![sealed, row_id],
-                    )?;
-                }
-                Ok(())
-            })
-            .expect("the sealed corpus lands");
-        Self { scratch, registry }
-    }
-
-    fn run(&self, name: &str, input: serde_json::Value) -> String {
-        let outcome = self
-            .scratch
-            .vault
-            .execute(
-                &self.registry,
-                &Principal::owner("phone"),
-                &Command::new(name, input),
-            )
-            .map_or_else(
-                |error| serde_json::json!({ "error": error.to_string() }),
-                |outcome| {
-                    serde_json::json!({
-                        "status": format!("{:?}", outcome.status),
-                        "output": outcome.output,
-                        "reason": outcome.reason,
-                    })
-                },
-            );
-        serde_json::to_string(&outcome).expect("the answer serialises")
-    }
-}
-
-/// Every planted plaintext, as a needle.
-fn needles() -> Vec<&'static str> {
-    PLANTED
-        .iter()
-        .map(|(_, _, _, plaintext)| *plaintext)
-        .collect()
-}
-
-/// The digit-bearing words of each planted secret (`zq7xk4`, `mv9wr2`, ...): the
-/// tokenizer splits `PLANTED-PASSWORD-zq7xk4-...` at its hyphens, so a scan for
-/// the whole string cannot see a secret indexed as words. These are what the
-/// index would actually hold.
-fn secret_tokens() -> Vec<String> {
-    needles()
-        .iter()
-        .flat_map(|needle| needle.split('-'))
-        .filter(|token| token.chars().any(|letter| letter.is_ascii_digit()))
-        .map(str::to_lowercase)
-        .collect()
-}
-
-/// Assert no word of any planted secret appears in the bytes.
-fn carries_no_secret_token(what: &str, answer: &[u8]) {
-    let lower = answer.to_ascii_lowercase();
-    for token in secret_tokens() {
-        assert!(
-            !contains(&lower, token.as_bytes()),
-            "{what} holds `{token}`, a word of a sealed cell's plaintext"
-        );
-    }
-}
-
-/// Assert a door's answer carries no planted secret, as text AND as bytes.
-fn carries_no_secret(what: &str, answer: &[u8]) {
-    for needle in needles() {
-        assert!(
-            !contains(answer, needle.as_bytes()),
-            "{what} produced the plaintext of a sealed cell"
-        );
-    }
-    // And the ciphertext's own base64 is fine to carry — the vault serves and
-    // backs up ciphertext **by design**, which is the other half of the premise
-    // and is worth saying so this test is not read as "no Locker data leaves".
-}
+use centraid_vault::commands::locker::{self, reads};
+use centraid_vault::custody::decrypt_under_locker_key;
+use centraid_vault::custody::sealed_file::SealReader;
+use common::locker::{K, add, id_of, item_id, key_id, plain, seal, secret, world};
+use serde_json::{Value, json};
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     haystack
@@ -297,268 +27,289 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
         .any(|window| window == needle)
 }
 
-/// THE GATE.
-#[test]
-fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
-    let sealed_vault = Sealed::founded();
+struct Planted {
+    /// `(table, row id, plaintext)` of every ciphertext cell planted.
+    cells: Vec<(&'static str, String, String)>,
+    /// The words a tokenizer makes of each plaintext (the digit-bearing ones).
+    tokens: Vec<String>,
+    /// What the file held, as bytes.
+    file_plain: Vec<u8>,
+    items: Vec<String>,
+}
 
-    // ---- 1. THE PAGED DOOR, over every sealed table -----------------------
-    for (table, pk, columns) in LOCKER_ENCRYPTED_COLUMNS {
-        let select: Vec<String> = std::iter::once((*pk).to_owned())
-            .chain(columns.iter().map(|column| (*column).to_owned()))
-            .collect();
-        let page = sealed_vault
-            .scratch
-            .vault
+impl Planted {
+    fn needles(&self) -> Vec<&str> {
+        self.cells
+            .iter()
+            .map(|(_, _, plaintext)| plaintext.as_str())
+            .collect()
+    }
+
+    fn silent(&self, what: &str, bytes: &[u8]) {
+        for needle in self.needles() {
+            assert!(
+                !contains(bytes, needle.as_bytes()),
+                "{what} produced the plaintext `{needle}`"
+            );
+        }
+        assert!(
+            !contains(bytes, &self.file_plain[..64]),
+            "{what} produced the plaintext of a sealed file"
+        );
+        let lower = bytes.to_ascii_lowercase();
+        for token in &self.tokens {
+            assert!(
+                !contains(&lower, token.as_bytes()),
+                "{what} holds the word `{token}` of a secret"
+            );
+        }
+    }
+}
+
+fn plant(w: &common::world::World) -> Planted {
+    let live = key_id(w);
+    let mut planted = Planted {
+        cells: Vec::new(),
+        tokens: Vec::new(),
+        file_plain: (0..4096_u32)
+            .flat_map(|n| format!("PLANTED-FILE-{n:05}-qz9;").into_bytes())
+            .collect(),
+        items: Vec::new(),
+    };
+    let mut keys_seen = BTreeSet::new();
+    for item_type in locker::ITEM_TYPES {
+        let item = item_id(w);
+        let mut fields = vec![plain("notes", &format!("plainmemo-{item_type}"))];
+        for key in locker::secret_keys_of(item_type) {
+            let plaintext = format!(
+                "PLANTED-{}-{}-zq7xk4w{}",
+                item_type.to_uppercase(),
+                key.to_uppercase(),
+                planted.cells.len()
+            );
+            fields.push(secret(w, &item, key, &plaintext));
+            planted
+                .tokens
+                .push(format!("zq7xk4w{}", planted.cells.len()));
+            planted
+                .cells
+                .push(("locker_item_field", id_of(&item, key), plaintext));
+            keys_seen.insert(key);
+        }
+        add(w, &item, item_type, &format!("The {item_type}"), fields);
+        planted.items.push(item);
+    }
+    assert_eq!(
+        keys_seen,
+        locker::secret_keys().into_iter().collect::<BTreeSet<_>>(),
+        "every built-in secret key is planted"
+    );
+    // A custom sealed field, a custom one-time-code field, a passkey and a sealed file, on item 0.
+    let item = planted.items[0].clone();
+    let (sealed_id, otp_id, passkey_id, file_id) = (
+        "custom-sealed-1".to_owned(),
+        "custom-otp-1".to_owned(),
+        w.mint(),
+        "sealed-file-1".to_owned(),
+    );
+    let sealed_plain = "PLANTED-CUSTOMFIELD-kp5ny1v1".to_owned();
+    let otp_plain = "PLANTED-OTPFIELD-bn8qc3v2".to_owned();
+    let key_plain = "PLANTED-PRIVATEKEY-fw2js6v3".to_owned();
+    let name_plain = "PLANTED-FILENAME-hd4mt8v4.pdf".to_owned();
+    for (id, kind, label, plaintext) in [
+        (&sealed_id, "sealed", "Recovery code", &sealed_plain),
+        (&otp_id, "otp", "Backup code", &otp_plain),
+    ] {
+        w.ok(
+            "locker.set_field",
+            json!({ "item_id": item, "field_id": id, "label": label, "kind": kind,
+                    "value": seal(w, id, plaintext), "key_id": live }),
+        );
+        planted
+            .cells
+            .push(("locker_item_field", id.clone(), plaintext.clone()));
+    }
+    w.ok(
+        "locker.set_passkey",
+        json!({ "item_id": item, "passkey_id": passkey_id, "rp_id": "bank.example",
+                "private_key": seal(w, &passkey_id, &key_plain), "key_id": live }),
+    );
+    planted
+        .cells
+        .push(("locker_item_passkey", passkey_id, key_plain));
+    let sealed_bytes = {
+        let mut sealer = SealReader::new(&planted.file_plain[..], &K, &live, &file_id).unwrap();
+        let mut out = Vec::new();
+        std::io::Read::read_to_end(&mut sealer, &mut out).unwrap();
+        out
+    };
+    let hash = w.vault().blobs().unwrap().put(&sealed_bytes).unwrap();
+    let meta = format!("{{\"name\":\"{name_plain}\",\"media_type\":\"application/pdf\"}}");
+    w.ok(
+        "locker.set_field",
+        json!({ "item_id": item, "field_id": file_id, "label": "Scan", "kind": "file",
+                "value": seal(w, &file_id, &meta), "blob": hash, "key_id": live }),
+    );
+    planted.cells.push(("locker_item_field", file_id, meta));
+    planted.cells.push(("name", String::new(), name_plain));
+    for token in ["kp5ny1v1", "bn8qc3v2", "fw2js6v3", "hd4mt8v4"] {
+        planted.tokens.push(token.to_owned());
+    }
+    // A reminder on a dated field, for the notification.
+    w.ok(
+        "locker.edit_item",
+        json!({ "item_id": planted.items[8], "fields": [plain("expires", "2031-05-04")] }),
+    );
+    planted
+}
+
+#[test]
+fn nothing_the_vault_serves_indexes_notifies_or_backs_up_carries_locker_plaintext() {
+    let w = world("locker-plaintext-gate");
+    let planted = plant(&w);
+    let vault = w.vault();
+
+    // 1. The paged door over every sealed table: it serves ciphertext, never the plaintext.
+    for (table, pk, columns) in centraid_vault::custody::locker_key::LOCKER_ENCRYPTED_COLUMNS {
+        let page = vault
             .keyset_page(&centraid_vault::page::KeysetPage {
                 name: "locker.gate".to_owned(),
-                select: select.clone(),
+                select: std::iter::once((*pk).to_owned())
+                    .chain(columns.iter().map(|c| (*c).to_owned()))
+                    .collect(),
                 from: (*table).to_owned(),
                 predicate: None,
                 binds: Vec::new(),
                 sort_column: (*pk).to_owned(),
                 pk_column: (*pk).to_owned(),
                 descending: false,
-                limit: 100,
+                limit: 200,
                 after: None,
                 held_thumbnail: false,
                 document_size: false,
             })
             .expect("the door answers");
         let rendered = format!("{:?}", page.rows);
-        carries_no_secret(&format!("the paged door over {table}"), rendered.as_bytes());
-        // …and it DID serve the ciphertext, so this is not passing because the
-        // read returned nothing.
+        planted.silent(&format!("the paged door over {table}"), rendered.as_bytes());
         assert!(
             rendered.contains("lk1:"),
-            "the paged door over {table} served no ciphertext, so the assertion above is vacuous"
+            "{table}: no ciphertext served, so the scan is vacuous"
+        );
+        // A read that is not Locker's cannot name a sealed column at all.
+        let refused = vault.keyset_page(&centraid_vault::page::KeysetPage {
+            name: "generic.peek".to_owned(),
+            select: vec![(*pk).to_owned(), columns[0].to_owned()],
+            from: (*table).to_owned(),
+            predicate: None,
+            binds: Vec::new(),
+            sort_column: (*pk).to_owned(),
+            pk_column: (*pk).to_owned(),
+            descending: false,
+            limit: 10,
+            after: None,
+            held_thumbnail: false,
+            document_size: false,
+        });
+        assert!(
+            refused.is_err(),
+            "a generic read of {table}.{} was served",
+            columns[0]
         );
     }
 
-    // ---- 2. EVERY `locker.*` COMMAND THAT RETURNS BYTES -------------------
-    let answers = [
-        ("locker.export", serde_json::json!({ "confirm": true })),
-        (
+    // 2. Every Locker command that returns bytes, and the reads.
+    let item = planted.items[0].clone();
+    let reminder = w.ok(
+        "reminder.add",
+        json!({ "entity_id": planted.items[8], "field_id": id_of(&planted.items[8], "expires"), "offset_min": 0 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let answers: Vec<Value> = vec![
+        w.ok(
             "locker.export",
-            serde_json::json!({ "confirm": true, "include_trashed": true, "include_history": true }),
+            json!({ "confirm": true, "device_passcode": true, "include_trashed": true }),
         ),
-        ("locker.counts", serde_json::json!({})),
-        (
-            "locker.totp_code",
-            serde_json::json!({ "item_id": "item-1" }),
-        ),
-        (
-            "locker.mark_used",
-            serde_json::json!({ "item_id": "item-1" }),
-        ),
-        (
-            "locker.duplicate_item",
-            serde_json::json!({ "item_id": "item-1", "new_item_id": "item-copy" }),
-        ),
-        (
+        w.ok("locker.counts", json!({})),
+        w.ok("locker.mark_used", json!({ "item_id": item })),
+        w.ok("locker.totp_code", json!({ "item_id": item })),
+        w.ok(
             "locker.edit_item",
-            serde_json::json!({ "item_id": "item-1", "title": "Renamed" }),
+            json!({ "item_id": item, "title": "Renamed" }),
+        ),
+        w.ok(
+            "locker.duplicate_item",
+            json!({ "item_id": item, "new_item_id": w.mint() }),
         ),
     ];
-    for (name, input) in answers {
-        let answer = sealed_vault.run(name, input);
-        carries_no_secret(&format!("{name}'s answer"), answer.as_bytes());
+    for answer in &answers {
+        planted.silent("a locker command's answer", answer.to_string().as_bytes());
     }
+    // The refusals of plaintext say nothing of it either.
+    let refusal = w.refused(
+        "locker.set_field",
+        json!({ "item_id": item, "field_key": "password", "value": "PLANTED-REFUSED-ab1cd2", "key_id": key_id(&w) }),
+    );
+    assert!(!refusal.contains("ab1cd2"), "{refusal}");
+    let views: String = planted
+        .items
+        .iter()
+        .map(|id| format!("{:?}", vault.read(|c| reads::fields_of(c, id)).unwrap()))
+        .collect();
+    planted.silent("the field reads", views.as_bytes());
+    // The notification names the title and the label and nothing else.
+    let notice = vault
+        .read(|c| centraid_vault::alerts::notice(c, &reminder))
+        .unwrap()
+        .unwrap();
+    planted.silent("a notification", format!("{notice:?}").as_bytes());
+    assert_eq!(notice.what.as_deref(), Some("Expires"));
 
-    // ---- 2b. THE READERS OF EVERY ENTITY (a Locker item is one) -----------
-    //
-    // A Locker item is an entity, so every reader that serves "entities" is a
-    // reader that could serve it. None may carry a cell, and none may carry the
-    // item at all unless it is one of Locker's.
-    {
-        let vault = &sealed_vault.scratch.vault;
-        let page_of = |name: &str, from: &str, select: &[&str], sort: &str, pk: &str| {
-            vault.keyset_page(&centraid_vault::page::KeysetPage {
-                name: name.to_owned(),
-                select: select.iter().map(|column| (*column).to_owned()).collect(),
-                from: from.to_owned(),
-                predicate: None,
-                binds: Vec::new(),
-                sort_column: sort.to_owned(),
-                pk_column: pk.to_owned(),
-                descending: false,
-                limit: 100,
-                after: None,
-                held_thumbnail: false,
-                document_size: false,
-            })
-        };
-        // keyset_page over `entity`: the vault's own owner and the seeded words,
-        // and not a Locker row.
-        let entities = page_of(
-            "generic.entities",
-            "entity",
-            &["id", "kind", "title"],
-            "id",
-            "id",
-        )
-        .expect("the door answers");
-        assert!(!entities.rows.is_empty(), "the entity page served nothing");
-        let rendered = format!("{:?}", entities.rows);
-        carries_no_secret("a generic page over entity", rendered.as_bytes());
-        assert!(
-            !rendered.contains("locker_item") && !rendered.contains("The bank"),
-            "a generic page over entity served a Locker item: {rendered}"
-        );
-        // …while Locker's own read of the same table does see its items.
-        let own = page_of(
-            "locker.phone.shelves",
-            "entity",
-            &["id", "kind", "title"],
-            "id",
-            "id",
-        )
-        .expect("the door answers");
-        assert!(format!("{:?}", own.rows).contains("The bank"));
-        // keyset_page over `edge`: no edge that touches an item.
-        sealed_vault
-            .scratch
-            .vault
-            .commit(|tx| {
-                tx.set_producer("test.fixture");
-                tx.connection().execute(
-                    "INSERT INTO edge (from_id, rel, to_id, created_at)
-                     VALUES ('item-1', 'tagged', 'flag:starred', '2026-01-01T00:00:00.000Z')",
-                    [],
-                )?;
-                Ok(())
-            })
-            .expect("a star lands");
-        let edges = page_of(
-            "generic.edges",
-            "edge",
-            &["from_id", "to_id"],
-            "from_id",
-            "to_id",
-        )
-        .expect("the door answers");
-        assert!(
-            edges.rows.is_empty(),
-            "a generic page over edge served a Locker edge"
-        );
-        let own_edges = page_of(
-            "locker.phone.tags",
-            "edge",
-            &["from_id", "to_id"],
-            "from_id",
-            "to_id",
-        )
-        .expect("the door answers");
-        assert_eq!(own_edges.rows.len(), 1, "Locker's own read lost its star");
-        // And a Locker TABLE is Locker's alone: a generic read is refused.
-        for table in ["locker_item", "locker_item_field", "locker_item_passkey"] {
-            let pk = if table == "locker_item" {
-                "id"
-            } else {
-                "item_id"
-            };
-            let refused = page_of("generic.peek", table, &[pk], pk, pk);
-            assert!(refused.is_err(), "a generic read of {table} was served");
-        }
-        // THE SEARCH INDEX holds a Locker item by its PLAIN text and by nothing
-        // sealed. The scan is of the index's vocabulary, its word list,
-        // `text_of`, and the raw bytes of the FTS5 shadow tables.
-        vault
-            .read(|connection| {
-                let words: Vec<String> = connection
-                    .prepare(
-                        "SELECT term FROM search_vocab UNION ALL SELECT term FROM search_past_vocab
-                         UNION ALL SELECT word FROM search_word",
-                    )?
-                    .query_map([], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                let index_text = words.join(" ");
-                carries_no_secret("the search index's words", index_text.as_bytes());
-                carries_no_secret_token("the search index's words", index_text.as_bytes());
-                // The shadow tables, as bytes: leaf blocks, the segment index,
-                // the doc sizes and the config.
-                let mut shadow = Vec::new();
-                for (table, column) in [
-                    ("search_data", "block"),
-                    ("search_docsize", "sz"),
-                    ("search_idx", "term"),
-                    ("search_config", "v"),
-                    ("search_past_data", "block"),
-                    ("search_past_docsize", "sz"),
-                    ("search_past_idx", "term"),
-                    ("search_past_config", "v"),
-                ] {
-                    for cell in connection
-                        .prepare(&format!("SELECT {column} FROM {table}"))?
-                        .query_map([], |row| row.get::<_, rusqlite::types::Value>(0))?
-                    {
-                        match cell? {
-                            rusqlite::types::Value::Blob(bytes) => shadow.extend(bytes),
-                            rusqlite::types::Value::Text(text) => shadow.extend(text.into_bytes()),
-                            other => shadow.extend(format!("{other:?}").into_bytes()),
-                        }
-                    }
-                }
-                carries_no_secret("the search shadow tables", &shadow);
-                carries_no_secret_token("the search shadow tables", &shadow);
-                // POSITIVE CONTROLS: the planted PLAIN fields are findable, and
-                // the scan above can see a word in these very bytes — so its
-                // silence about the secrets is not a scan that looks nowhere.
-                for plain in ["bank", "card", "quokka7", "zeppelin3", "narwhal5"] {
-                    assert!(
-                        words.iter().any(|word| word == plain),
-                        "the plain word `{plain}` of a Locker item is not in the index"
-                    );
-                }
-                assert!(
-                    contains(&shadow, b"zeppelin3"),
-                    "the byte scan cannot see a plain word in the shadow tables, so it proves nothing"
-                );
-                // text_of answers with the plain fields and nothing sealed.
-                for item in ["item-1", "item-2"] {
-                    let text = centraid_vault::index::text_of(connection, item, Kind::LockerItem)?
-                        .expect("text_of answered for a Locker item");
-                    carries_no_secret("text_of", text.as_bytes());
-                    carries_no_secret_token("text_of", text.as_bytes());
-                }
-                // (`locker.edit_item` above REPLACED item-1's cells, so the plain
-                // cells that are still there are item-1's alias and item-2's two.)
-                for (item, plain) in [
-                    ("item-1", "narwhal5"),
-                    ("item-2", "quokka7"),
-                    ("item-2", "zeppelin3"),
-                ] {
-                    let text = centraid_vault::index::text_of(connection, item, Kind::LockerItem)?
-                        .unwrap_or_default();
-                    assert!(text.contains(plain), "text_of lost `{plain}`: {text}");
-                }
-                // The action keys hold a caller's id and a digest, and a Locker item's history
-                // keeps its sealed cells only as the ciphertext they are: no revision carries a plaintext.
-                let keys: String = connection
-                    .prepare("SELECT key || ' ' || asked FROM action_key")?
-                    .query_map([], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?
-                    .join("\n");
-                carries_no_secret("the action keys", keys.as_bytes());
-                let revisions: String = connection
-                    .prepare("SELECT state || ' ' || COALESCE(body, '') FROM revision")?
-                    .query_map([], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?
-                    .join("\n");
-                carries_no_secret("the history", revisions.as_bytes());
-                carries_no_secret_token("the history", revisions.as_bytes());
-                Ok(())
-            })
-            .expect("the readers answer");
+    // 3. The index: its words, its postings, its bytes; the derivative table; the history.
+    common::index::drain(vault);
+    let words: Vec<String> = common::index::words_file(&common::index::index_path(w.scratch.dir()))
+        .into_iter()
+        .collect();
+    planted.silent("the word list", words.join(" ").as_bytes());
+    let postings = common::index::dump(w.scratch.dir())
+        .into_iter()
+        .collect::<Vec<_>>()
+        .join("\n");
+    planted.silent("the index's postings", postings.as_bytes());
+    let index_bytes = std::fs::read(common::index::index_path(w.scratch.dir())).unwrap();
+    planted.silent("the index file", &index_bytes);
+    if let Ok(wal) = std::fs::read(w.scratch.dir().join("vault.index.db-wal")) {
+        planted.silent("the index file's WAL", &wal);
     }
+    // Positive controls: plain words are there, and the byte scan can see one.
+    assert!(
+        words.iter().any(|word| word == "plainmemo"),
+        "the plain memo is indexed"
+    );
+    assert!(contains(&index_bytes, b"plainmemo") || postings.contains("plainmemo"));
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM derivative", &[]),
+        0,
+        "nothing is derived"
+    );
+    let revisions: String = w
+        .strings(
+            "SELECT state || ' ' || COALESCE(body, '') FROM revision",
+            &[],
+        )
+        .join("\n");
+    planted.silent("the history", revisions.as_bytes());
+    assert!(
+        revisions.contains("lk1:"),
+        "history keeps the ciphertext, which is the control"
+    );
+    let keys = w
+        .strings("SELECT key || ' ' || asked FROM action_key", &[])
+        .join("\n");
+    planted.silent("the action keys", keys.as_bytes());
 
-    // ---- 4. THE BACKUP SNAPSHOT, SEALED AND OPENED (#1080, #1209) --------
-    //
-    // A backup is the file read page for page, cut into 64 KiB ranges, each
-    // sealed as a `centraid-sealed/4` object, plus the tree's nodes. The scan
-    // reads every sealed object — which would pass vacuously if the sealing
-    // were ever removed — AND every opened one: a range that leaked a Locker
-    // secret into the plaintext it seals is a leak the moment its key is lost.
+    // 4. The backup snapshot, sealed and opened.
     {
         use centraid_media::sealed::{self, BackupKeys, Class, Digest};
         use centraid_vault::backup::directory::Directory;
@@ -566,22 +317,18 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
         use centraid_vault::backup::staging::Staging;
         use centraid_vault::backup::state::DeviceState;
 
-        let vault = &sealed_vault.scratch.vault;
         let keys = BackupKeys::from_root(&[0x5a; 32]);
         let state = DeviceState::open_beside(vault.path()).expect("a device state");
-        let staging = Staging::open(
-            sealed_vault.scratch.join("vault.staging"),
-            512 * 1024 * 1024,
-        )
-        .expect("a staging area");
+        let staging =
+            Staging::open(w.scratch.join("vault.staging"), 512 * 1024 * 1024).expect("staging");
         let directory = Directory::new(Vec::new()).expect("a directory");
-        let taken = snapshot::take(vault, &keys, &state, &staging, &directory, Options::at(1))
-            .expect("a snapshot is taken");
+        snapshot::take(vault, &keys, &state, &staging, &directory, Options::at(1))
+            .expect("a snapshot");
         let staged = state.staged_all().expect("the staged ranges");
-        assert!(staged.len() > 1, "the ranges are sealed and staged");
+        assert!(staged.len() > 1);
         for row in &staged {
             let object = std::fs::read(&row.path).expect("the object reads");
-            carries_no_secret("a sealed snapshot range", &object);
+            planted.silent("a sealed snapshot range", &object);
             let plain = sealed::open_checked(
                 &keys,
                 &row.name,
@@ -591,452 +338,99 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                 &object,
             )
             .expect("the range opens");
-            carries_no_secret("an opened snapshot range", &plain);
-        }
-        let root = state
-            .get_node(&taken.root.name)
-            .expect("the root is cached")
-            .expect("the root's plaintext");
-        carries_no_secret("the tree's root", &root);
-    }
-
-    // ---- 5. THE VAULT FILE ITSELF ----------------------------------------
-    // Not a door, and the reason it is here anyway: a gate that only checked
-    // the doors would pass over a vault that had a plaintext column somebody
-    // forgot to seal, or a table that kept the value an intent carried.
-    let file = std::fs::read(sealed_vault.scratch.dir().join("vault.db")).expect("the file reads");
-    carries_no_secret("the vault file", &file);
-    for sidecar in ["vault.db-wal", "vault.db-shm"] {
-        if let Ok(bytes) = std::fs::read(sealed_vault.scratch.dir().join(sidecar)) {
-            carries_no_secret(sidecar, &bytes);
+            planted.silent("an opened snapshot range", &plain);
         }
     }
-}
 
-/// A LOCKER WRITE THAT CARRIES PLAINTEXT IS REFUSED, NEVER STORED PLAIN.
-///
-/// The other direction of the same property: the gate above says no secret
-/// gets out, and this says the command plane cannot be talked into taking one
-/// in. Both matter, because a vault that accepted plaintext would hold the
-/// secret in its file, its WAL and every backup of them regardless of what
-/// its read doors answer.
-#[test]
-fn the_command_plane_cannot_be_talked_into_storing_a_plaintext_secret() {
-    let sealed_vault = Sealed::founded();
-    for (command, input) in [
-        (
-            "locker.add_item",
-            serde_json::json!({
-                "item_id": "item-3",
-                "type": "login",
-                "title": "A third",
-                "password": "PLANTED-PASSWORD-zq7xk4-not-in-any-payload",
-                "password_rotated": true,
-                "key_id": "key-1"
-            }),
-        ),
-        (
-            "locker.edit_item",
-            serde_json::json!({
-                "item_id": "item-1",
-                "password": "PLANTED-PASSWORD-zq7xk4-not-in-any-payload",
-                "password_rotated": true,
-                "key_id": "key-1"
-            }),
-        ),
-        (
-            "locker.set_field",
-            serde_json::json!({
-                "item_id": "item-1",
-                "field_id": "field-2",
-                "label": "A code",
-                "kind": "sealed",
-                "value": "PLANTED-CUSTOMFIELD-kp5ny1-not-in-any-payload",
-                "key_id": "key-1"
-            }),
-        ),
-    ] {
-        let outcome = sealed_vault
-            .scratch
-            .vault
-            .execute(
-                &sealed_vault.registry,
-                &Principal::owner("phone"),
-                &Command::new(command, input),
-            )
-            .expect("the command plane answers");
-        assert_eq!(
-            outcome.status,
-            CommandStatus::Failed,
-            "{command} accepted a plaintext secret"
-        );
+    // 5. Every file on disk: the vault, its WAL, and the content store (the file is sealed there).
+    let mut stored = 0;
+    for path in walk(w.scratch.dir()) {
+        let bytes = std::fs::read(&path).unwrap();
+        planted.silent(&format!("{}", path.display()), &bytes);
+        stored += 1;
     }
+    assert!(stored >= 3, "the scan walked the vault file and the store");
 
-    // AND THE FILE HOLDS NONE OF IT — not in a row, not in a key, not in
-    // the WAL.
-    let file = std::fs::read(sealed_vault.scratch.dir().join("vault.db")).expect("the file reads");
-    carries_no_secret("the vault file after three refused writes", &file);
-    for sidecar in ["vault.db-wal", "vault.db-shm"] {
-        if let Ok(bytes) = std::fs::read(sealed_vault.scratch.dir().join(sidecar)) {
-            carries_no_secret(sidecar, &bytes);
+    // 6. THE FALSIFICATION: the same cells DO open under K, so the scans above have something to
+    // fail to find, and the search finds a plaintext when one is present.
+    for (table, row_id, plaintext) in &planted.cells {
+        if row_id.is_empty() {
+            continue;
         }
-    }
-}
-
-/// A custom field of kind `otp` is a one-time-code seed, a secret: the schema keeps it out of the
-/// plain `value_text` column (a plain value is refused, and an `otp` field without a sealed one
-/// is), the vault takes only its ciphertext, and no revision, plain column or search row holds it.
-#[test]
-fn an_otp_custom_field_is_sealed_and_never_plain_in_a_row_a_revision_or_the_index() {
-    const SEED: &str = "PLANTED-OTPFIELD-bn8qc3-not-in-any-payload";
-    let vault = Sealed::founded();
-    let key = locker_key();
-
-    // The vault takes no plaintext seed, however it arrives.
-    for (command, input) in [
-        (
-            "locker.set_field",
-            serde_json::json!({
-                "item_id": "item-1", "field_id": "field-otp", "label": "Backup code",
-                "kind": "otp", "value": SEED
-            }),
-        ),
-        (
-            "locker.duplicate_item",
-            serde_json::json!({
-                "item_id": "item-1", "new_item_id": "item-9",
-                "fields": [{ "field_id": "field-otp-2", "label": "Backup code",
-                             "kind": "otp", "value": SEED }]
-            }),
-        ),
-    ] {
-        let outcome = vault
-            .scratch
-            .vault
-            .execute(
-                &vault.registry,
-                &Principal::owner("phone"),
-                &Command::new(command, input),
-            )
-            .expect("the command plane answers");
-        assert_eq!(
-            outcome.status,
-            CommandStatus::Failed,
-            "{command} stored an otp field's value in the clear"
-        );
-    }
-    // The schema itself refuses a plain seed, and an `otp` field with no sealed one.
-    for statement in [
-        "INSERT INTO locker_item_field (id, item_id, label, kind, value_text, created_at)
-         VALUES ('plain-otp', 'item-1', 'x', 'otp', 'PLAIN', '2026-01-01T00:00:00.000Z')",
-        "INSERT INTO locker_item_field (id, item_id, label, kind, value_text, value_sealed, created_at)
-         VALUES ('both-otp', 'item-1', 'x', 'otp', 'PLAIN', 'lk1:x', '2026-01-01T00:00:00.000Z')",
-        "INSERT INTO locker_item_field (id, item_id, label, kind, created_at)
-         VALUES ('empty-otp', 'item-1', 'x', 'otp', '2026-01-01T00:00:00.000Z')",
-    ] {
-        let refused = vault.scratch.vault.commit(|tx| {
-            tx.set_producer("test.fixture");
-            tx.connection().execute(statement, [])?;
-            Ok(())
-        });
-        assert!(refused.is_err(), "the schema took: {statement}");
-    }
-
-    // A sealed seed is taken, keeps its kind, and its plaintext is nowhere a reader can see.
-    let sealed = encrypt_under_locker_key(&key, "key-1", "field-otp", SEED).expect("seals");
-    let stored = vault.run(
-        "locker.set_field",
-        serde_json::json!({
-            "item_id": "item-1", "field_id": "field-otp", "label": "Backup code",
-            "kind": "otp", "value": sealed, "key_id": "key-1"
-        }),
-    );
-    assert!(stored.contains("Executed"), "{stored}");
-    // Rewriting it with the placeholder keeps the seed and the kind.
-    let kept = vault.run(
-        "locker.set_field",
-        serde_json::json!({
-            "item_id": "item-1", "field_id": "field-otp", "label": "Backup codes",
-            "kind": "otp", "value": "«sealed»"
-        }),
-    );
-    assert!(kept.contains("Executed"), "{kept}");
-    // The edit makes a revision (so the scan below is not vacuous).
-    let edited = vault.run(
-        "locker.edit_item",
-        serde_json::json!({ "item_id": "item-1", "username": "someone-else" }),
-    );
-    assert!(edited.contains("Executed"), "{edited}");
-    vault
-        .scratch
-        .vault
-        .read(|connection| {
-            let kind_and_plain: (String, Option<String>, Option<String>) = connection.query_row(
-                "SELECT kind, value_text, value_sealed FROM locker_item_field
-                  WHERE id = 'field-otp'",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )?;
-            assert_eq!(kind_and_plain.0, "otp");
-            assert_eq!(kind_and_plain.1, None);
-            assert!(
-                kind_and_plain
-                    .2
-                    .as_deref()
-                    .is_some_and(is_locker_ciphertext)
-            );
-            // No plain column of any table holds the seed or a word of it.
-            for table in ["locker_item", "locker_item_field", "locker_item_address"] {
-                let rows: Vec<String> = connection
-                    .prepare(&format!("SELECT * FROM {table}"))?
-                    .query_map([], |row| {
-                        let mut line = String::new();
-                        for index in 0..row.as_ref().column_count() {
-                            if let Ok(text) = row.get::<_, String>(index) {
-                                line.push_str(&text);
-                                line.push(' ');
-                            }
-                        }
-                        Ok(line)
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                for line in rows.iter().filter(|line| !line.contains("lk1:")) {
-                    carries_no_secret(table, line.as_bytes());
-                    carries_no_secret_token(table, line.as_bytes());
-                }
-            }
-            // No revision holds it, and one was written.
-            let revisions: Vec<String> = connection
-                .prepare("SELECT CAST(state AS TEXT) FROM revision")?
-                .query_map([], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            assert!(
-                revisions.iter().any(|state| state.contains("someone-else")
-                    || state.contains("plainuser-xylophone9")),
-                "the edit made a revision (the scan is not vacuous)"
-            );
-            for state in &revisions {
-                assert!(!state.contains(SEED), "history copied an otp field's seed");
-                // The field and its sealed seed are state, as the ciphertext the live cell holds.
-                assert!(
-                    state.contains("lk1:") || !state.contains("Backup code"),
-                    "history holds the otp field with no sealed value"
-                );
-            }
-            // And the search index holds no word of it.
-            let text = centraid_vault::index::text_of(connection, "item-1", Kind::LockerItem)?
-                .unwrap_or_default();
-            carries_no_secret("text_of", text.as_bytes());
-            carries_no_secret_token("text_of", text.as_bytes());
-            Ok(())
-        })
-        .expect("the file reads");
-}
-
-/// THE FALSIFICATION.
-///
-/// The gate above is a **search for plaintext**, and a search that finds
-/// nothing is the same output as a search that looks nowhere. So: take the
-/// same vault's own ciphertext, open it with `K`, and assert the searcher
-/// **would** have failed on that output. If this test ever stops finding the
-/// plaintext, `carries_no_secret` has stopped looking and every assertion
-/// above it is vacuous.
-#[test]
-fn the_search_fires_when_the_key_is_present() {
-    let sealed_vault = Sealed::founded();
-    let key = locker_key();
-
-    // The ciphertext the vault serves, read back through its own door.
-    let mut opened = 0usize;
-    for (table, row_id, column, plaintext) in PLANTED {
-        let cell: String = sealed_vault
-            .scratch
-            .vault
-            .read(|connection| {
-                Ok(connection.query_row(
-                    &format!("SELECT {column} FROM {table} WHERE rowid IN (SELECT rowid FROM {table}) AND {column} IS NOT NULL LIMIT 1"),
-                    [],
-                    |row| row.get(0),
+        let pk = "id";
+        let (cipher, key): (String, String) = w
+            .vault()
+            .read(|c| {
+                let column = if *table == "locker_item_field" {
+                    "value_sealed"
+                } else {
+                    "private_key"
+                };
+                Ok(c.query_row(
+                    &format!("SELECT {column}, key_id FROM {table} WHERE {pk} = ?1"),
+                    [row_id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
                 )?)
             })
-            .expect("the cell reads");
-        if !is_locker_ciphertext(&cell) {
-            continue;
-        }
-        // What only the holder of `K` can do: open it.
-        let Ok(revealed) = decrypt_under_locker_key(&key, "key-1", row_id, &cell) else {
-            continue;
-        };
-        if revealed != plaintext {
-            // The planted rows share columns; only the matching pair proves
-            // anything, and one is enough.
-            continue;
-        }
-        // THE SEARCHER FIRES. Asserted by catching the panic, because
-        // `carries_no_secret` is an assertion and its failing IS the claim.
-        let caught = std::panic::catch_unwind(|| {
-            carries_no_secret("a holder of K", revealed.as_bytes());
-        });
-        assert!(
-            caught.is_err(),
-            "the searcher did not fire on {table}.{column}'s own plaintext — \
-             `carries_no_secret` has stopped looking and every assertion in \
-             the gate above it is vacuous"
+            .expect("a planted cell");
+        assert_eq!(
+            &decrypt_under_locker_key(&K, &key, row_id, &cipher).unwrap(),
+            plaintext
         );
-        opened += 1;
+        assert!(contains(plaintext.as_bytes(), plaintext.as_bytes()));
     }
-    assert!(
-        opened > 0,
-        "no planted cell could be opened even WITH the key: the falsification \
-         itself is vacuous"
-    );
+    let opened_file = {
+        let hash: String = w.one(
+            "SELECT value_blob FROM locker_item_field WHERE id = 'sealed-file-1'",
+            &[],
+        );
+        let bytes = vault.blobs().unwrap().get(&hash).unwrap();
+        centraid_vault::custody::sealed_file::open_bytes(&bytes, &K, &key_id(&w), "sealed-file-1")
+            .unwrap()
+    };
+    assert_eq!(opened_file, planted.file_plain);
+    assert!(contains(&opened_file, &planted.file_plain[..64]));
 }
 
-// ---------------------------------------------------------------------------
-// THE ASSISTANT'S READS (the owner's ruling of 2026-10-22, #1135)
-//
-// The assistant reads the vault through pages named `assist.native.*`. It has the owner's access
-// to a Locker item's plain rows, and no access to a sealed value: the page serves the rows and
-// refuses every way to name a sealed column but its presence bit.
-// ---------------------------------------------------------------------------
+fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            found.extend(walk(&path));
+        } else {
+            found.push(path);
+        }
+    }
+    found
+}
 
 #[test]
-fn the_assistants_reads_serve_a_locker_items_plain_rows_and_never_a_sealed_column() {
-    let sealed_vault = Sealed::founded();
-    let vault = &sealed_vault.scratch.vault;
-    sealed_vault
-        .scratch
-        .vault
-        .commit(|tx| {
-            tx.set_producer("test.fixture");
-            tx.connection().execute(
-                "INSERT INTO edge (from_id, rel, to_id, created_at)
-                 VALUES ('item-1', 'tagged', 'flag:starred', '2026-01-01T00:00:00.000Z')",
-                [],
-            )?;
-            Ok(())
-        })
-        .expect("a star lands");
-    let page = |name: &str, from: &str, select: &[&str], sort: &str, predicate: Option<&str>| {
-        vault.keyset_page(&centraid_vault::page::KeysetPage {
-            name: name.to_owned(),
-            select: select.iter().map(|column| (*column).to_owned()).collect(),
-            from: from.to_owned(),
-            predicate: predicate.map(str::to_owned),
-            binds: Vec::new(),
-            sort_column: sort.to_owned(),
-            pk_column: sort.to_owned(),
-            descending: false,
-            limit: 100,
-            after: None,
-            held_thumbnail: false,
-            document_size: false,
-        })
-    };
-
-    // The rows a Locker item is made of, plain: its entity, its edges, its kind row.
-    let entities = page(
-        "assist.native.entity",
-        "entity",
-        &["id", "kind", "title"],
-        "id",
-        None,
-    )
-    .expect("the door answers");
-    let rendered = format!("{:?}", entities.rows);
-    assert!(
-        rendered.contains("locker_item") && rendered.contains("The bank"),
-        "{rendered}"
-    );
-    let edges = page(
-        "assist.native.edge",
-        "edge",
-        &["from_id", "to_id"],
-        "from_id",
-        None,
-    )
-    .expect("the door answers");
-    assert_eq!(
-        edges.rows.len(),
-        1,
-        "the item's star is an edge the assistant reads"
-    );
-    let items = page(
-        "assist.native.locker_item",
-        "locker_item",
-        &["id", "type", "memo"],
-        "id",
-        None,
-    )
-    .expect("the door answers");
-    let rendered = format!("{:?}", items.rows);
-    assert!(rendered.contains("plainname-quokka7"), "{rendered}");
-    carries_no_secret("the assistant's read of locker_item", rendered.as_bytes());
-    let fields = page(
-        "assist.native.locker_item_field",
-        "locker_item_field",
-        &[
-            "id",
-            "item_id",
-            "field_key",
-            "value_text",
-            "value_sealed IS NOT NULL AS has_sealed",
-        ],
-        "id",
-        None,
-    )
-    .expect("the door answers");
-    let rendered = format!("{:?}", fields.rows);
-    assert!(rendered.contains("plainuser-xylophone9"), "{rendered}");
-    assert!(
-        rendered.contains("has_sealed") && rendered.contains("Integer(1)"),
-        "the presence bit is served: {rendered}"
-    );
-    carries_no_secret(
-        "the assistant's read of locker_item_field",
-        rendered.as_bytes(),
-    );
-    assert!(
-        !rendered.contains("lk1:"),
-        "no ciphertext either: {rendered}"
-    );
-
-    // …and every way to name a sealed column is refused: projected, ordered by, filtered on,
-    // or read out of a JSON path.
-    for (table, pk, column) in [
-        ("locker_item_field", "item_id", "value_sealed"),
-        ("locker_item_passkey", "item_id", "private_key"),
-    ] {
-        let read = |select: &[&str], sort: &str, predicate: Option<&str>| {
-            page("assist.native.read", table, select, sort, predicate)
-        };
-        assert!(
-            read(&[pk, column], pk, None).is_err(),
-            "projected {table}.{column}"
-        );
-        assert!(
-            read(&[pk], column, None).is_err(),
-            "ordered by {table}.{column}"
-        );
-        assert!(
-            read(&[pk], pk, Some(&format!("{column} LIKE 'lk1:%'"))).is_err(),
-            "filtered on {table}.{column}"
-        );
-        assert!(
-            read(
-                &[&format!("json_extract({column}, '$.x') AS x"), pk],
-                pk,
-                None
-            )
-            .is_err(),
-            "extracted from {table}.{column}"
-        );
-        // The presence bit is the one way to name it.
-        assert!(
-            read(&[pk, &format!("{column} IS NOT NULL AS has_it")], pk, None).is_ok(),
-            "the presence of {table}.{column}"
-        );
+fn the_command_plane_cannot_be_talked_into_storing_a_plaintext_secret() {
+    let w = world("locker-gate-refuse");
+    let live = key_id(&w);
+    for item_type in locker::ITEM_TYPES {
+        for key in locker::secret_keys_of(item_type) {
+            let item = item_id(&w);
+            let sentence = w.refused(
+                "locker.add_item",
+                json!({ "item_id": item, "type": item_type, "title": "x", "fields": [
+                    { "field_key": key, "value": "PLANTED-PLAINTEXT-mq3rv9", "key_id": live }] }),
+            );
+            assert!(!sentence.contains("mq3rv9"), "{sentence}");
+        }
     }
-    // A read that is neither Locker's nor the assistant's is served no Locker table.
-    assert!(page("generic.peek", "locker_item", &["id"], "id", None).is_err());
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM locker_item", &[]), 0);
+    let file = std::fs::read(w.scratch.dir().join("vault.db")).unwrap();
+    assert!(!contains(&file, b"mq3rv9"));
+    // Nor a passkey's key.
+    let item = item_id(&w);
+    add(&w, &item, "login", "x", vec![]);
+    assert!(
+        w.refused(
+            "locker.set_passkey",
+            json!({ "item_id": item, "passkey_id": w.mint(), "rp_id": "x.example", "private_key": "mq3rv9", "key_id": live }),
+        )
+        .contains("sealed")
+    );
 }

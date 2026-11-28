@@ -1,292 +1,340 @@
-//! THE GENERAL LINK (#1185): any item links to any other item, nothing links to a Locker item, a
-//! link made on one page shows on the other, and either page takes it off. The shape table itself
-//! is held by `commitments.rs`; this proves the commands and the two reads a page uses.
+//! THE GENERAL LINK (#1185, #1214 A4): any linkable item links to any other (a Locker item
+//! included, it is an ordinary app's item), a link made on one page shows on the other, either page
+//! takes it off, a duplicate in either direction is impossible, and what is not an item is refused
+//! with a sentence. The table's own rules are held by `schema_rules.rs`; this proves the commands
+//! and the reads a page uses.
 
 mod common;
 
-use centraid_vault::commands::Registry;
 use centraid_vault::links;
 use centraid_vault::model::Kind;
-use centraid_vault::{Command, CommandStatus, Principal};
+use common::world::{AT, World};
 use serde_json::json;
 
-const AT: &str = "2026-03-01T09:00:00.000Z";
-
-struct World {
-    scratch: common::Scratch,
-    registry: Registry,
-}
-
-impl World {
-    fn new() -> Self {
-        let scratch = common::Scratch::founded("links").expect("a vault");
-        scratch
-            .vault
-            .commit(|tx| {
-                tx.set_producer("test.fixture");
-                for kind in Kind::ALL {
-                    tx.insert_entity(&format!("a:{}", kind.as_str()), kind, "Alpha", AT)?;
-                    tx.insert_entity(&format!("b:{}", kind.as_str()), kind, "Beta", AT)?;
-                }
-                Ok(())
-            })
-            .expect("fixture entities");
-        Self {
-            scratch,
-            registry: Registry::with_system_commands().expect("a registry"),
-        }
-    }
-
-    fn run(&self, name: &str, input: serde_json::Value) -> centraid_vault::CommandOutcome {
-        self.scratch
-            .vault
-            .execute(
-                &self.registry,
-                &Principal::owner("phone"),
-                &Command::new(name, input),
-            )
-            .unwrap_or_else(|error| panic!("`{name}`: {error}"))
-    }
-
-    fn link(&self, from: &str, to: &str) -> centraid_vault::CommandOutcome {
-        self.run("edge.add", json!({"from": from, "rel": "links", "to": to}))
-    }
-
-    fn unlink(&self, from: &str, to: &str) -> centraid_vault::CommandOutcome {
-        self.run(
-            "edge.remove",
-            json!({"from": from, "rel": "links", "to": to}),
-        )
-    }
-
-    fn linked(&self, id: &str) -> Vec<links::Linked> {
-        self.scratch
-            .vault
-            .read(|connection| links::linked(connection, id))
-            .expect("reads")
-    }
-
-    fn edges(&self) -> i64 {
-        self.scratch
-            .vault
-            .read(|c| {
-                Ok(
-                    c.query_row("SELECT COUNT(*) FROM edge WHERE rel = 'links'", [], |row| {
-                        row.get(0)
-                    })?,
-                )
-            })
-            .expect("a count")
-    }
+fn link_rows(w: &World) -> i64 {
+    w.one("SELECT COUNT(*) FROM link", &[])
 }
 
 #[test]
-fn every_linkable_kind_links_to_every_other_and_nothing_links_to_a_locker_item() {
-    let world = World::new();
-    let starts: Vec<Kind> = Kind::ALL
-        .into_iter()
-        .filter(|kind| kind.is_link_start())
-        .collect();
-    assert_eq!(starts.len(), 11, "the ten ends and the Locker item");
-    for from in &starts {
-        for to in Kind::LINK_ENDS {
-            let outcome = world.link(
-                &format!("a:{}", from.as_str()),
-                &format!("b:{}", to.as_str()),
-            );
+fn every_linkable_kind_links_to_every_other_in_either_order_and_the_rest_are_refused() {
+    let w = World::new("links_matrix");
+    let linkable = w.kinds_linkable(true);
+    assert!(linkable.len() >= 12, "{linkable:?}");
+    assert!(linkable.contains(&Kind::LockerItem), "Locker is ordinary");
+    let ones: Vec<(Kind, String)> = linkable.iter().map(|k| (*k, w.made(*k, "Alpha"))).collect();
+    let twos: Vec<(Kind, String)> = linkable.iter().map(|k| (*k, w.made(*k, "Beta"))).collect();
+    // Every kind to every kind, one end made from the first set and the other from the second;
+    // half of them are asked in the other order, which is the same link.
+    for (n, (from_kind, from)) in ones.iter().enumerate() {
+        for (m, (to_kind, to)) in twos.iter().enumerate() {
+            let (x, y) = if (n + m) % 2 == 0 {
+                (from, to)
+            } else {
+                (to, from)
+            };
+            let out = w.ok("link.add", json!({"a": x, "b": y}));
+            assert_eq!(out["added"], true, "{from_kind:?} {to_kind:?}");
+        }
+    }
+    let pairs = (linkable.len() * linkable.len()) as i64;
+    assert_eq!(link_rows(&w), pairs);
+    // Asking again, from either end, adds nothing.
+    for (_, from) in &ones {
+        for (_, to) in &twos {
             assert_eq!(
-                outcome.status,
-                CommandStatus::Executed,
-                "{} -> {}: {:?}",
-                from.as_str(),
-                to.as_str(),
-                outcome.reason
+                w.ok("link.add", json!({"a": to, "b": from}))["added"],
+                false
             );
         }
     }
-    assert_eq!(world.edges(), 110);
+    assert_eq!(
+        link_rows(&w),
+        pairs,
+        "a duplicate in either direction is the same row"
+    );
+    // The lower id is always `a`.
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM link WHERE a >= b", &[]),
+        0
+    );
 
-    // Nothing links to a Locker item, from any kind at all, and the member reads why.
-    for from in Kind::ALL {
-        let outcome = world.link(&format!("a:{}", from.as_str()), "b:locker_item");
-        assert_eq!(outcome.status, CommandStatus::Failed, "{}", from.as_str());
-        assert_eq!(
-            outcome.reason.as_deref(),
-            Some("a Locker item cannot be the target of a link: link from the Locker item instead"),
-            "{}",
-            from.as_str()
-        );
+    // What is not an item (a reading, a chat, a container, a label) is no end, as the kind's own
+    // row says; the member reads why.
+    let before = link_rows(&w);
+    let person = &ones[0].1;
+    let refused_kinds = w.kinds_linkable(false);
+    assert!(refused_kinds.contains(&Kind::Reading) && refused_kinds.contains(&Kind::Tag));
+    for kind in refused_kinds {
+        let other = w.made(kind, "Nope");
+        for (a, b) in [(&other, person), (person, &other)] {
+            let sentence = w.refused("link.add", json!({"a": a, "b": b}));
+            assert!(
+                sentence.contains("cannot be linked") && sentence.contains(&kind.noun()),
+                "{kind:?}: {sentence}"
+            );
+        }
     }
-    assert_eq!(world.edges(), 110, "a refused link writes nothing");
+    assert_eq!(link_rows(&w), before, "a refused link writes nothing");
+}
 
-    // The kinds that are no items (a tag, a flag, a notebook, a revision's owner) are not linked.
-    for from in Kind::ALL.into_iter().filter(|kind| !kind.is_link_start()) {
-        let outcome = world.link(&format!("a:{}", from.as_str()), "b:person");
-        assert_eq!(outcome.status, CommandStatus::Failed, "{}", from.as_str());
-    }
+#[test]
+fn a_thing_is_not_linked_to_itself_and_a_missing_or_trashed_end_is_refused() {
+    let w = World::new("links_ends");
+    let a = w.person("Ada");
+    assert!(
+        w.refused("link.add", json!({"a": &a, "b": &a}))
+            .contains("itself")
+    );
+    assert!(
+        w.refused(
+            "link.add",
+            json!({"a": &a, "b": "01900000-0000-7000-8000-00000000dead"})
+        )
+        .contains("nothing with the id")
+    );
+    let b = w.person("Bo");
+    w.ok("entity.trash", json!({"id": &b}));
+    assert!(
+        w.refused("link.add", json!({"a": &a, "b": &b}))
+            .contains("in the trash")
+    );
+    assert_eq!(link_rows(&w), 0);
 }
 
 #[test]
 fn a_link_shows_on_both_pages_and_either_page_takes_it_off() {
-    let world = World::new();
-    assert_eq!(
-        world.link("a:note", "a:event").status,
-        CommandStatus::Executed
-    );
-    let from_note = world.linked("a:note");
+    let w = World::new("links_both");
+    let note = w.note("Trip");
+    let place = w.made(Kind::Place, "Lisbon");
+    w.ok("link.add", json!({"a": &note, "b": &place}));
+    let linked = |id: &str| w.vault().read(|c| links::linked(c, id)).expect("reads");
+    let from_note = linked(&note);
     assert_eq!(from_note.len(), 1);
     assert_eq!(
-        (from_note[0].id.as_str(), from_note[0].key),
-        ("a:event", "event")
+        (from_note[0].id.as_str(), from_note[0].kind),
+        (place.as_str(), Kind::Place)
     );
-    let from_event = world.linked("a:event");
-    assert_eq!(from_event.len(), 1, "the event's page shows the note");
+    assert!(!from_note[0].in_text);
+    let from_place = linked(&place);
+    assert_eq!(from_place.len(), 1, "the other page shows the note");
     assert_eq!(
-        (from_event[0].id.as_str(), from_event[0].key),
-        ("a:note", "note")
+        (from_place[0].id.as_str(), from_place[0].kind),
+        (note.as_str(), Kind::Note)
     );
+    // The two reads are one row, read from `a` and from `b`.
+    assert_eq!(link_rows(&w), 1);
 
-    // The same link made from the other end is the same link.
+    // The page that did not make it takes it off.
+    let (a, b) = links::ordered(&note, &place);
+    let maker_is_a = a == note;
     assert_eq!(
-        world.link("a:event", "a:note").status,
-        CommandStatus::Executed
+        w.ok("link.remove", json!({"a": b, "b": a}))["removed"],
+        true,
+        "taken off from the end the other page was (note made it: {maker_is_a})"
     );
-    assert_eq!(world.edges(), 1);
-
-    // The event's page takes it off, though the note made it.
+    assert_eq!(link_rows(&w), 0);
+    assert!(linked(&note).is_empty() && linked(&place).is_empty());
+    // Taking off what is not there is a no-op, so an Undo may run twice.
     assert_eq!(
-        world.unlink("a:event", "a:note").status,
-        CommandStatus::Executed
-    );
-    assert_eq!(world.edges(), 0);
-    assert!(world.linked("a:note").is_empty());
-
-    // Taking off a link that is not there is a no-op, so an Undo may run twice.
-    assert_eq!(
-        world.unlink("a:event", "a:note").status,
-        CommandStatus::Executed
+        w.ok("link.remove", json!({"a": &note, "b": &place}))["removed"],
+        false
     );
 }
 
 #[test]
-fn a_locker_item_is_seen_only_on_its_own_page() {
-    let world = World::new();
+fn a_locker_item_is_an_ordinary_end_listed_on_the_other_page_and_offered_by_the_picker() {
+    let w = World::new("links_locker");
+    let person = w.person("Ada");
+    let item = w.made(Kind::LockerItem, "Bank login");
+    w.ok("link.add", json!({"a": &item, "b": &person}));
+    let read = |id: &str| w.vault().read(|c| links::linked(c, id)).expect("reads");
     assert_eq!(
-        world.link("a:locker_item", "a:person").status,
-        CommandStatus::Executed
+        read(&person).len(),
+        1,
+        "the person's page names the Locker item"
     );
-    let own = world.linked("a:locker_item");
-    assert_eq!(own.len(), 1);
-    assert_eq!(own[0].key, "person");
-    assert!(
-        world.linked("a:person").is_empty(),
-        "the person's page does not name a Locker item"
-    );
+    assert_eq!(read(&person)[0].kind, Kind::LockerItem);
+    assert_eq!(read(&item)[0].id, person);
+    let offered = w
+        .vault()
+        .read(|c| links::candidates(c, "locker_item", "bank", 10))
+        .expect("reads");
+    assert_eq!(offered.len(), 1, "a Locker item is offered like any item");
+    assert_eq!(offered[0].id, item);
 }
 
 #[test]
-fn a_trashed_item_is_not_listed_and_a_workout_is_a_workout() {
-    let world = World::new();
-    world.link("a:task", "a:photo");
-    assert_eq!(world.linked("a:task").len(), 1);
-    world
-        .scratch
-        .vault
-        .commit(|tx| {
-            tx.set_producer("test.fixture");
-            tx.connection().execute(
-                "UPDATE entity SET deleted_at = ?1, purge_at = ?1 WHERE id = 'a:photo'",
-                [AT],
-            )?;
-            Ok(())
-        })
-        .expect("trashed");
-    assert!(world.linked("a:task").is_empty());
-    assert_eq!(links::key_of(Kind::Activity, true), Some("workout"));
-    assert_eq!(links::key_of(Kind::Activity, false), None);
-    assert_eq!(links::key_of(Kind::Txn, false), Some("transaction"));
-    assert_eq!(links::key_of(Kind::Tag, false), None);
+fn a_trashed_item_is_not_listed() {
+    let w = World::new("links_trash");
+    let task = w.made(Kind::Task, "Pack");
+    let photo = w.made(Kind::Photo, "Beach");
+    w.ok("link.add", json!({"a": &task, "b": &photo}));
+    let read = |id: &str| w.vault().read(|c| links::linked(c, id)).expect("reads");
+    assert_eq!(read(&task).len(), 1);
+    w.ok("entity.trash", json!({"id": &photo}));
+    assert!(read(&task).is_empty());
+    w.ok("entity.restore", json!({"id": &photo}));
+    assert_eq!(read(&task).len(), 1, "the link was never taken off");
 }
 
 #[test]
-fn the_picker_lists_one_kind_by_typed_term_bounded_and_never_a_locker_item() {
-    let world = World::new();
-    world
-        .scratch
-        .vault
-        .commit(|tx| {
-            tx.set_producer("test.fixture");
-            for n in 0..(links::MAX_CANDIDATES + 10) {
-                tx.insert_entity(&format!("t{n}"), Kind::Task, &format!("Chore {n:03}"), AT)?;
-            }
-            Ok(())
-        })
-        .expect("tasks");
-    let pick = |key: &str, term: &str, limit: usize| {
-        world
-            .scratch
-            .vault
-            .read(|c| links::candidates(c, key, term, limit))
+fn the_picker_lists_one_kind_by_typed_term_bounded_and_offers_nothing_that_is_no_end() {
+    let w = World::new("links_picker");
+    let alpha = w.made(Kind::Task, "Alpha");
+    let ids: Vec<String> = (0..links::MAX_CANDIDATES + 10).map(|_| w.mint()).collect();
+    w.commit(|tx| {
+        for (n, id) in ids.iter().enumerate() {
+            tx.insert_entity_in(id, Kind::Task, &format!("Chore {n:03}"), None, AT)?;
+        }
+        Ok(())
+    });
+    let pick = |kind: &str, term: &str, limit: usize| {
+        w.vault()
+            .read(|c| links::candidates(c, kind, term, limit))
             .expect("reads")
     };
     assert_eq!(pick("task", "", 1_000).len(), links::MAX_CANDIDATES);
     let typed = pick("task", "CHORE 05", 1_000);
     assert!(!typed.is_empty() && typed.iter().all(|c| c.title.contains("Chore 05")));
-    assert_eq!(pick("task", "alpha", 1_000)[0].id, "a:task");
+    assert_eq!(pick("task", "alpha", 1_000)[0].id, alpha);
     assert!(pick("task", "nothing like it", 10).is_empty());
-    assert!(
-        pick("locker_item", "", 10).is_empty(),
-        "never a Locker item"
-    );
-    assert!(pick("tag", "", 10).is_empty(), "not an item");
+    assert!(pick("tag", "", 10).is_empty(), "a label is no end");
+    assert!(pick("reading", "", 10).is_empty(), "a reading is no end");
+    assert!(pick("no_such_kind", "", 10).is_empty());
+    // An item with no title to pick it by is not offered.
+    w.bare(Kind::Photo, "", None);
+    assert!(pick("photo", "", 10).is_empty());
     // The owner leads the people, whatever the order of names.
+    w.person("Aaron");
     let people = pick("person", "", 10);
     assert!(people[0].is_owner, "{people:?}");
+    assert_eq!(people.len(), 2);
 }
 
 #[test]
-fn a_link_written_in_a_notes_text_reads_in_text_from_both_ends_and_a_picked_link_does_not() {
-    let world = World::new();
-    let id = |output: serde_json::Value| output["id"].as_str().expect("an id").to_owned();
-    let target = id(world
-        .run(
-            "note.create",
-            json!({"title": "Packing list", "body": "socks"}),
-        )
-        .output);
-    let host = id(world
-        .run(
-            "note.create",
-            json!({"title": "Host", "body": "see [[Packing list]]"}),
-        )
-        .output);
-    let picked = id(world
-        .run(
-            "note.create",
-            json!({"title": "Itinerary", "body": "day one"}),
-        )
-        .output);
-    assert_eq!(
-        world.link(&host, &picked).status,
-        CommandStatus::Executed,
-        "a picked link"
-    );
-    let on_host = world.linked(&host);
+fn a_title_written_in_a_notes_text_reads_in_text_from_both_ends_and_a_picked_link_does_not() {
+    let w = World::new("links_mention");
+    let target = w.note("Packing list");
+    let host = w.note("Host");
+    let picked = w.note("Itinerary");
+    w.ok("link.add", json!({"a": &host, "b": &picked}));
+    // The note's own save writes its mentions; here the rows stand where it would put them.
+    w.commit(|tx| {
+        tx.connection().execute(
+            "INSERT INTO mention (note_id, ordinal, wikilink, to_id) VALUES (?1, 0, 'Packing list', ?2)",
+            [&host, &target],
+        )?;
+        Ok(())
+    });
+    let read = |id: &str| w.vault().read(|c| links::linked(c, id)).expect("reads");
     let in_text = |rows: &[links::Linked], other: &str| {
         rows.iter()
             .find(|row| row.id == other)
             .map(|row| row.in_text)
     };
+    let on_host = read(&host);
     assert_eq!(
         in_text(&on_host, &target),
         Some(true),
         "the note's own page"
     );
     assert_eq!(in_text(&on_host, &picked), Some(false), "a picked link");
-    let on_target = world.linked(&target);
     assert_eq!(
-        in_text(&on_target, &host),
+        in_text(&read(&target), &host),
         Some(true),
-        "the linked item's page"
+        "the mentioned item's page"
+    );
+    // The same pair picked by hand as well is still one thing, written in the text.
+    w.ok("link.add", json!({"a": &host, "b": &target}));
+    assert_eq!(read(&host).iter().filter(|row| row.id == target).count(), 1);
+    assert_eq!(in_text(&read(&host), &target), Some(true));
+}
+
+#[test]
+fn a_purged_item_takes_its_links_with_it_and_its_mentions_wait_for_a_title_again() {
+    let w = World::new("links_purge");
+    let keep = w.person("Ada");
+    let gone = w.made(Kind::Place, "Lisbon");
+    let host = w.note("Trip");
+    w.ok("link.add", json!({"a": &keep, "b": &gone}));
+    w.commit(|tx| {
+        tx.connection().execute(
+            "INSERT INTO mention (note_id, ordinal, wikilink, to_id) VALUES (?1, 0, 'Lisbon', ?2)",
+            [&host, &gone],
+        )?;
+        Ok(())
+    });
+    w.ok("entity.trash", json!({"id": &gone}));
+    w.ok("entity.purge", json!({"id": &gone}));
+    assert_eq!(link_rows(&w), 0, "the link went by ON DELETE CASCADE");
+    assert_eq!(
+        w.one::<Option<String>>("SELECT to_id FROM mention WHERE note_id = ?1", &[&host]),
+        None,
+        "the mention is unresolved again, as the note's text reads"
+    );
+    assert!(
+        w.vault()
+            .read(|c| links::linked(c, &keep))
+            .expect("reads")
+            .is_empty()
+    );
+}
+
+#[test]
+fn merging_one_item_into_another_moves_every_link_with_no_duplicate_either_way() {
+    let w = World::new("links_repoint");
+    let (from, into) = (w.person("Alex"), w.person("Alexander"));
+    let (shared, only_from, only_into) = (
+        w.note("Both"),
+        w.made(Kind::Place, "Rome"),
+        w.made(Kind::Task, "Call"),
+    );
+    w.ok("link.add", json!({"a": &from, "b": &shared}));
+    w.ok("link.add", json!({"a": &shared, "b": &into}));
+    w.ok("link.add", json!({"a": &only_from, "b": &from}));
+    w.ok("link.add", json!({"a": &into, "b": &only_into}));
+    w.ok("link.add", json!({"a": &from, "b": &into}));
+    let moved = w
+        .vault()
+        .commit(|tx| links::repoint(tx.connection(), &from, &into))
+        .expect("merged")
+        .value;
+    assert_eq!(
+        moved.links, 1,
+        "only the place is new to the survivor: the shared note was there, the pair itself is dropped"
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM link WHERE a = ?1 OR b = ?1", &[&from]),
+        0
+    );
+    let read = |id: &str| -> Vec<String> {
+        let mut ids: Vec<String> = w
+            .vault()
+            .read(|c| links::linked(c, id))
+            .expect("reads")
+            .into_iter()
+            .map(|row| row.id)
+            .collect();
+        ids.sort();
+        ids
+    };
+    let mut want = vec![shared, only_from, only_into];
+    want.sort();
+    assert_eq!(read(&into), want);
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM link WHERE a >= b", &[]),
+        0
+    );
+    // Two of different kinds, or the same one twice, are not a merge.
+    assert!(
+        w.vault()
+            .commit(|tx| links::repoint(tx.connection(), &into, &into))
+            .is_err()
+    );
+    let place = w.made(Kind::Place, "Elsewhere");
+    assert!(
+        w.vault()
+            .commit(|tx| links::repoint(tx.connection(), &place, &into))
+            .is_err()
     );
 }

@@ -104,7 +104,7 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          agree with ourselves; the RFC's bytes are the point of the file (W0.5-R1)",
     ),
     (
-        "screens/src/chat/asset.rs",
+        "core/src/assist/asset.rs",
         "the digest of the two model files the chat downloads is SHA-256 because \
          that is what their publisher states for them (Hugging Face's LFS object \
          id): the value is someone else's, checked against the bytes that arrived. \
@@ -112,9 +112,20 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          is SHA-256",
     ),
     (
-        "screens/src/chat/model.rs",
-        "carries `ModelDownload.sha256` from `asset.rs` to the shell, which hashes \
-         the file that arrived; same reason as `asset.rs`",
+        "core/src/assist/files.rs",
+        "carries `AssistFile.sha256` from `asset.rs` to the shell, which hashes the \
+         file that arrived, and its tests build a model record whose digests are the \
+         published files' SHA-256; same reason as `asset.rs`",
+    ),
+    (
+        "core/tests/assist_adapter_switch.rs",
+        "tests the adapter switch with a model record and an adapter, whose digests are \
+         the published files' SHA-256; same reason as `assist/src/record.rs`",
+    ),
+    (
+        "core/tests/assist_adapter_reload.rs",
+        "tests the model reloading an adapter, whose digests are the published files' \
+         SHA-256; same reason as `assist/src/record.rs`",
     ),
     (
         "assist/src/record.rs",
@@ -147,21 +158,6 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
         "assist-eval/src/bin/assist-eval.rs",
         "computes the SHA-256 of the model and adapter files it scores, for the report; \
          same reason as `assist/src/record.rs`. It hashes nothing inside a vault",
-    ),
-    (
-        "core/tests/assist_adapter_switch.rs",
-        "tests the adapter switch with a model record and an adapter, whose digests are \
-         the published files' SHA-256; same reason as `assist/src/record.rs`",
-    ),
-    (
-        "screens/tests/chat_model.rs",
-        "tests the chat's model download, whose digest is the published file's SHA-256; \
-         same reason as `screens/src/chat/asset.rs`",
-    ),
-    (
-        "screens/tests/chat_adapter_reload.rs",
-        "tests the chat reloading an adapter, whose digests are the published files' \
-         SHA-256; same reason as `assist/src/record.rs`",
     ),
     (
         "xtask/src/dev_paths.rs",

@@ -73,10 +73,7 @@ impl World {
 
     /// A note in the trash, ready to be overdue 30 days on.
     fn trashed_note(&self, title: &str) -> String {
-        let id = self.run("note.create", json!({"title": title, "body": "words"}))["id"]
-            .as_str()
-            .expect("an id")
-            .to_owned();
+        let id = common::insert_note_with(&self.scratch.vault, title, "words").expect("a note");
         self.run("entity.trash", json!({"id": id}));
         id
     }
@@ -126,7 +123,7 @@ fn a_clock_years_ahead_purges_nothing_and_a_normal_gap_still_purges() {
     let w = World::new("bound-normal");
     w.trashed_note("one");
     w.scratch.clock.advance_days(29);
-    w.run("note.create", json!({"title": "later", "body": "x"}));
+    common::insert_note_with(&w.scratch.vault, "later", "x").expect("a note");
     w.scratch.clock.advance_days(2);
     assert_eq!(w.pass(), 1, "within the bound, the lapsed row is purged");
     assert_eq!(w.trashed(), 0);
@@ -163,7 +160,7 @@ fn a_clock_behind_the_last_commit_purges_nothing_either() {
     let w = World::new("bound-behind");
     w.trashed_note("one");
     w.scratch.clock.advance_days(60);
-    w.run("note.create", json!({"title": "later", "body": "x"}));
+    common::insert_note_with(&w.scratch.vault, "later", "x").expect("a note");
     // The phone's clock slips back 15 days: the row reads as lapsed (day 45 > 30) but the clock
     // cannot be believed.
     w.scratch
@@ -182,7 +179,7 @@ fn a_clock_behind_the_last_commit_purges_nothing_either() {
 #[test]
 fn the_bound_is_seven_days_to_the_millisecond_in_both_directions() {
     let w = World::new("bound-edge");
-    w.run("note.create", json!({"title": "n", "body": "x"}));
+    common::insert_note_with(&w.scratch.vault, "n", "x").expect("a note");
     let written = w
         .scratch
         .vault
@@ -230,7 +227,7 @@ fn a_phone_idle_eight_days_purges_after_its_first_write() {
     );
     assert_eq!(w.trashed(), 1);
     // The member opens the app and writes once: that write re-bases the bound on today's clock.
-    w.run("note.create", json!({"title": "back", "body": "x"}));
+    common::insert_note_with(&w.scratch.vault, "back", "x").expect("a note");
     assert_eq!(
         w.pass(),
         1,

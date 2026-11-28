@@ -22,12 +22,17 @@ use rusqlite::Connection;
 /// before it.
 pub const APPLICATION_ID: i64 = 0x4345_4e32;
 
+/// `CEIX`: the `application_id` of the attached `<stem>.index.db` (#1214, A15): derived data (the
+/// search indexes, the alerts, the spatial index) in a file of its own, founded from its own ladder
+/// (`contracts/migrations/index/`), never in a snapshot, rebuilt on a restore.
+pub const INDEX_APPLICATION_ID: i64 = 0x4345_4958;
+
 /// `CEN1`: what the model before #1135 wrote. Refused, never opened (R-FP-10).
 pub const EARLIER_APPLICATION_ID: i64 = 0x4345_4e31;
 
 /// The digest of the schema this build founds: see [`schema_digest`]. Updated with every change
 /// to the baseline, and held to the founded file by a test.
-pub const SCHEMA_DIGEST: &str = "3503c6f7788fb7059e49f212402e07a56d2a93a7d9eafa9a5f1bda3d2be0ba81";
+pub const SCHEMA_DIGEST: &str = "580098aecb56bbcc0dd348002aaf67ef5a57f5922154c25691a7eff9394e7997";
 
 /// BLAKE3, in hex, over the file's `sqlite_schema` rows: type, name, table name and statement,
 /// ordered by name.
@@ -135,6 +140,8 @@ mod tests {
         assert_eq!(APPLICATION_ID.to_be_bytes()[4..], *b"CEN2");
         assert_eq!(EARLIER_APPLICATION_ID.to_be_bytes()[4..], *b"CEN1");
         assert_ne!(APPLICATION_ID, crate::backup::state::STATE_APPLICATION_ID);
+        assert_eq!(INDEX_APPLICATION_ID.to_be_bytes()[4..], *b"CEIX");
+        assert_ne!(INDEX_APPLICATION_ID, APPLICATION_ID);
     }
 
     /// THE CONSTANT IS THE FOUNDED FILE'S DIGEST. A change to the baseline moves it; when this

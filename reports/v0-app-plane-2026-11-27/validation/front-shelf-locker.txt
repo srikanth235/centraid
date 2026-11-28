@@ -1,0 +1,10 @@
+   Compiling centraid-screens v1.0.0-alpha.0 (/workspace/centraid/crates/screens)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.56s
+     Running tests/room_front_shelf_locker.rs (target/debug/deps/room_front_shelf_locker-c82c51084ede6a6d)
+
+running 2 tests
+test background_invalidates_pending_owner_result_and_requires_a_new_check ... ok
+test switching_vaults_relocks_both_sides_and_requires_fresh_owner_checks ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+

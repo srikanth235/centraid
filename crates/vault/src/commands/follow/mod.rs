@@ -1,64 +1,64 @@
-//! Following: a store the phone owns (its contacts, a calendar, a folder of
-//! files, the health store) or a statement a member imports, kept in step with
-//! the vault without ever overwriting what the member did.
+//! Following: a store the phone owns (its contacts, a calendar, a folder of files, the health
+//! store, the camera roll) or a statement a member imports, kept in step with the vault without
+//! ever overwriting what the member did.
+//!
+//! **What a system is comes from the file, not from this crate.** Which systems exist, the kind
+//! of home a follow of each fills, whether stopping it retires the origin, whether it names a
+//! device and which kinds of record it yields are rows of `origin_system` and `source_shape`
+//! (A1, A10, A11). No list or match in Rust names a system, or a system and kind pair, to decide
+//! them: the engine reads the rows, and the database refuses what they forbid. What a map adds is
+//! only what a lookup cannot say: which fields of the kind a system states and how a record of it
+//! reads.
 //!
 //! **The merge is the vault's, in this one module**
-//! ([#1135](https://github.com/srikanth235/centraid/issues/1135)). The
-//! follower on the phone reads a store and sends records (an external id, an
-//! origin, the fields the system owns) through one command per system,
-//! `follow.<system>`. For each field the system owns:
+//! ([#1135](https://github.com/srikanth235/centraid/issues/1135)). The follower on the phone reads
+//! a store and sends records (an external id, an origin, the fields the system owns) through one
+//! command per map, `follow.<…>`. For each field the system owns:
 //!
-//! - if the vault's value equals what the source last **stated**, the member
-//!   never changed it and the new value is written;
-//! - if it differs, the member's value stands;
+//! - if the vault's value equals what the source last **stated**, the member never changed it and
+//!   the new value is written;
+//! - if it differs, the member's value stands (nothing refuses the edit; the detail screen says
+//!   "Phone says X" from [`differences`]);
 //!
-//! and then `source.stated` becomes the new statement. A field made of items (a
-//! contact's points, an event's guests, a series' days) follows the same rule **per
-//! item**: an item the member has not changed takes the source's word, including its
-//! removal; one they changed, added or removed stands
-//! ([#1183](https://github.com/srikanth235/centraid/issues/1183)). A field is "edited" only
-//! while the vault's value differs from the statement, so it follows again by itself once
-//! they are equal. [`differences`] reads, per call, where a field differs from what the
-//! source said, and `follow.take_stated` copies the stated value back. A record that is new is
-//! **matched** first, by the system's match key (a name; a title and a start; a
-//! file name; a workout kind and its start) against rows nothing follows yet,
-//! and only then added. What a record gone from a *complete* read does is the
-//! system's ([`Gone`]): contacts, events and files trash the row if the member
-//! never edited it and otherwise forget the source and keep the row (R-FP-3);
-//! the health store's workouts always keep the row and forget the source
-//! (R-1129-14); a statement line is never removed. There is no fingerprint and
-//! no detach.
+//! and then `source.stated` becomes the new statement. **A record may be stated by several
+//! sources** (A9: `source` is 1:N on the entity, a merged person keeps every one it had), and each
+//! pass compares against the `stated` of the source it came through, never another's. A field made
+//! of items (a contact's points, an event's guests, a series' days) follows the same rule **per
+//! item**. A field is "edited" only while the vault's value differs from the statement, so it
+//! follows again by itself once they are equal. A record that is new is **matched** first, by the
+//! map's match key (a name; a title and a start; a file name) against rows nothing follows yet,
+//! and only then added. What a record gone from a *complete* read does is the map's ([`Gone`]).
+//!
+//! **Every pass commits as the store** ([`crate::history::Actor::Store`], B4): the revisions it
+//! writes say `store` and name the origin, whatever command carried it. Nothing infers that from a
+//! command's name.
 //!
 //! **Four guards, one each for the whole engine** ([#1146](https://github.com/srikanth235/centraid/issues/1146)):
 //!
-//! - *The owner is nobody's record.* A match never lands on the vault's owner,
-//!   the owner never gains a source, and nothing takes the owner to the trash
-//!   ([`entity::is_self`] is the one question all of them ask).
-//! - *A read that lost most of what the vault follows is doubted.* A complete
-//!   read that no longer holds at least [`DOUBTED_AT_LEAST`] of an origin's
-//!   followed rows, and more than half of them, looks like a sync glitch (a
-//!   calendar not yet downloaded, an unmounted card), not a mass delete: nothing
-//!   is trashed or forgotten for it and the answer says how many rows it doubts
-//!   (`doubted`). Contacts, events and files are all judged here and nowhere else.
-//! - *What the follower trashed for a record's absence comes back with the
-//!   record.* The source remembers when it trashed the row (`gone_at`); the same
-//!   record in a later read restores the row if the member has not touched it.
-//!   What the member trashed stays trashed.
-//! - *Tombstones are found and forgotten.* A record another phone states is
-//!   matched against the first phone's tombstones as well as its rows (a purged
-//!   row is never revived under a new name), and a tombstone whose record is gone
-//!   from a complete read goes with it.
+//! - *The owner is nobody's record.* A match never lands on the vault's owner, the owner never
+//!   gains a source (the database refuses it too) and nothing takes the owner to the trash.
+//! - *A read that lost most of what the vault follows is doubted.* A complete read that no longer
+//!   holds at least [`DOUBTED_AT_LEAST`] of an origin's followed rows, and more than half of
+//!   them, looks like a sync glitch, not a mass delete: nothing is trashed or forgotten for it and
+//!   the answer says how many rows it doubts (`doubted`).
+//! - *What the follower trashed for a record's absence comes back with the record.* The source
+//!   remembers when it trashed the row (`gone_at`); the same record in a later read restores the
+//!   row if the member has not touched it. What the member trashed stays trashed.
+//! - *A purged row's source is a tombstone and never takes a row again* (the database refuses it
+//!   in `source_tombstone_is_final`; the pass reads the tombstone and adds nothing). A record
+//!   another phone states is matched against the first phone's tombstones as well as its rows, and
+//!   a tombstone whose record is gone from a complete read goes with it.
 //!
-//! **A system's map is data** ([`SystemMap`]): which kind it fills, which
-//! scalar columns it owns, what a new row needs that no record states, whether
-//! a record's absence may take its row away. The engine knows no system by
-//! name. The maps below carry the scalar columns of each system's kind row; the
-//! rows that hang off them (a contact's points, an event's attendees, a
-//! workout's measures) are added by the lane that owns the kind.
+//! **A system's map is data** ([`SystemMap`]) and **registering it is one step**: a row in
+//! [`SYSTEMS`] (`systems.rs`). The pass command, its schema and its preconditions are built from
+//! the rows ([`definitions`]); a lane's tests build the same for a map of their own with
+//! [`definitions_for`].
 
 mod commands;
 mod merge;
+mod sources;
 mod systems;
+mod totals;
 
 use std::collections::BTreeMap;
 
@@ -69,10 +69,15 @@ use crate::commands::CommandCtx;
 use crate::error::Result;
 use crate::model::Kind;
 
-pub(crate) use commands::system_of;
-pub use commands::{Difference, ItemDifference, definitions, differences};
+pub(crate) use commands::system_row;
+pub use commands::{
+    Difference, ItemDifference, definitions, definitions_for, differences, differences_in,
+    pass_schema,
+};
 pub use merge::apply;
-pub use systems::SYSTEMS;
+pub use sources::move_sources;
+pub use systems::{SYSTEMS, Systems, canonical_instants};
+pub use totals::write_day_totals;
 
 /// The origin a batch of records came from, as a map's defaults see it.
 pub struct OriginRow {
@@ -83,7 +88,9 @@ pub struct OriginRow {
     pub device: Option<String>,
 }
 
-/// What a new row needs that no record states, given its origin.
+/// What a new row needs that no record states, given its origin (a column of the kind's own table
+/// the origin decides, such as the account a statement line is in; the home is `entity.parent_id`
+/// and the engine sets it).
 pub type Defaults =
     fn(&Connection, &OriginRow) -> Result<Vec<(&'static str, rusqlite::types::Value)>>;
 
@@ -95,7 +102,7 @@ pub struct Home<'a> {
     /// The origin's label before this pass, when it had one.
     pub was: Option<&'a str>,
     pub label: &'a str,
-    /// The colour the phone paints the store with, as the wheel names it.
+    /// The colour the phone paints the store with, when it is a key of the palette.
     pub color: Option<&'a str>,
 }
 
@@ -179,32 +186,26 @@ impl Match {
     }
 }
 
-/// What an origin of a system is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OriginOf {
-    /// A store on a phone (an account of the address book, a calendar, a folder, the
-    /// health store): named by the ref the phone gives it, and its records are a
-    /// phone's, so they say which phone.
-    Phone,
-    /// An account's statements: **one origin per account**, whatever ref an import
-    /// names, and no phone is named anywhere (a statement is not a phone store).
-    Account,
-}
-
 /// The fewest followed rows a complete read must lose before it is doubted.
 pub const DOUBTED_AT_LEAST: usize = 5;
 
-/// One system, as data.
+/// The maps a set of follow commands is built from: the product's are [`SYSTEMS`] (see
+/// [`Systems`]); a lane's tests name their own. A command's handler is a plain function, so the
+/// maps it reads are a type, not a value.
+pub trait Maps {
+    const MAPS: &'static [SystemMap];
+}
+
+/// One system's map, as data.
 pub struct SystemMap {
-    /// The `origin.system` CHECK's word, and the command's suffix.
+    /// The `origin_system.code` this map is for. Whether the file knows it, and whether it
+    /// yields `kind`, are the lookups' answers, asked when a pass arrives.
     pub system: &'static str,
+    /// The command a pass of this map runs (`follow.<…>`): one per map, so a system that yields
+    /// two kinds has two.
     pub command: &'static str,
-    /// The kind of entity this system fills.
+    /// The kind of entity a record of this map is: the kind whose columns `fields` names.
     pub kind: Kind,
-    /// The kind an origin's `fills` must be, when it has one.
-    pub fills: Option<Kind>,
-    /// Whose origin it is.
-    pub origin: OriginOf,
     /// The field naming bytes the command claims in its own commit (a record
     /// then says their `size`), so no step between staging and naming leaves them
     /// unreferenced.
@@ -213,8 +214,7 @@ pub struct SystemMap {
     /// owned, and is the entity's.
     pub fields: &'static [&'static str],
     /// The fields (`title` among them) that are written when a row is added and
-    /// never after: a statement line is never edited, whatever a later
-    /// statement says.
+    /// never after, whatever a later read says.
     pub fixed: &'static [&'static str],
     /// The fields that are rows of their own, after the columns.
     pub children: &'static [Child],
@@ -230,12 +230,15 @@ pub struct SystemMap {
     pub window: Option<&'static str>,
     pub defaults: Defaults,
     /// How an origin that fills nothing gets the thing it fills, and keeps it (one calendar of
-    /// the vault per phone calendar, with the phone's colour); none when the member names it.
+    /// the vault per phone calendar, with the phone's colour). None: the engine founds a plain
+    /// container of the kind the system fills (`origin_system.fills_kind`) when that kind is a
+    /// container, and otherwise the member names the home.
     pub founds: Option<Founds>,
     /// Read what a record states into the form the vault holds it (a wall clock
     /// and its zone become the instant, a store's word for a workout becomes a
-    /// kind), so the statement and the row compare equal. A record it refuses is
-    /// counted and left out.
+    /// kind), so the statement and the row compare equal; an instant is held in the clock's one
+    /// form, [`canonical_instants`] says each named field so. A record it refuses is counted and
+    /// left out.
     pub shape: Shape,
     /// What a row derives from what the source stated (a rule's support), run
     /// after the fields are written.

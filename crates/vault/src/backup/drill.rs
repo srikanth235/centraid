@@ -19,6 +19,11 @@ pub fn dump(vault: &Vault) -> Result<BTreeMap<String, Vec<String>>> {
         let census = crate::pagesource::census_of(connection)?;
         let mut out = BTreeMap::new();
         for table in census.keys() {
+            // The index's own queue is derived, not a record: a restore founds the index file again,
+            // rebuilds it and so empties the queue (#1214, A15), which a live vault's is not.
+            if crate::log::guard::is_index(table) {
+                continue;
+            }
             let quoted = table.replace('"', "\"\"");
             let mut statement = connection.prepare(&format!("SELECT * FROM \"{quoted}\""))?;
             let columns = statement.column_count();

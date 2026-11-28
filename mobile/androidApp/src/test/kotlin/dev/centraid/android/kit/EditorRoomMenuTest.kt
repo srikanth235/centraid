@@ -31,7 +31,7 @@ class EditorRoomMenuTest {
                 val open = remember { mutableStateOf(false) }
                 EditorRoom(
                     title = "Note",
-                    status = null,
+                    status = "",
                     onClose = {},
                     onDeparted = {},
                     trailing = RoomAction(

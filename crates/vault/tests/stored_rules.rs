@@ -14,14 +14,14 @@
 //!
 //! The apps' and screens' halves (the event at its anchor, the detail, the
 //! read-only Custom editor) are in `crates/apps/calendar/tests/stored_rules.rs` and `crates/apps/reminders/tests/stored_rules.rs`
-//! and `crates/screens/tests/agenda_repeat.rs`.
+//! and `crates/screens/tests/agenda_repeat.rs`; they are rewritten at checkpoint 2.
 
 mod common;
 
-use centraid_vault::commands::Registry;
+use centraid_vault::CommandStatus;
 use centraid_vault::time::recurrence::{ExpandInput, Semantics, expand};
 use centraid_vault::time::rrule;
-use centraid_vault::{Command, CommandStatus, Principal};
+use common::world::World;
 use serde_json::{Value, json};
 
 /// Rules this build refuses at every write boundary and cannot expand.
@@ -32,70 +32,21 @@ const UNREADABLE: [&str; 4] = [
     "FREQ=DAILY;COUNT=3;UNTIL=20300101",
 ];
 
-struct World {
-    scratch: common::Scratch,
-    registry: Registry,
+/// Put `rule` on a row PAST the commands, the way an older build left it.
+fn store(w: &World, table: &str, id: &str, rule: &str) {
+    w.commit(|tx| {
+        tx.set_producer("test.sql");
+        let changed = tx.connection().execute(
+            &format!("UPDATE {table} SET rule = ?2 WHERE id = ?1"),
+            rusqlite::params![id, rule],
+        )?;
+        assert_eq!(changed, 1);
+        Ok(())
+    });
 }
 
-impl World {
-    fn new() -> Self {
-        Self {
-            scratch: common::Scratch::founded("stored-rules").expect("a vault"),
-            registry: Registry::with_system_commands().expect("a registry"),
-        }
-    }
-
-    fn run(&self, name: &str, input: Value) -> centraid_vault::CommandOutcome {
-        self.scratch
-            .vault
-            .execute(
-                &self.registry,
-                &Principal::owner("phone"),
-                &Command::new(name, input),
-            )
-            .unwrap_or_else(|error| panic!("`{name}`: {error}"))
-    }
-
-    fn ok(&self, name: &str, input: Value) -> Value {
-        let outcome = self.run(name, input);
-        assert_eq!(
-            outcome.status,
-            CommandStatus::Executed,
-            "{name}: {:?}",
-            outcome.reason
-        );
-        outcome.output
-    }
-
-    fn id(&self, name: &str, input: Value) -> String {
-        self.ok(name, input)["id"]
-            .as_str()
-            .expect("an id")
-            .to_owned()
-    }
-
-    fn one<T: rusqlite::types::FromSql>(&self, sql: &str, params: &[&str]) -> T {
-        self.scratch
-            .vault
-            .read(|c| Ok(c.query_row(sql, rusqlite::params_from_iter(params), |r| r.get(0))?))
-            .expect("a row")
-    }
-
-    /// Put `rule` on a row PAST the commands, the way an older build left it.
-    fn store(&self, table: &str, id: &str, rule: &str) {
-        self.scratch
-            .vault
-            .commit(|tx| {
-                tx.set_producer("test.sql");
-                let changed = tx.connection().execute(
-                    &format!("UPDATE {table} SET rule = ?2 WHERE id = ?1"),
-                    rusqlite::params![id, rule],
-                )?;
-                assert_eq!(changed, 1);
-                Ok(())
-            })
-            .expect("a write");
-    }
+fn id(w: &World, name: &str, input: Value) -> String {
+    w.ok(name, input)["id"].as_str().expect("an id").to_owned()
 }
 
 #[test]
@@ -119,12 +70,13 @@ fn the_unreadable_rules_are_unreadable_everywhere() {
 #[test]
 fn a_repeating_task_with_an_unreadable_rule_completes_without_spawning_and_without_error() {
     for rule in UNREADABLE {
-        let w = World::new();
-        let task = w.id(
+        let w = World::new("stored_rules");
+        let task = id(
+            &w,
             "task.add",
             json!({ "title": "Water the plants", "due": "2026-03-02", "rule": "FREQ=DAILY" }),
         );
-        w.store("task", &task, rule);
+        store(&w, "task", &task, rule);
         let done = w.ok("task.complete", json!({ "id": task }));
         assert_eq!(done["status"], "done", "{rule}");
         assert!(done["next_id"].is_null(), "{rule}: no successor is spawned");
@@ -152,12 +104,13 @@ fn a_repeating_task_with_an_unreadable_rule_completes_without_spawning_and_witho
 
 #[test]
 fn a_task_with_an_unreadable_rule_can_be_reopened_edited_and_trashed() {
-    let w = World::new();
-    let task = w.id(
+    let w = World::new("stored_rules");
+    let task = id(
+        &w,
         "task.add",
         json!({ "title": "Pay rent", "due": "2026-03-02", "rule": "FREQ=MONTHLY" }),
     );
-    w.store("task", &task, UNREADABLE[0]);
+    store(&w, "task", &task, UNREADABLE[0]);
     w.ok("task.edit", json!({ "id": task, "title": "Pay the rent" }));
     assert_eq!(
         w.one::<String>("SELECT rule FROM task WHERE id = ?1", &[&task]),
@@ -172,13 +125,14 @@ fn a_task_with_an_unreadable_rule_can_be_reopened_edited_and_trashed() {
 
 #[test]
 fn an_event_with_an_unreadable_rule_keeps_its_anchor_and_edits_and_trashes_cleanly() {
-    let w = World::new();
-    let event = w.id(
+    let w = World::new("stored_rules");
+    let event = id(
+        &w,
         "event.propose",
         json!({ "title": "Standup", "starts": "2026-03-02T09:00", "ends": "2026-03-02T09:15",
                 "timing": "floating", "rule": "FREQ=DAILY" }),
     );
-    w.store("event", &event, UNREADABLE[1]);
+    store(&w, "event", &event, UNREADABLE[1]);
     w.ok(
         "event.edit",
         json!({ "id": event, "description": "daily sync" }),
@@ -221,7 +175,7 @@ fn read(w: &World, records: Vec<Value>) -> Value {
 
 #[test]
 fn the_follow_merge_does_not_choke_on_a_followed_event_whose_rule_is_unreadable() {
-    let w = World::new();
+    let w = World::new("stored_rules");
     read(&w, vec![followed("uid:1", "Sync", json!("FREQ=DAILY"))]);
     let event: String = w.one(
         "SELECT entity_id FROM source WHERE external_id = 'uid:1'",
@@ -229,7 +183,7 @@ fn the_follow_merge_does_not_choke_on_a_followed_event_whose_rule_is_unreadable(
     );
     // The stored rule becomes one this build cannot read; the member edits
     // something else.
-    w.store("event", &event, UNREADABLE[2]);
+    store(&w, "event", &event, UNREADABLE[2]);
     w.ok("event.edit", json!({ "id": event, "description": "mine" }));
 
     // The phone changes the title and still says the rule it always said.
@@ -283,13 +237,13 @@ fn the_follow_merge_does_not_choke_on_a_followed_event_whose_rule_is_unreadable(
 #[test]
 fn a_followed_series_with_an_unreadable_rule_survives_a_moved_start() {
     // `rekey_stranded` leaves a series whose rule the expander cannot read as it is.
-    let w = World::new();
+    let w = World::new("stored_rules");
     read(&w, vec![followed("uid:2", "Weekly", json!("FREQ=WEEKLY"))]);
     let event: String = w.one(
         "SELECT entity_id FROM source WHERE external_id = 'uid:2'",
         &[],
     );
-    w.store("event", &event, UNREADABLE[3]);
+    store(&w, "event", &event, UNREADABLE[3]);
     let mut moved = followed("uid:2", "Weekly", json!("FREQ=WEEKLY"));
     moved["fields"]["starts"] = json!("2026-03-02T10:00");
     moved["fields"]["ends"] = json!("2026-03-02T11:00");
@@ -304,7 +258,7 @@ fn a_followed_series_with_an_unreadable_rule_survives_a_moved_start() {
 
 #[test]
 fn the_write_boundaries_still_refuse_a_rule_the_member_states() {
-    let w = World::new();
+    let w = World::new("stored_rules");
     for rule in UNREADABLE {
         let refused = w.run(
             "task.add",
@@ -318,7 +272,8 @@ fn the_write_boundaries_still_refuse_a_rule_the_member_states() {
         );
         assert_eq!(refused.status, CommandStatus::Failed, "{rule}");
     }
-    let task = w.id(
+    let task = id(
+        &w,
         "task.add",
         json!({ "title": "Fine", "due": "2026-03-02", "rule": "FREQ=DAILY" }),
     );

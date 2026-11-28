@@ -1,37 +1,149 @@
-#!/usr/bin/env bash
-# Format and lint check over the STAGED files, with the repo's own configs.
-# CI checks the whole tree (`cargo xtask gate`'s `ts-static` step); this
-# catches the same thing before the commit exists. Fix with `bun run format`
-# and `bun run lint:fix`. Skip with `git commit --no-verify`.
-set -euo pipefail
+#!/bin/sh
+# Fast POSIX pre-commit hygiene gate (#1214).
+# Runs over staged files by default, or over every tracked file with `--all` (CI).
+# Skip locally with `git commit --no-verify`.
+set -eu
 
-root="$(git rev-parse --show-toplevel)"
-cd "$root"
-bin="$root/node_modules/.bin"
-if [[ ! -x "$bin/oxfmt" || ! -x "$bin/oxlint" ]]; then
-  echo "pre-commit: oxfmt/oxlint not installed — run \`bun install\` to enable this hook" >&2
+ALL=0
+if [ "${1:-}" = "--all" ]; then
+  ALL=1
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+TMP_LIST="$TMP_DIR/files"
+TMP_CONTENT="$TMP_DIR/content"
+TMP_MODELS="$TMP_DIR/models"
+: > "$TMP_CONTENT"
+: > "$TMP_MODELS"
+
+if [ "$ALL" -eq 1 ]; then
+  git ls-files > "$TMP_LIST"
+else
+  git diff --cached --name-only --diff-filter=ACMR > "$TMP_LIST"
+fi
+
+if [ ! -s "$TMP_LIST" ]; then
   exit 0
 fi
 
-fmt=()
-lint=()
+STATUS=0
+DESIGN_TOUCHED=0
+SECURITY_TOUCHED=0
+
+fail() {
+  printf 'pre-commit: %s\n' "$1" >&2
+  STATUS=1
+}
+
+is_allowed_image() {
+  case "$1" in
+    design/icon/*) return 0 ;;
+    scripts/*-site/*) return 0 ;;
+    assets/*) return 0 ;;
+    mobile/iosApp/Resources/AppIcon.icon/*) return 0 ;;
+    mobile/iosApp/Resources/Assets.xcassets/*) return 0 ;;
+    mobile/androidApp/src/main/res/mipmap-*/*) return 0 ;;
+    mobile/androidApp/src/main/res/drawable*/*) return 0 ;;
+    crates/core/src/example/photos/*) return 0 ;;
+    .claude/skills/stack/*/general/*) return 0 ;;
+    */goldens/* | */snapshots/* | */__Snapshots__/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  [ -f "$file" ] || continue
+
   case "$file" in
-    *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs | *.mts | *.cts)
-      fmt+=("$file")
-      lint+=("$file")
-      ;;
-    *.json | *.jsonc | *.yml | *.yaml | *.css | *.md | *.html | *.astro)
-      fmt+=("$file")
+    design/*) DESIGN_TOUCHED=1 ;;
+    .claude/skills/stack/security/*) SECURITY_TOUCHED=1 ;;
+  esac
+
+  base="${file##*/}"
+
+  case "$base" in
+    .env.example | *.example) ;;
+    .env | .env.* | *.pem | *.p12 | *.key)
+      fail "secret file refused: $file"
       ;;
   esac
-done < <(git diff --cached --name-only --diff-filter=ACMR)
 
-status=0
-if ((${#fmt[@]})); then
-  "$bin/oxfmt" -c oxfmt.config.ts --disable-nested-config --no-error-on-unmatched-pattern --check "${fmt[@]}" || status=1
+  case "$file" in
+    target/* | */target/* | node_modules/* | */node_modules/* | dist/* | */dist/* | .gradle/* | */.gradle/* | *.xcresult/*)
+      fail "build artifact refused: $file"
+      ;;
+  esac
+  case "$base" in
+    .DS_Store | *.orig | *.rej | *.swp | *.swo)
+      fail "editor or OS junk refused: $file"
+      ;;
+  esac
+
+  case "$base" in
+    *.png | *.PNG | *.jpg | *.JPG | *.jpeg | *.JPEG | *.webp | *.WEBP | *.gif | *.GIF | *.bmp | *.BMP | *.ico | *.ICO | *.heic | *.HEIC | *.tiff | *.TIFF | *.svg | *.SVG)
+      if ! is_allowed_image "$file"; then
+        fail "image outside allowlist: $file"
+      fi
+      continue
+      ;;
+  esac
+
+  if [ "$file" != ".githooks/pre-commit" ]; then
+    printf '%s\n' "$file" >> "$TMP_CONTENT"
+    case "$file" in
+      .claude/skills/stack/*/general/*) ;;
+      *) printf '%s\n' "$file" >> "$TMP_MODELS" ;;
+    esac
+  fi
+done < "$TMP_LIST"
+
+# Size check (> 1 MB) in bulk via awk over wc -c (POSIX, works on Linux and macOS).
+if [ -s "$TMP_LIST" ]; then
+  while IFS= read -r big; do
+    [ -n "$big" ] && fail "file exceeds 1 MB: $big"
+  done <<EOF
+$(tr '\n' '\0' < "$TMP_LIST" | xargs -0 -r sh -c 'for f in "$@"; do [ -f "$f" ] || continue; s=$(wc -c < "$f"); [ "$s" -gt 1048576 ] && printf "%s (%s bytes)\n" "$f" "$s"; done' _)
+EOF
 fi
-if ((${#lint[@]})); then
-  "$bin/oxlint" -c oxlint.config.ts --disable-nested-config --deny-warnings "${lint[@]}" || status=1
+
+SECRET_RE='BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}'
+MODEL_RE='\b(claude-(3|4|opus|sonnet|haiku)|gpt-[345]|chatgpt|gemini-[12]|o[13]-(preview|mini))\b'
+
+if [ -s "$TMP_CONTENT" ]; then
+  while IFS= read -r hit; do
+    [ -n "$hit" ] && fail "possible secret in content: $hit"
+  done <<EOF
+$(tr '\n' '\0' < "$TMP_CONTENT" | xargs -0 -r grep -El "$SECRET_RE" 2>/dev/null || true)
+EOF
 fi
-exit "$status"
+
+if [ -s "$TMP_MODELS" ]; then
+  while IFS= read -r hit; do
+    [ -n "$hit" ] && fail "model name refused: $hit"
+  done <<EOF
+$(tr '\n' '\0' < "$TMP_MODELS" | xargs -0 -r grep -Eil "$MODEL_RE" 2>/dev/null || true)
+EOF
+fi
+
+if [ "$DESIGN_TOUCHED" -eq 1 ] && [ "$ALL" -eq 0 ]; then
+  if command -v cargo >/dev/null 2>&1; then
+    if ! cargo xtask design --check >/dev/null 2>&1; then
+      fail "stale design artifacts — run \`cargo xtask design\`"
+    fi
+  fi
+fi
+
+if [ "$SECURITY_TOUCHED" -eq 1 ] || [ "$ALL" -eq 1 ]; then
+  if [ -f ".claude/skills/stack/security/sync.py" ] && command -v python3 >/dev/null 2>&1; then
+    if ! python3 .claude/skills/stack/security/sync.py --check >/dev/null 2>&1; then
+      fail "stale security skill copy — run \`python3 .claude/skills/stack/security/sync.py\`"
+    fi
+  fi
+fi
+
+exit "$STATUS"

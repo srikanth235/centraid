@@ -93,6 +93,23 @@ pub fn canonical(value: &str) -> String {
     }
 }
 
+/// A floating wall clock in the one form a column holds, `YYYY-MM-DDTHH:MM` (A2): the seconds a
+/// phone may spell (`T09:00:00`, `T09:00:00.000`) are dropped when they are zero, and a clock with
+/// a second to it is `None` (a floating time is to the minute). `None` for anything that is not a
+/// floating wall clock.
+#[must_use]
+pub fn floating_minute(value: &str) -> Option<String> {
+    if classify(value) != Some(Kind::FloatingDateTime) {
+        return None;
+    }
+    let (minute, rest) = value.split_at(16);
+    let seconds = rest.trim_start_matches(':');
+    seconds
+        .chars()
+        .all(|c| c == '0' || c == '.')
+        .then(|| minute.to_owned())
+}
+
 /// Which of the four readings `value` carries, or `None` when it carries none.
 ///
 /// **The one place a temporal string is judged**; every entry point calls it

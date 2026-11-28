@@ -7,6 +7,10 @@
 #![allow(dead_code)]
 
 pub mod edge_shapes;
+pub mod follow;
+pub mod index;
+pub mod locker;
+pub mod world;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -127,6 +131,11 @@ impl Drop for Scratch {
 /// Insert a note, returning its id: an entity and its kind row, written as a
 /// command would, through the commit guard.
 pub fn insert_note(vault: &Vault, title: &str) -> Result<String> {
+    insert_note_with(vault, title, &format!("the body of {title}"))
+}
+
+/// [`insert_note`] with the note's own words.
+pub fn insert_note_with(vault: &Vault, title: &str, body: &str) -> Result<String> {
     let id = vault.ids().next();
     let now = vault.clock().now_text();
     vault.commit(|tx| {
@@ -134,7 +143,7 @@ pub fn insert_note(vault: &Vault, title: &str) -> Result<String> {
         tx.insert_entity(&id, centraid_vault::model::Kind::Note, title, &now)?;
         tx.connection().execute(
             "INSERT INTO note (id, body) VALUES (?1, ?2)",
-            rusqlite::params![id, format!("the body of {title}")],
+            rusqlite::params![id, body],
         )?;
         Ok(())
     })?;

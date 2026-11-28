@@ -1,0 +1,23 @@
+room app_place key="reminders"
+  header title="Reminders"
+    key add sym="Plus" "New reminder" #key/add
+  band home=#band/home search=#band/search more=#band/more
+    tab "Reminders" sym="Check" selected #tab/reminders
+    menu #band/more/menu
+      section
+        item "Follow Reminders" #more/follow-reminders
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    choice chips "Reminders" #choice/smart
+      option "Today" id="today" selected
+      option "Scheduled" id="scheduled"
+      option "All" id="all"
+      option "Starred" id="starred"
+      option "Completed" id="completed"
+    empty glyph="Check" body="Add the first thing you must not forget. Tap + to write one."
+    section #section/my-lists "My Lists"
+      trailing "New list" sym="Plus" #lists/add
+      row #list/inbox "Inbox" meta="0 open" mark=glyph:Tray
+  search placeholder="Search Reminders" #search
+  selection

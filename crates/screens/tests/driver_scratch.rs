@@ -17,7 +17,7 @@ fn ours() -> Vec<String> {
 #[test]
 fn a_driver_removes_the_scratch_vault_it_made_when_it_drops() {
     let before = ours();
-    let mut driver = Driver::with_runtime(centraid_screens::imports::runtime());
+    let mut driver = Driver::with_runtime(centraid_screens::shell::runtime());
     driver.start();
     assert_eq!(ours().len(), before.len() + 1, "the driver made one vault");
     drop(driver);

@@ -103,77 +103,11 @@ pub fn estimate_tokens(text: &str) -> u32 {
     u32::try_from(eighths.div_ceil(8) + 2).unwrap_or(u32::MAX)
 }
 
-/// What the assistant did on an earlier turn, as far as the next prompt needs.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Recorded {
-    /// It read: the call it made, the read's headline, the sentence it said.
-    Tool {
-        call_json: String,
-        headline: String,
-        answer: String,
-    },
-    /// It answered directly.
-    Answer(String),
-    /// It said no tool fits.
-    NoTool,
-    /// It answered over an attachment, or said a few free words. The free-reply and
-    /// attachment prompts show it, under the turn's marker line.
-    Attachment(String),
-}
-
-/// One earlier turn.
+/// One earlier turn: the member's line as the prompt holds it, and what the assistant said.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Turn {
     pub user: String,
-    pub record: Recorded,
-}
-
-impl Turn {
-    /// The turn as the vault keeps it beside the answer it belongs to, so a
-    /// reopened chat's follow-up is routed the way it would have been had the
-    /// app never closed: the read the assistant made and the headline it was
-    /// handed are what the next prompt shows, and neither is in the words a
-    /// member read.
-    #[must_use]
-    pub fn to_json(&self) -> String {
-        let record = match &self.record {
-            Recorded::Tool {
-                call_json,
-                headline,
-                answer,
-            } => serde_json::json!({
-                "kind": "tool", "call_json": call_json, "headline": headline, "answer": answer
-            }),
-            Recorded::Answer(text) => serde_json::json!({ "kind": "answer", "text": text }),
-            Recorded::NoTool => serde_json::json!({ "kind": "no_tool" }),
-            Recorded::Attachment(text) => {
-                serde_json::json!({ "kind": "attachment", "text": text })
-            }
-        };
-        serde_json::json!({ "user": self.user, "record": record }).to_string()
-    }
-
-    /// A turn read back from [`Self::to_json`]. `None` for text that is not
-    /// one: a record this build cannot read is no history, never a guess.
-    #[must_use]
-    pub fn from_json(text: &str) -> Option<Self> {
-        let value: serde_json::Value = serde_json::from_str(text).ok()?;
-        let user = value.get("user")?.as_str()?.to_owned();
-        let record = value.get("record")?;
-        let field = |key: &str| record.get(key).and_then(serde_json::Value::as_str);
-        let record = match field("kind")? {
-            "tool" => Recorded::Tool {
-                call_json: field("call_json")?.to_owned(),
-                headline: field("headline")?.to_owned(),
-                answer: field("answer")?.to_owned(),
-            },
-            "answer" => Recorded::Answer(field("text")?.to_owned()),
-            "no_tool" => Recorded::NoTool,
-            "attachment" => Recorded::Attachment(field("text")?.to_owned()),
-            _ => return None,
-        };
-        Some(Self { user, record })
-    }
+    pub said: String,
 }
 
 pub(crate) fn message(role: &str, content: &str) -> String {
@@ -223,17 +157,12 @@ const CHAT_SYSTEM: &str = "You are Centraid, a private assistant that runs entir
 pub fn chat_prompt(history: &[Turn], user: &str) -> String {
     let shown: Vec<&Turn> = history
         .iter()
-        .filter(|turn| turn.record != Recorded::NoTool)
+        .filter(|turn| !turn.said.is_empty())
         .collect();
     let mut out = message("system", CHAT_SYSTEM);
     for turn in &shown[shown.len().saturating_sub(HISTORY_TURNS)..] {
         out.push_str(&data_message("user", &turn.user));
-        let said = match &turn.record {
-            Recorded::Tool { answer, .. } => answer.as_str(),
-            Recorded::Answer(text) | Recorded::Attachment(text) => text.as_str(),
-            Recorded::NoTool => continue,
-        };
-        out.push_str(&data_message("assistant", said));
+        out.push_str(&data_message("assistant", &turn.said));
     }
     out.push_str(&data_message("user", &question(user)));
     out.push_str(ASSISTANT_TURN);
@@ -247,11 +176,7 @@ mod tests {
     fn recorded(n: usize) -> Turn {
         Turn {
             user: format!("question {n}"),
-            record: Recorded::Tool {
-                call_json: r#"{"tool":"agenda.task_list","args":{"view":"today"}}"#.to_owned(),
-                headline: format!("{n} tasks due today"),
-                answer: format!("answer {n}"),
-            },
+            said: format!("answer {n}"),
         }
     }
 
@@ -285,77 +210,17 @@ mod tests {
         let mut history: Vec<Turn> = (1..=4).map(recorded).collect();
         history.push(Turn {
             user: "refused".to_owned(),
-            record: Recorded::NoTool,
+            said: String::new(),
         });
         history.push(Turn {
             user: "a photo".to_owned(),
-            record: Recorded::Attachment("A river.".to_owned()),
+            said: "A river.".to_owned(),
         });
         let prompt = chat_prompt(&history, "and tomorrow?");
         assert!(!prompt.contains("question 3") && !prompt.contains("refused"));
         assert!(prompt.contains("question 4"));
         assert!(prompt.contains("<|im_start|>assistant\nanswer 4<|im_end|>"));
         assert!(prompt.contains("<|im_start|>assistant\nA river.<|im_end|>"));
-    }
-
-    #[test]
-    fn a_stored_turn_reads_back_whatever_record_it_holds() {
-        let turns = [
-            recorded(1),
-            Turn {
-                user: "hi".to_owned(),
-                record: Recorded::Answer("Hello.".to_owned()),
-            },
-            Turn {
-                user: "weather?".to_owned(),
-                record: Recorded::NoTool,
-            },
-            Turn {
-                user: "[Photo: river] what is this?".to_owned(),
-                record: Recorded::Attachment("A river bend.".to_owned()),
-            },
-        ];
-        for turn in turns {
-            assert_eq!(Turn::from_json(&turn.to_json()), Some(turn));
-        }
-    }
-
-    #[test]
-    fn a_thread_stored_before_the_native_plane_still_reads() {
-        // The shapes the routed plane stored (#1078): `tool`, `answer` and `no_tool`. A thread
-        // holding them must reopen, so they stay readable although nothing writes them now.
-        let tool = r#"{"user":"What is due today?","record":{"kind":"tool","call_json":"{\"tool\":\"agenda.task_list\",\"args\":{\"view\":\"today\"}}","headline":"2 tasks due today","answer":"Two things are due."}}"#;
-        assert_eq!(
-            Turn::from_json(tool),
-            Some(Turn {
-                user: "What is due today?".to_owned(),
-                record: Recorded::Tool {
-                    call_json: r#"{"tool":"agenda.task_list","args":{"view":"today"}}"#.to_owned(),
-                    headline: "2 tasks due today".to_owned(),
-                    answer: "Two things are due.".to_owned(),
-                },
-            })
-        );
-        assert_eq!(
-            Turn::from_json(r#"{"user":"weather?","record":{"kind":"no_tool"}}"#),
-            Some(Turn {
-                user: "weather?".to_owned(),
-                record: Recorded::NoTool,
-            })
-        );
-    }
-
-    #[test]
-    fn a_record_this_build_cannot_read_is_no_history() {
-        for text in [
-            "",
-            "not json",
-            r#"{"user":"q"}"#,
-            r#"{"user":"q","record":{"kind":"mystery"}}"#,
-            r#"{"user":"q","record":{"kind":"tool","call_json":"{}"}}"#,
-        ] {
-            assert_eq!(Turn::from_json(text), None, "{text}");
-        }
     }
 
     // ---- the token estimate ----

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Glance</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Glance</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">A widget card: a title and finished lines.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">CALENDAR</div>
+  <div>
+    <!-- variant:calendar -->
+    <div style="grid-column: span 2; grid-row: span 2; border-radius: 22px; background: var(--surface-card); padding: 12px; box-sizing: border-box; display: flex; flex-direction: column;">
+      <div data-slot="t0" style="font-size: 11px; font-weight: 700; color: var(--app-calendar); letter-spacing: 0.4px;">WEDNESDAY</div>
+      <div data-slot="t1" style="font-size: 30px; font-weight: 600; line-height: 1;">4</div>
+      <div style="margin-top: 8px; border-left: 3px solid var(--app-calendar); padding-left: 6px;"><div data-slot="t2" style="font-size: 12px; font-weight: 600;">Lunch with Ana</div><div data-slot="t3" style="font-size: 11px; color: var(--text-meta);">11:15 – 12:30</div></div>
+      <div style="margin-top: 6px; border-left: 3px solid var(--list-violet); padding-left: 6px;"><div data-slot="t4" style="font-size: 12px; font-weight: 600;">Lease call</div><div data-slot="t5" style="font-size: 11px; color: var(--text-meta);">11:45</div></div>
+      <div data-slot="t6" style="margin-top: auto; font-size: 11px; color: var(--text-meta);">Calendar · 2 more</div>
+    </div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">REMINDERS</div>
+  <div>
+    <!-- variant:reminders -->
+    <div style="grid-column: span 2; grid-row: span 2; border-radius: 22px; background: var(--surface-card); padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;"><span data-slot="t0" style="font-size: 13px; font-weight: 700; color: var(--app-reminders);">Reminders</span><span data-slot="t1" style="font-size: 18px; font-weight: 700; color: var(--app-reminders);">5</span></div>
+      <div style="display: flex; gap: 6px; align-items: center; font-size: 12px;"><span style="width: 12px; height: 12px; border-radius: 6px; border: 1.4px solid var(--stroke-strong);"></span>Pay electricity bill</div>
+      <div style="display: flex; gap: 6px; align-items: center; font-size: 12px;"><span style="width: 12px; height: 12px; border-radius: 6px; border: 1.4px solid var(--stroke-strong);"></span>Call the bank</div>
+      <div style="display: flex; gap: 6px; align-items: center; font-size: 12px;"><span style="width: 12px; height: 12px; border-radius: 6px; border: 1.4px solid var(--stroke-strong);"></span>Send lease to Ana</div>
+      <div data-slot="t2" style="margin-top: auto; font-size: 11px; color: var(--text-meta);">Today</div>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

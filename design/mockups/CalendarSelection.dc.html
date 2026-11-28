@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calendar list selection</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}button{font:inherit;color:inherit}</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:var(--surface-plain-page);font-family:Geist,system-ui,sans-serif;color:var(--text-ink);">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:56px 20px 12px;">
+    <button style="height:44px;padding:0 16px 0 10px;border-radius:22px;border:1px solid var(--surface-border);background:var(--glass-card);display:flex;align-items:center;gap:4px;font-size:17px;font-weight:600;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>November</button>
+    <button style="height:44px;padding:0 16px;border-radius:22px;border:1px solid var(--surface-border);background:var(--glass-card);font-size:15px;font-weight:600;">Done</button>
+  </div>
+  <div style="margin:4px 20px 14px;font-size:13px;color:var(--text-meta);">2 selected</div>
+  <div style="padding:0 16px 8px;font-size:13px;font-weight:600;color:var(--text-meta);">TUESDAY, NOV 4</div>
+  <div style="margin:0 16px;background:var(--surface-card);border-radius:16px;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:12px;min-height:68px;padding:8px 14px;border-bottom:1px solid var(--surface-line);">
+      <span style="width:24px;height:24px;border-radius:12px;border:2px solid var(--app-calendar-fill);background:var(--app-calendar-fill);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"></path></svg></span>
+      <span style="width:4px;height:42px;border-radius:3px;background:var(--list-blue);"></span><div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:600;">Team standup</div><div style="font-size:13px;color:var(--text-meta);margin-top:3px;">09:30 · Call</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;min-height:68px;padding:8px 14px;border-bottom:1px solid var(--surface-line);">
+      <span style="width:24px;height:24px;border-radius:12px;border:1.5px solid var(--surface-border);background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex:none;"></span>
+      <span style="width:4px;height:42px;border-radius:3px;background:var(--list-violet);"></span><div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:600;">Lunch with Ana</div><div style="font-size:13px;color:var(--text-meta);margin-top:3px;">11:15 · Café Lume</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;min-height:68px;padding:8px 14px;">
+      <span style="width:24px;height:24px;border-radius:12px;border:2px solid var(--app-calendar-fill);background:var(--app-calendar-fill);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"></path></svg></span>
+      <span style="width:4px;height:42px;border-radius:3px;background:var(--list-petrol);"></span><div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:600;">Pick up dry cleaning</div><div style="font-size:13px;color:var(--text-meta);margin-top:3px;">15:00 · Errands</div></div>
+    </div>
+  </div>
+  <div style="position:absolute;left:16px;right:16px;bottom:24px;padding:12px;background:var(--glass-bar);border:1px solid var(--glass-bar);border-radius:28px;box-shadow:0 6px 20px var(--shadow-card);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <span style="font-size:14px;font-weight:600;white-space:nowrap;">2 selected</span>
+    <button style="height:44px;padding:0 16px;border-radius:22px;background:var(--surface-card);border:1px solid var(--surface-border);font-size:14px;font-weight:600;">Move to trash</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>class Component extends DCLogic { renderVals(){return{};} }</script>
+</body>
+</html>

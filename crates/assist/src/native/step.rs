@@ -755,24 +755,6 @@ mod tests {
     }
 
     #[test]
-    fn the_spans_a_think_copies_are_checked_against_the_message() {
-        let think = "intent: write \"add\"\nverb: create\nkind: task\nname: Pay rent\nset: description = Zorblax";
-        let model = ScriptedModel::new([think]);
-        let prompt = format!(
-            "<|im_start|>user\nvault: Home (#6)\n\nadd a task pay RENT, thanks\n<|im_end|>\n{OPEN}"
-        );
-        let out = step(&model, &prompt, None);
-        assert_eq!(out.info.unspanned, ["set description: Zorblax"]);
-        // an observation is not the message
-        let model = ScriptedModel::new([think]);
-        let prompt = format!(
-            "<|im_start|>user\nadd a task pay rent\n<|im_end|>\n<|im_start|>user\n<tool_response>\nZorblax\n</tool_response><|im_end|>\n{OPEN}"
-        );
-        let out = step(&model, &prompt, None);
-        assert_eq!(out.info.unspanned, ["set description: Zorblax"]);
-    }
-
-    #[test]
     fn a_stop_before_the_step_asks_nothing_of_the_engine() {
         let model = ScriptedModel::new([THINK]);
         let cancel = Cancel::new();

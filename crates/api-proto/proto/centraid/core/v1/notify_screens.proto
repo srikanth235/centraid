@@ -76,6 +76,13 @@ message PendingNotification {
   string channel_id = 10;
   // Opaque raw alert configuration digest; display locale/zone and unrelated edits do not change it.
   string source_fingerprint = 11;
+  // WHAT A TAP OPENS AND WHAT A BUTTON ACTS ON (app-plane §9, D4): `centraid://open/<kind>/<id>`
+  // and the alert's own target, which a shell writes into its outbox (D7) and sends back unread.
+  // Empty for a notice that names no item (the backup's, the paused one).
+  string open_url = 12;
+  string entity_id = 13;
+  string date_id = 14;
+  string field_id = 15;
 }
 
 // Effect 120: make the operating system hold exactly `all`.
@@ -125,10 +132,6 @@ enum NotificationPermission {
   NOTIFICATION_PERMISSION_DENIED = 3;
 }
 
-// A button under an alert line that says "in Settings" (#1188, NA1): the shell sends this when it
-// is pressed. The same message is the event of a reminder's page and of an event's editor.
-message AlertSettingsPressed {}
-
 // Open this app's notification page in the phone's Settings (Android: the app's notification
 // settings, where the channels are; iOS: the app's page). Answered with `EffectDone`.
 message OpenNotificationSettings {}
@@ -165,4 +168,69 @@ message NotificationAnswered {
   // press that is sent twice is applied once. Empty (a shell that predates the
   // field) is a press with nothing to deduplicate by.
   string press_id = 3;
+}
+
+// THE NOTIFICATION SERVICE'S DOORS (app-plane §9). The core's scheduler holds the desired set and
+// pushes it whole as `Event.notify`; a shell applies it, then tells the core what the OS did.
+message NotifyLaunched {
+  // The most notifications the platform keeps pending for this app (iOS 64).
+  uint32 pending_cap = 1;
+  // The member's zone and locale, as the phone says them.
+  string zone = 2;
+  string locale = 3;
+}
+
+// One press of a notification's button, as a shell's outbox (D7) keeps it. A shell writes it
+// before it dismisses the banner and sends the same press again, with the same `id` and `key`,
+// until the answer names it settled; the core runs a press under its `key`, so a repeat is a
+// no-op.
+message NotifyPress {
+  string id = 1;
+  NotificationVerb verb = 2;
+  string entity_id = 3;
+  string date_id = 4;
+  string field_id = 5;
+  // When the member pressed it, on the phone's clock: a snooze is an hour from here.
+  int64 at_ms = 6;
+  string key = 7;
+}
+
+message NotifyPresses {
+  repeated NotifyPress items = 1;
+}
+
+// The member said "Allow notifications" on a screen that explained why: the next set asks the OS.
+message NotifyAskPermission {}
+
+message NotifyRequest {
+  oneof kind {
+    NotifyLaunched launched = 1;
+    NotificationsScheduled scheduled = 2;
+    NotifyPresses presses = 3;
+    NotifyAskPermission ask_permission = 4;
+  }
+}
+
+enum NotifyPressOutcome {
+  NOTIFY_PRESS_OUTCOME_UNSPECIFIED = 0;
+  NOTIFY_PRESS_OUTCOME_APPLIED = 1;
+  // Run before, under this key: nothing was done again.
+  NOTIFY_PRESS_OUTCOME_ALREADY = 2;
+  // The alert's moment had passed or the item is gone: nothing to do, and the outbox may drop it.
+  NOTIFY_PRESS_OUTCOME_EXPIRED = 3;
+  // The core refused it in its own sentence; the outbox keeps it for the next launch.
+  NOTIFY_PRESS_OUTCOME_REFUSED = 4;
+}
+
+message NotifyPressResult {
+  string id = 1;
+  NotifyPressOutcome outcome = 2;
+  string sentence = 3;
+}
+
+message NotifyResponse {
+  // The answer to each press, in order.
+  repeated NotifyPressResult results = 1;
+  // The set as it stands after this call, when it changed (always on `launched`).
+  ScheduleNotifications schedule = 2;
 }

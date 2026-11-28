@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Earlier versions (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div data-theme="dark" style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Earlier versions</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">Footer: a summary that opens the versions page.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">SUMMARY</div>
+  <div>
+    <!-- variant:summary -->
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 14px; min-height: 48px;"><span data-slot="t0" style="flex-grow: 1; font-size: 16px;">Earlier versions</span><span data-slot="t1" style="font-size: 15px; color: var(--text-meta);">2</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--stroke-strong)" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

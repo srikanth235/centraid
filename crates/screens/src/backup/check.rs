@@ -250,7 +250,7 @@ impl Check {
         let stamp = format!("{day}T{:02}:{:02}", wall.hour, wall.minute);
         format!(
             "{}, {}",
-            crate::kit::schedule::rule_words::long_day(locale, &day),
+            crate::kit::civil::long_day(locale, &day),
             crate::kit::civil::clock_for(locale, &stamp, ctx.hour_cycle())
         )
     }

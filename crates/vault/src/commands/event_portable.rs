@@ -3,19 +3,19 @@
 //!
 //! An event is a VEVENT with its UID, DTSTAMP, times (a date for an all-day event, a wall clock
 //! for a floating one, a wall clock in the event's own zone for a zoned one), title, place,
-//! notes, link, status, alerts (VALARM), guests (ATTENDEE with their answer as PARTSTAT, and the
-//! mail address as a `mailto:` when the person has one), the travel allowance
+//! notes, link, status, alerts (VALARM), guests (ATTENDEE with their answer as PARTSTAT, role and
+//! the guest's own address as `mailto:`), the travel allowance
 //! (`X-APPLE-TRAVEL-DURATION`, the property calendar apps read it from) and, for a series, its
 //! RRULE with a day the member cancelled as an EXDATE and a day moved, renamed or changed in any
 //! way as a VEVENT with the same UID and a RECURRENCE-ID (it repeats the guests, which stay the
-//! series'). Not written: a change that reaches "this day and every one after it" (a calendar
-//! file has no spelling for it short of rewriting the rule).
+//! series'). A split series (L4) is two events and so two UIDs, the first ending in an UNTIL.
+//! LOCATION is the free text the member (or the phone) wrote, else the place they picked.
 
 use rusqlite::Connection;
 use serde_json::Value as Json;
 
 use crate::commands::ical::{self, Writer};
-use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note};
+use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note_portable};
 use crate::error::Result;
 use crate::time::recurrence::parse_instant_ms;
 use crate::time::rrule;
@@ -43,9 +43,11 @@ struct Event {
 
 /// One guest of an event: who, how to reach them and what they answered.
 struct Guest {
-    name: String,
+    name: Option<String>,
     address: String,
     answer: &'static str,
+    role: &'static str,
+    organizer: bool,
 }
 
 /// A stored start or end as the property that carries it: `(parameters, value)`.
@@ -81,16 +83,20 @@ fn moment(
     }
 }
 
-/// A series-local wall clock key (an `original_start`) as a property: `(parameters, value)`.
+/// A day's key (`occurrence.original_start`: the instant of a zoned series' day, the wall clock of
+/// a floating one's, the date of an all-day one's) as a property: `(parameters, value)`.
 fn series_key(timing: &str, zone: Option<&str>, key: &str) -> Option<(String, String)> {
     match timing {
         "all-day" => Some((";VALUE=DATE".to_owned(), ical::compact_date(key)?)),
         "floating" => Some((String::new(), ical::compact_wall(parse_wall_iso(key)?))),
         _ => {
-            let wall = ical::compact_wall(parse_wall_iso(key)?);
-            Some(match zone {
-                Some(name) => (format!(";TZID={name}"), wall),
-                None => (String::new(), wall),
+            let millis = parse_instant_ms(key)?;
+            Some(match zone.and_then(|name| FireZone::named(name).ok()) {
+                Some(zone) => (
+                    format!(";TZID={}", zone.name()),
+                    ical::compact_wall(zone.zoned_parts(millis)),
+                ),
+                None => (String::new(), ical::compact_utc_ms(millis)),
             })
         }
     }
@@ -106,62 +112,28 @@ fn quoted_param(value: &str) -> String {
     format!("\"{clean}\"")
 }
 
-/// The event's guests in the order they were added, each with their preferred mail address
-/// (`mailto:`), or a `urn:centraid:person:` name when they have none.
+/// The event's guests that have an address to write: the organizer first, then by address.
 fn guests(connection: &Connection, id: &str) -> Result<Vec<Guest>> {
-    // Both reads are by index and unordered; the few rows an event has are put in order here.
-    let mut statement = connection.prepare_cached(
-        "SELECT p.id, p.title, a.state, a.created_at
-           FROM edge a JOIN entity p ON p.id = a.to_id
-          WHERE a.from_id = ?1 AND a.rel = 'attendee' AND p.deleted_at IS NULL",
-    )?;
-    let mut found = statement
-        .query_map([id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    found.sort_by(|a, b| (&a.3, &a.0).cmp(&(&b.3, &b.0)));
-    let mut emails = connection.prepare_cached(
-        "SELECT value, preferred, position, id FROM contact_point
-          WHERE person_id = ?1 AND kind = 'email'",
-    )?;
-    let mut out = Vec::with_capacity(found.len());
-    for (person, name, state, _) in found {
-        let mut held = emails
-            .query_map([&person], |row| {
-                Ok((
-                    row.get::<_, i64>(1)? == 0, // preferred sorts first
-                    row.get::<_, f64>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, String>(0)?,
-                ))
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        held.sort_by(|a, b| {
-            a.0.cmp(&b.0)
-                .then(a.1.total_cmp(&b.1))
-                .then_with(|| a.2.cmp(&b.2))
-        });
-        out.push(Guest {
-            name,
-            address: match held.first() {
-                Some(email) => format!("mailto:{}", email.3.trim()),
-                None => format!("urn:centraid:person:{person}"),
-            },
-            answer: match state.as_deref() {
-                Some("accepted") => "ACCEPTED",
-                Some("declined") => "DECLINED",
-                Some("tentative") => "TENTATIVE",
+    Ok(crate::commands::event::guests_of(connection, id)?
+        .into_iter()
+        .filter_map(|guest| Some((guest.address.clone()?, guest)))
+        .map(|(address, guest)| Guest {
+            name: guest.name,
+            address: format!("mailto:{address}"),
+            answer: match guest.status.as_str() {
+                "accepted" => "ACCEPTED",
+                "declined" => "DECLINED",
+                "tentative" => "TENTATIVE",
                 _ => "NEEDS-ACTION",
             },
-        });
-    }
-    Ok(out)
+            role: match guest.role.as_str() {
+                "optional" => "OPT-PARTICIPANT",
+                "non-participant" => "NON-PARTICIPANT",
+                _ => "REQ-PARTICIPANT",
+            },
+            organizer: guest.organizer,
+        })
+        .collect())
 }
 
 fn place_text(connection: &Connection, id: &str) -> Option<String> {
@@ -246,10 +218,25 @@ fn write_day(writer: &mut Writer, exdates: &[(String, String)], day: &Day<'_>) {
     } else {
         "TRANSP:TRANSPARENT"
     });
-    for guest in &event.guests {
+    if let Some(organizer) = event.guests.iter().find(|guest| guest.organizer) {
         writer.line(&format!(
-            "ATTENDEE;CN={};ROLE=REQ-PARTICIPANT;PARTSTAT={}:{}",
-            quoted_param(&guest.name),
+            "ORGANIZER{}:{}",
+            organizer
+                .name
+                .as_deref()
+                .map_or_else(String::new, |name| format!(";CN={}", quoted_param(name))),
+            organizer.address
+        ));
+    }
+    for guest in &event.guests {
+        let name = guest
+            .name
+            .as_deref()
+            .unwrap_or_else(|| guest.address.trim_start_matches("mailto:"));
+        writer.line(&format!(
+            "ATTENDEE;CN={};ROLE={};PARTSTAT={}:{}",
+            quoted_param(name),
+            guest.role,
             guest.answer,
             guest.address
         ));
@@ -280,10 +267,10 @@ fn events(
 ) -> Result<Vec<Event>> {
     let mut statement = connection.prepare_cached(
         "SELECT e.id, e.title, e.updated_at, v.starts, v.ends, v.timing, v.zone, v.rule, v.status,
-                v.busy, v.place_id, v.url, v.description, v.travel_min
+                v.busy, v.location, v.place_id, v.url, v.description, v.travel_min
            FROM event v JOIN entity e ON e.id = v.id
           WHERE e.kind = 'event' AND e.deleted_at IS NULL
-            AND (?1 IS NULL OR v.calendar_id = ?1)
+            AND (?1 IS NULL OR e.parent_id = ?1)
             AND (?2 IS NULL OR e.id = ?2)
           ORDER BY v.starts, e.created_at, e.id",
     )?;
@@ -301,20 +288,22 @@ fn events(
                     rule: row.get(7)?,
                     status: row.get(8)?,
                     busy: row.get::<_, i64>(9)? != 0,
-                    place: None,
-                    url: row.get(11)?,
+                    place: row.get(10)?,
+                    url: row.get(12)?,
                     reminders: Vec::new(),
-                    description: row.get(12)?,
-                    travel_min: row.get(13)?,
+                    description: row.get(13)?,
+                    travel_min: row.get(14)?,
                     guests: Vec::new(),
                 },
-                row.get::<_, Option<String>>(10)?,
+                row.get::<_, Option<String>>(11)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut out = Vec::with_capacity(rows.len());
     for (mut event, place) in rows {
-        event.place = place.and_then(|id| place_text(connection, &id));
+        if event.place.is_none() {
+            event.place = place.and_then(|id| place_text(connection, &id));
+        }
         event.guests = guests(connection, &event.id)?;
         event.reminders = crate::alerts::longest_first(crate::commands::event::reminders_held(
             connection, &event.id,
@@ -342,9 +331,9 @@ struct Occurrence {
 
 fn occurrences(connection: &Connection, series: &str) -> Result<Vec<Occurrence>> {
     let mut statement = connection.prepare_cached(
-        "SELECT original_start, cancelled, starts, ends, timing, zone, title, description, url, place_id
-           FROM occurrence WHERE series_id = ?1 AND scope = 'occurrence'
-          ORDER BY original_start",
+        "SELECT original_start, cancelled, starts, ends, timing, zone, title, description, url,
+                location, place_id
+           FROM occurrence WHERE series_id = ?1 ORDER BY original_start",
     )?;
     let rows = statement
         .query_map([series], |row| {
@@ -359,16 +348,18 @@ fn occurrences(connection: &Connection, series: &str) -> Result<Vec<Occurrence>>
                     title: row.get(6)?,
                     description: row.get(7)?,
                     url: row.get(8)?,
-                    place: None,
+                    place: row.get(9)?,
                 },
-                row.get::<_, Option<String>>(9)?,
+                row.get::<_, Option<String>>(10)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows
         .into_iter()
         .map(|(mut day, place)| {
-            day.place = place.and_then(|id| place_text(connection, &id));
+            if day.place.is_none() {
+                day.place = place.and_then(|id| place_text(connection, &id));
+            }
             day
         })
         .collect())
@@ -479,7 +470,7 @@ fn export_ics(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 row.get(0)
             })
             .ok();
-        file_name = title.map_or_else(|| "Calendar".to_owned(), |t| note::portable_stem(&t));
+        file_name = title.map_or_else(|| "Calendar".to_owned(), |t| note_portable::file_stem(&t));
     }
     let (text, count) = calendar_text(ctx.connection(), calendar, one)?;
     Ok(serde_json::json!({

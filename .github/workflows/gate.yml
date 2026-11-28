@@ -5,13 +5,13 @@ name: gate
 # required check that never reports blocks the PR forever (#557).
 #
 #   gate               `cargo xtask gate --profile pr` — every step a PR must
-#                      pass, Rust, protobuf, TypeScript and CI policy alike
+#                      pass, Rust, protobuf, sites and CI policy alike
 #                      (crates/xtask/README.md). Its cargo cache is saved from
 #                      pull requests too, so a PR's second push starts warm
 #                      (.github/actions/setup, `cargo-cache-save-pr`).
 #   engine             the on-device chat's llama.cpp build, too slow for the
 #                      `pr` profile (R-CHAT-10).
-#   ios                Swift 6 app/XCTest, HealthSeeder, and the Rust simulator core.
+#   ios                Swift 6 app/XCTest and the Rust simulator and unsigned device cores.
 #   android            the Compose shell's Kotlin compiled against the Android SDK (no native
 #                      core: `compileDebugKotlin` stops before the libraries are packaged), on
 #                      the runner's own SDK.
@@ -42,21 +42,45 @@ jobs:
         run: bash mobile/scripts/select-xcode.sh
       - uses: ./.github/actions/setup
         with:
-          bun: "false"
           rust: "true"
-          rust-targets: aarch64-apple-ios-sim
+          rust-targets: aarch64-apple-ios aarch64-apple-ios-sim
           cargo-cache: ios-simulator
       - name: Install the native generators
         run: brew install xcodegen protobuf swift-protobuf
-      - name: Build the actual simulator core with llama
+      - name: Build the actual simulator and device cores with llama
+        id: ios_core
         run: |
           set -euo pipefail
           mkdir -p target/ios-verification
           IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
           export IPHONEOS_DEPLOYMENT_TARGET
-          mobile/scripts/ios-core.sh aarch64-apple-ios-sim 2>&1 | tee target/ios-verification/rust-core.log
-      - name: Compile Swift 6 app, run XCTest, and compile HealthSeeder
+          mobile/scripts/ios-core.sh aarch64-apple-ios-sim aarch64-apple-ios 2>&1 | tee target/ios-verification/rust-core.log
+      - name: Compile Swift 6 app and run XCTest
         run: bash mobile/scripts/verify-ios.sh
+      - name: Build unsigned iPhone app for a generic device
+        if: ${{ !cancelled() && steps.ios_core.outcome == 'success' }}
+        working-directory: mobile/iosApp
+        run: |
+          set -euo pipefail
+          IPHONEOS_DEPLOYMENT_TARGET="$(cat ../ios-deployment-target)"
+          export IPHONEOS_DEPLOYMENT_TARGET
+          mkdir -p ../../target/ios-verification
+          xcodebuild -project Centraid.xcodeproj -scheme Centraid \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ../../target/ios-verification/device-derived-data \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build \
+            2>&1 | tee ../../target/ios-verification/centraid-device-build.log
+      - name: Upload iOS screenshots and readable logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ios-review
+          path: |
+            target/ios-verification/*.log
+            target/ios-verification/screenshots/**/*.png
+            target/ios-verification/screenshots/manifest.json
+          retention-days: 7
+          if-no-files-found: warn
       - name: Upload iOS compiler and test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -65,6 +89,7 @@ jobs:
           path: |
             target/ios-verification/*.log
             target/ios-verification/*.xcresult
+            target/ios-verification/screenshots/**
             mobile/iosApp/Sources/Generated
           retention-days: 7
           if-no-files-found: warn
@@ -86,6 +111,7 @@ jobs:
       - run: git show-ref --verify --quiet refs/heads/main || git branch main origin/main
       - uses: ./.github/actions/setup
         with:
+          bun: "true"
           rust: "true"
           cargo-cache: gate
           # A cold compile is what made PR runs take 50 to 70 minutes against
@@ -96,6 +122,8 @@ jobs:
       # The profile's external tools, pinned in the action and nowhere else.
       # Under CI each step FAILS rather than skips when its binary is missing.
       - uses: ./.github/actions/gate-tools
+      - name: Pre-commit hygiene over tracked files
+        run: sh .githooks/pre-commit --all
       - run: cargo xtask gate --profile pr
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
@@ -141,6 +169,21 @@ jobs:
       - name: Run the shared-fixture tests
         working-directory: mobile
         run: ./gradlew -Pcentraid.android=true :androidApp:testDebugUnitTest --tests 'dev.centraid.android.kit.BackupCheckControlsTest' --no-daemon --stacktrace
+      # Every Roborazzi golden and the accessibility suite, compared against the committed images.
+      - name: Verify the Compose goldens and run the unit tests
+        working-directory: mobile
+        run: ./gradlew -Pcentraid.android=true :androidApp:testDebugUnitTest -Droborazzi.test.verify=true --no-daemon --stacktrace
+      - name: Upload the Roborazzi compare output
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: roborazzi-compare
+          path: |
+            mobile/androidApp/build/outputs/roborazzi
+            mobile/androidApp/build/reports/roborazzi
+            mobile/androidApp/build/reports/tests
+          retention-days: 7
+          if-no-files-found: warn
 
   engine:
     runs-on: ubuntu-latest
@@ -149,7 +192,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
-          bun: "false"
           rust: "true"
           # Its own key: an engine-flavoured `target/` restored into `gate`
           # would be a cold release build inside the `pr` job.

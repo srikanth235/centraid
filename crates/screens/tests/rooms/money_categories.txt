@@ -1,0 +1,113 @@
+room pushed_page key="money/categories"
+  header title="Categories"
+    back "Money" #back
+  ready
+    section #section/categories "Categories"
+      row #cat/category:shopping.general "Clothes and household"
+        menu #cat/category:shopping.general/menu
+          section
+            item "Merge" #cat/category:shopping.general/merge
+      row #cat/01900000-0000-7000-8000-000000000202 "Dining"
+        menu #cat/01900000-0000-7000-8000-000000000202/menu
+          section
+            item "Merge" #cat/01900000-0000-7000-8000-000000000202/merge
+      row #cat/category:food.dining "Dining out"
+        menu #cat/category:food.dining/menu
+          section
+            item "Merge" #cat/category:food.dining/merge
+      row #cat/category:fun.entertainment "Entertainment and travel"
+        menu #cat/category:fun.entertainment/menu
+          section
+            item "Merge" #cat/category:fun.entertainment/merge
+      row #cat/category:fees "Fees and taxes"
+        menu #cat/category:fees/menu
+          section
+            item "Merge" #cat/category:fees/merge
+      row #cat/category:food "Food"
+        menu #cat/category:food/menu
+          section
+            item "Merge" #cat/category:food/merge
+      row #cat/01900000-0000-7000-8000-000000000203 "Food & Drink"
+        menu #cat/01900000-0000-7000-8000-000000000203/menu
+          section
+            item "Merge" #cat/01900000-0000-7000-8000-000000000203/merge
+      row #cat/category:transport.fuel "Fuel"
+        menu #cat/category:transport.fuel/menu
+          section
+            item "Merge" #cat/category:transport.fuel/merge
+      row #cat/category:fun "Fun and travel"
+        menu #cat/category:fun/menu
+          section
+            item "Merge" #cat/category:fun/merge
+      row #cat/01900000-0000-7000-8000-000000000201 "Groceries"
+        menu #cat/01900000-0000-7000-8000-000000000201/menu
+          section
+            item "Merge" #cat/01900000-0000-7000-8000-000000000201/merge
+      row #cat/category:food.groceries "Groceries"
+        menu #cat/category:food.groceries/menu
+          section
+            item "Merge" #cat/category:food.groceries/merge
+      row #cat/category:health "Health"
+        menu #cat/category:health/menu
+          section
+            item "Merge" #cat/category:health/merge
+      row #cat/category:health.care "Health care"
+        menu #cat/category:health.care/menu
+          section
+            item "Merge" #cat/category:health.care/merge
+      row #cat/category:housing.home "Home and repairs"
+        menu #cat/category:housing.home/menu
+          section
+            item "Merge" #cat/category:housing.home/merge
+      row #cat/category:housing "Housing"
+        menu #cat/category:housing/menu
+          section
+            item "Merge" #cat/category:housing/merge
+      row #cat/category:income "Income"
+        menu #cat/category:income/menu
+          section
+            item "Merge" #cat/category:income/merge
+      row #cat/category:income.other "Other income"
+        menu #cat/category:income.other/menu
+          section
+            item "Merge" #cat/category:income.other/merge
+      row #cat/category:income.pay "Pay"
+        menu #cat/category:income.pay/menu
+          section
+            item "Merge" #cat/category:income.pay/merge
+      row #cat/category:utilities.phone "Phone and internet"
+        menu #cat/category:utilities.phone/menu
+          section
+            item "Merge" #cat/category:utilities.phone/merge
+      row #cat/category:utilities.bills "Power, gas and water"
+        menu #cat/category:utilities.bills/menu
+          section
+            item "Merge" #cat/category:utilities.bills/merge
+      row #cat/category:housing.rent "Rent or mortgage"
+        menu #cat/category:housing.rent/menu
+          section
+            item "Merge" #cat/category:housing.rent/merge
+      row #cat/category:shopping "Shopping"
+        menu #cat/category:shopping/menu
+          section
+            item "Merge" #cat/category:shopping/merge
+      row #cat/category:fun.subscriptions "Subscriptions"
+        menu #cat/category:fun.subscriptions/menu
+          section
+            item "Merge" #cat/category:fun.subscriptions/merge
+      row #cat/category:transport.transit "Transit and rideshare"
+        menu #cat/category:transport.transit/menu
+          section
+            item "Merge" #cat/category:transport.transit/merge
+      row #cat/category:transport "Transport"
+        menu #cat/category:transport/menu
+          section
+            item "Merge" #cat/category:transport/merge
+      row #cat/category:utilities "Utilities"
+        menu #cat/category:utilities/menu
+          section
+            item "Merge" #cat/category:utilities/merge
+    section #section/add "New category"
+      form
+        text #field/name "Category name"  rev=0 required
+        explicit save="Save"#form/save cancel="Cancel"#form/cancel save_disabled

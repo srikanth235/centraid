@@ -7,12 +7,12 @@ The rules that never bend are in [safety.md](./safety.md). This file follows one
 - [`crates/assist`](../../../crates/assist/README.md) is the plane: the tool runtime (`native/`), the turn loop (`native_turn/`), the attached and free replies, the `Model` trait. It holds no vault and no engine. Every read and write goes through the `Door` trait ([`native/door.rs`](../../../crates/assist/src/native/door.rs)); it never writes SQL.
 - [`crates/assist-llama`](../../../crates/assist-llama/src/lib.rs) is the one engine: llama.cpp behind `Model` and `ModelLoader`. Nothing else links llama.cpp.
 - [`crates/core/src/assist/mod.rs`](../../../crates/core/src/assist/mod.rs) joins the plane to an open vault: sessions in memory, the event queue, the saved turn.
-- [`crates/screens/src/chat`](../../../crates/screens/src/chat/mod.rs) is the screen. It decides what each phase shows and never re-decides what the assistant decided.
+- [`crates/screens/src/room/chat.rs`](../../../crates/screens/src/room/chat.rs) is the chat room. It decides what each phase shows and never re-decides what the assistant decided.
 
 ## The screen
 
 - The phases are `CHECKING`, `NEEDS_MODEL`, `DOWNLOADING`, `LOADING`, `READY`, plus `UNAVAILABLE` for a build that cannot run a model. A thread exists only in `READY`.
-- The shell owns the download. What it fetches (URL at a commit, SHA-256, size) is read from the model record by [`asset.rs`](../../../crates/screens/src/chat/asset.rs). Pin changes are in [model.md](./model.md).
+- The shell owns the download. What it fetches (URL at a commit, SHA-256, size) is planned from the model record by [`crates/core/src/assist/files.rs`](../../../crates/core/src/assist/files.rs) (`AssistRequest.plan`). Pin changes are in [model.md](./model.md).
 - Status, start, cancel, confirm and dismiss are inline calls. Loading the model and sending a turn run off the runtime lock on the core's pool and come back as `OffThreadDone`.
 - A turn ends twice on the wire: a terminal event, then the answer to `send`. The event only draws words. The answer comes after the save and settles the turn once, by the turn id the screen minted.
 - A message over `MESSAGE_MAX` (800 characters) is refused in the screen before it is sent.
@@ -35,7 +35,7 @@ The rules that never bend are in [safety.md](./safety.md). This file follows one
 
 - A write is planned against a patched copy of the world. The turn ends in one `PendingWrite`, put on the wire as `AssistPending`. The card is built from structured row changes in [`native_turn/pending.rs`](../../../crates/assist/src/native_turn/pending.rs), not from the text the model saw.
 - Confirm runs the steps through the door, one key per step, and refuses a stale card. Dismiss, or any new message, drops it.
-- A reveal never parks. It ends the turn in a member action card, and the value is shown on that card, not by the model: the member taps Reveal, the phone asks its owner check, and the core reads the value through Locker's reveal into the screen ([`chat/reveal.rs`](../../../crates/screens/src/chat/reveal.rs), driving the same controller as Locker's item page). It is in memory only: dropped on a relock, when the app leaves the foreground, the tab or page is left or the thread changes, and never saved, so a reopened thread shows Reveal again. If the member copies that value, the clipboard copy survives those view and background transitions to its original expiry: iOS clears at expiry, Android clears at expiry while Centraid is active or on return if it expired while closed. Explicit Locker Lock and vault switch clear the latest copy owned by that vault immediately, even after process restart; native lease metadata stores only a digest, vault id and expiry. Why: [safety.md](./safety.md).
+- A reveal never parks. It ends the turn in a member action card, and the value is shown on that card, not by the model: the member taps Reveal, the phone asks its owner check, and the core reads the value through Locker's reveal into the screen (the chat screen's reveal (target), driving the same controller as Locker's item page). It is in memory only: dropped on a relock, when the app leaves the foreground, the tab or page is left or the thread changes, and never saved, so a reopened thread shows Reveal again. If the member copies that value, the clipboard copy survives those view and background transitions to its original expiry: iOS clears at expiry, Android clears at expiry while Centraid is active or on return if it expired while closed. Explicit Locker Lock and vault switch clear the latest copy owned by that vault immediately, even after process restart; native lease metadata stores only a digest, vault id and expiry. Why: [safety.md](./safety.md).
 
 ## The engine
 

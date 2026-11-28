@@ -1,0 +1,4 @@
+room sheet key="docs/folder/01900000-0000-7000-8000-000000002010/trash-confirm"
+  header title="Move folder to trash?"
+  ready
+    confirm outlined "Move folder to trash?" body="“Tax 2026” and its 2 items move to trash. Restore brings them back." yes="Move to trash"#confirm/yes no="Cancel"#confirm/no

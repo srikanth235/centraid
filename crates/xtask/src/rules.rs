@@ -31,7 +31,7 @@ const SQL_ALLOWED_ROOTS: [&str; 4] = [
     "crates/ontology",
     "crates/vault",
     "crates/search",
-    "crates/apps/kit",
+    "crates/domain",
 ];
 
 /// `crates/xtask` is exempt from the two source-scanning rules because it
@@ -83,7 +83,7 @@ pub struct RuleReport {
     /// cannot tell that from a rule that is silently not running.
     pub note: String,
     /// Lines `cargo xtask rules` prints under a passing rule: known debt a
-    /// register lists (`promises`), which is not a finding.
+    /// rule lists, which is not a finding.
     pub details: Vec<String>,
 }
 
@@ -275,9 +275,11 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
     .chain(crate::ddl_rules::all(root))
     .chain(crate::lists::all(root))
     .chain([
-        crate::promises::promises(root),
         crate::page_state::page_state(root),
         crate::data_pin::data_pin(root),
+        crate::copy_rules::rule_report(root),
+        crate::journey_rules::rule_report(root),
+        crate::skill_rules::rule_report(root),
     ])
     .collect()
 }
@@ -315,7 +317,7 @@ pub fn findings_block(reports: &[RuleReport]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Rule 1 — SQL only under crates/{ontology,vault,search} and crates/apps/kit
+// Rule 1 — SQL only under crates/{ontology,vault,search} and crates/domain
 // ---------------------------------------------------------------------------
 
 pub fn sql_confinement(root: &Path) -> RuleReport {
@@ -908,7 +910,7 @@ fn escaped() -> &'static str { "a \" quote" }
         let root = fixture_dir("sql-green");
         write(
             &root,
-            "crates/apps/kit/src/lib.rs",
+            "crates/domain/src/lib.rs",
             "fn q() { let _ = \"SELECT 1\"; }",
         );
         write(

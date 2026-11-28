@@ -152,8 +152,9 @@ pub struct Floors {
     pub swift: usize,
 }
 
+// Ratcheted to 813 after the M2 purge (#1214) deleted per-app proto files.
 const FLOORS: Floors = Floors {
-    items: 1000,
+    items: 813,
     kotlin: 50,
     swift: 50,
 };
@@ -607,6 +608,7 @@ pub(crate) fn check(root: &Path, register: &[Entry], floors: Floors) -> RuleRepo
     for file in &swift_files {
         swift_reads(&without_comments(&read(file)), &mut swift);
     }
+    findings.extend(room_arm_findings(root));
 
     // AN EMPTY CENSUS IS A RULE THAT ALWAYS PASSES.
     if items.len() < floors.items
@@ -720,6 +722,146 @@ pub(crate) fn check(root: &Path, register: &[Entry], floors: Floors) -> RuleRepo
         proto_files.len(),
         register.len()
     ))
+}
+
+fn room_arm_findings(root: &Path) -> Vec<String> {
+    let proto = root.join("crates/api-proto/proto/centraid/core/v1/room.proto");
+    let Ok(proto) = fs::read_to_string(proto) else {
+        return vec!["room.proto: missing from the native room census".to_owned()];
+    };
+    let block_kotlin = without_comments(&read(
+        &root.join("mobile/androidApp/src/main/kotlin/dev/centraid/android/room/RoomBlocks.kt"),
+    ));
+    let block_swift = without_comments(&read(
+        &root.join("mobile/iosApp/Sources/Kit/RoomBlocks.swift"),
+    ));
+    let effect_kotlin = without_comments(&read(&root.join("mobile/androidApp/src/main/kotlin/dev/centraid/android/session/RoomShellEffectPerformer.kt")));
+    let effect_swift = without_comments(&read(&root.join("mobile/iosApp/Sources/RoomStore.swift")));
+    missing_room_arms(
+        &proto,
+        &block_kotlin,
+        &block_swift,
+        &effect_kotlin,
+        &effect_swift,
+    )
+}
+
+fn missing_room_arms(
+    proto: &str,
+    block_kotlin: &str,
+    block_swift: &str,
+    effect_kotlin: &str,
+    effect_swift: &str,
+) -> Vec<String> {
+    let mut findings = Vec::new();
+    for item in proto_items(proto).into_iter().filter(|item| {
+        item.arm && (item.key.starts_with("ShellEffect.") || item.key.starts_with("RoomBlock."))
+    }) {
+        let (android, swift, qualifier) = if item.key.starts_with("RoomBlock.") {
+            (block_kotlin, block_swift, "block")
+        } else {
+            (effect_kotlin, effect_swift, "effect")
+        };
+        let swift_name = swift_spellings(&item.field)
+            .into_iter()
+            .next()
+            .unwrap_or_default();
+        let android_marker = if qualifier == "block" {
+            "RoomBlockView("
+        } else {
+            "suspend fun perform(effect: ShellEffect)"
+        };
+        let android_body = function_body(android, android_marker);
+        let handled_android = android_body.is_some_and(|body| {
+            let branch = if qualifier == "block" {
+                "block"
+            } else {
+                "effect"
+            };
+            body.contains(&format!("{branch}.{} != null ->", item.field))
+        });
+        if !handled_android {
+            findings.push(format!("{}: Android has no dispatch branch", item.key));
+        }
+        let (owner_marker, switch_key) = if qualifier == "block" {
+            ("var body: some View", "switch block.kind")
+        } else {
+            ("private func perform(", "switch effect.kind")
+        };
+        let swift_owner = switch_body(swift, owner_marker);
+        let swift_body = swift_owner.and_then(|owner| switch_body(owner, switch_key));
+        let handled_swift = swift_body.is_some_and(|body| {
+            body.contains(&format!("case .{swift_name}("))
+                || body.contains(&format!("case .{swift_name}?"))
+        });
+        if !handled_swift {
+            findings.push(format!("{}: iOS has no dispatch branch", item.key));
+        }
+    }
+    findings
+}
+
+/// Return the braced body belonging to an actual dispatch function. Searching
+/// the whole file for a field name accepts comments, tests, or unrelated UI
+/// mentions as if they were handlers.
+fn switch_body<'a>(source: &'a str, marker: &str) -> Option<&'a str> {
+    let start = source.find(marker)?;
+    let open = start + source[start..].find('{')?;
+    let bytes = source.as_bytes();
+    let mut depth = 0usize;
+    for (offset, byte) in bytes[open..].iter().enumerate() {
+        match byte {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&source[open + 1..open + offset]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Find a function's body after its complete parameter list. Kotlin permits
+/// default lambda values such as `onCanvas = {}` before the body, so taking
+/// the first brace after the function name mistakes a parameter for dispatch.
+fn function_body<'a>(source: &'a str, marker: &str) -> Option<&'a str> {
+    let start = source.find(marker)?;
+    let open_paren = start + source[start..].find('(')?;
+    let mut depth = 0usize;
+    let mut close_paren = None;
+    for (offset, byte) in source.as_bytes()[open_paren..].iter().enumerate() {
+        match byte {
+            b'(' => depth += 1,
+            b')' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    close_paren = Some(open_paren + offset);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let after_signature = close_paren? + 1;
+    let open_body = after_signature + source[after_signature..].find('{')?;
+    let bytes = source.as_bytes();
+    let mut brace_depth = 0usize;
+    for (offset, byte) in bytes[open_body..].iter().enumerate() {
+        match byte {
+            b'{' => brace_depth += 1,
+            b'}' => {
+                brace_depth = brace_depth.checked_sub(1)?;
+                if brace_depth == 0 {
+                    return Some(&source[open_body + 1..open_body + offset]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 #[cfg(test)]

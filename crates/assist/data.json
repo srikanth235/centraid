@@ -8,7 +8,12 @@
   "catalog_hash": "487261c0f8548972e20267601cb0b672a6fd7d29c8f77e5fd01133a0fdce81dd",
   "tokenizer_blake3": "3fd498e7fff0650ca4cf62dccd4e0844ed5ad2f1abcee9adfda013fef06c4220",
   "stale": {
-    "since": "create and edit cover 13 kinds and almost only `name`; no money, measurement or Locker fields. Chat is meant to create Locker secrets, so those are gaps to fill, not exclusions",
-    "level": "coverage"
+    "since": "rebuilt the assistant runtime against the v0 vault schema and restored link, categorize, and respond as Direct actions (#1214)",
+    "level": "coverage",
+    "at": {
+      "tools_hash": "66c140a52cd47febd0048451fd4e691b6a9475615d23d314a5cceec716d60e4c",
+      "prompt_hash": "e4bbba8d217605b014b1d2ea1bc784ea80b06f272c60fe4d902ae048bfeef203",
+      "catalog_hash": "55c2253fb9a7ecd8db4c86d0c5d9b31b0c0379c2dbd37fd0c5c6a570f4388471"
+    }
   }
 }

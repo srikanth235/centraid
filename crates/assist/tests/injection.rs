@@ -38,7 +38,7 @@ fn the_free_reply_prompt_adds_no_structure() {
         let plain = chat_prompt(&[], "hello");
         let history = [Turn {
             user: (*sample).to_owned(),
-            record: centraid_assist::prompt::Recorded::Answer((*sample).to_owned()),
+            said: (*sample).to_owned(),
         }];
         let hostile = chat_prompt(&history, sample);
         // the hostile prompt has one more user and one more assistant message

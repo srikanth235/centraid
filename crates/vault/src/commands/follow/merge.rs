@@ -6,12 +6,13 @@ use serde_json::{Map, Value as Json};
 
 use crate::blob;
 use crate::commands::entity::{self, trash_stamp};
-use crate::commands::{CommandCtx, arrival, container, origin_cursor};
+use crate::commands::{CommandCtx, origin_cursor};
 use crate::error::{Result, VaultError};
-use crate::model::Kind;
+use crate::history::Actor;
 
+use super::commands::{SystemRow, system_row};
 use super::systems::stated_title;
-use super::{DOUBTED_AT_LEAST, Gone, Home, Match, OriginOf, OriginRow, SystemMap};
+use super::{DOUBTED_AT_LEAST, Gone, Home, Match, OriginRow, SystemMap};
 
 // ---------------------------------------------------------------------------
 // Values
@@ -96,8 +97,99 @@ pub(crate) fn current(
 // The origin and the source
 // ---------------------------------------------------------------------------
 
+/// An origin the vault already has: its id, its home and its label.
+pub(super) struct KnownOrigin {
+    pub id: String,
+    pub fills: Option<String>,
+    pub label: String,
+}
+
+/// The origin a pass names, if the vault has one: by the system's `ref`, else by the home the
+/// input names (one home is filled by one origin, whatever ref a read gives it: a statement of
+/// the same account, a calendar read again by a new phone).
+pub(super) fn known_origin(
+    connection: &Connection,
+    system: &str,
+    reference: &str,
+    fills: Option<&str>,
+) -> Result<Option<KnownOrigin>> {
+    let read = |row: &rusqlite::Row<'_>| {
+        Ok(KnownOrigin {
+            id: row.get(0)?,
+            fills: row.get(1)?,
+            label: row.get(2)?,
+        })
+    };
+    let by_ref = connection
+        .query_row(
+            "SELECT id, fills, label FROM origin
+              WHERE system = ?1 AND ref = ?2",
+            [system, reference],
+            read,
+        )
+        .optional()?;
+    if by_ref.is_some() {
+        return Ok(by_ref);
+    }
+    let Some(fills) = fills else {
+        return Ok(None);
+    };
+    Ok(connection
+        .query_row(
+            "SELECT id, fills, label FROM origin
+              WHERE system = ?1 AND fills = ?2",
+            [system, fills],
+            read,
+        )
+        .optional()?)
+}
+
+/// Point an origin at its home: `fills` and the home's kind move together, as the table's check
+/// and its key to `origin_system(code, fills_kind)` want.
+fn set_home(connection: &Connection, origin: &str, home: &str) -> Result<()> {
+    connection.execute(
+        "UPDATE origin SET fills = ?2, fills_kind = (SELECT kind FROM entity WHERE id = ?2)
+          WHERE id = ?1",
+        [origin, home],
+    )?;
+    Ok(())
+}
+
+/// A plain home for a follow that names none: an entity of the kind the system fills, titled by
+/// the origin's label, when that kind is a container (a calendar, a folder, a project). Any other
+/// kind (an account) needs its own fields, so the member names it or the map founds it.
+fn found_container(
+    ctx: &CommandCtx<'_, '_>,
+    system: &SystemRow,
+    label: &str,
+    color: Option<&str>,
+) -> Result<Option<String>> {
+    let Some(kind) = system
+        .fills_kind
+        .as_deref()
+        .and_then(crate::model::Kind::parse)
+    else {
+        return Ok(None);
+    };
+    if !kind.is_container() {
+        return Ok(None);
+    }
+    let id = ctx.insert_entity(kind, label)?;
+    ctx.connection().execute(
+        "INSERT INTO container (id, kind, color) VALUES (?1, ?2, ?3)",
+        rusqlite::params![id, kind.as_str(), color],
+    )?;
+    Ok(Some(id))
+}
+
 fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow> {
     let connection = ctx.connection();
+    let system = system_row(connection, map.system)?.ok_or_else(|| VaultError::Invariant {
+        context: format!(
+            "`{}` is not an origin system, and a precondition said it was",
+            map.system
+        ),
+    })?;
     let origin = ctx.input.get("origin").cloned().unwrap_or(Json::Null);
     let text = |key: &str| origin.get(key).and_then(Json::as_str).map(str::to_owned);
     let (reference, label) = (
@@ -105,138 +197,87 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
         text("label").unwrap_or_default(),
     );
     let fills = text("fills");
-    if let Some(fills) = &fills {
-        let found =
-            entity::lookup(connection, fills)?.map_err(|sentence| VaultError::InvalidInput {
-                name: "origin.fills".to_owned(),
-                detail: sentence,
-            })?;
-        if map.fills != Some(found.kind) {
-            return Err(VaultError::InvalidInput {
-                name: "origin.fills".to_owned(),
-                detail: format!(
-                    "`{}` feeds a {}, not a {}",
-                    map.system,
-                    map.fills.map_or("nothing", Kind::as_str),
-                    found.kind.noun()
-                ),
-            });
-        }
-    }
     let config = origin
         .get("config")
         .filter(|config| !config.is_null())
         .map(Json::to_string);
-    let account_origin = map.origin == OriginOf::Account;
-    // A statement is not a phone store: no phone is named on its origin.
-    let device = if account_origin {
-        None
-    } else {
+    // A system that names no device (a statement) is not a phone's: no phone is named anywhere.
+    let device = if system.on_device {
         text("device_id")
-    };
-    let known: Option<String> = if account_origin {
-        let Some(fills) = &fills else {
-            return Err(VaultError::InvalidInput {
-                name: "origin.fills".to_owned(),
-                detail: format!("`{}` is imported into an account", map.system),
-            });
-        };
-        connection
-            .query_row(
-                "SELECT id FROM origin WHERE system = ?1 AND fills = ?2",
-                [map.system, fills.as_str()],
-                |row| row.get(0),
-            )
-            .optional()?
     } else {
-        connection
-            .query_row(
-                "SELECT id FROM origin WHERE system = ?1 AND ref = ?2",
-                [map.system, reference.as_str()],
-                |row| row.get(0),
-            )
-            .optional()?
+        None
     };
-    // A RETIRED ORIGIN IS REVIVED, never made again: Stop kept its row, its home (`fills`) and its
-    // sources, so the same `ref` followed again finds all three. Naming a different home than the
-    // retired one filled (the member trashed it, and a new one was made) starts over: the sources
-    // of the old home name documents that are not the new home's.
-    let retired: Option<(Option<String>, bool)> = match &known {
-        Some(id) if !account_origin => connection
-            .query_row(
-                "SELECT fills, retired_at IS NOT NULL FROM origin WHERE id = ?1",
-                [id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .optional()?
-            .filter(|(_, retired)| *retired),
-        _ => None,
-    };
-    if let (Some(id), Some((old_home, _))) = (&known, &retired)
-        && fills.is_some()
-        && fills != *old_home
+    let known = known_origin(connection, map.system, &reference, fills.as_deref())?;
+    // A RETIRED ORIGIN IS REVIVED, never made again: Stop kept its row, its home and its sources,
+    // so the same `ref` followed again finds all three.
+    if let Some(KnownOrigin {
+        fills: Some(old_home),
+        ..
+    }) = &known
+        && fills.as_ref().is_some_and(|named| named != old_home)
     {
-        connection.execute("DELETE FROM source WHERE origin_id = ?1", [id])?;
+        return Err(VaultError::InvalidInput {
+            name: "origin.fills".to_owned(),
+            detail: "that store already fills another home; stop it first".to_owned(),
+        });
     }
-    let label_was: Option<String> = match &known {
-        Some(id) => connection
-            .query_row("SELECT label FROM origin WHERE id = ?1", [id], |row| {
-                row.get(0)
-            })
-            .optional()?,
-        None => None,
-    };
-    let id = if let Some(id) = known {
-        if account_origin {
-            // The account names its origin (its bank number, its name): an
-            // import neither renames nor re-keys it.
-            connection.execute(
-                "UPDATE origin SET config = COALESCE(?2, config) WHERE id = ?1",
-                rusqlite::params![id, config],
-            )?;
-        } else {
-            connection.execute(
-                // A cursor is the word of the install that wrote it: an origin another install takes
-                // over (`device_id` changes) keeps none of the last one's (#1183).
-                "UPDATE origin SET label = ?2, fills = COALESCE(?4, fills),
-                        config = COALESCE(?5, config),
-                        cursor = CASE WHEN device_id IS ?3 THEN cursor END,
-                        device_id = ?3, retired_at = NULL
-                  WHERE id = ?1",
-                rusqlite::params![id, label, device, fills, config],
-            )?;
+    let label_was = known.as_ref().map(|known| known.label.clone());
+    let id = if let Some(KnownOrigin { id, .. }) = known {
+        connection.execute(
+            // A cursor is the word of the install that wrote it: an origin another install takes
+            // over (`device_id` changes) keeps none of the last one's (#1183).
+            "UPDATE origin SET label = ?2,
+                    config = COALESCE(?4, config),
+                    cursor = CASE WHEN device_id IS ?3 THEN cursor END,
+                    device_id = ?3, retired_at = NULL
+              WHERE id = ?1",
+            rusqlite::params![id, label, device, config],
+        )?;
+        if let Some(home) = &fills {
+            set_home(connection, &id, home)?;
         }
         id
     } else {
         let id = ctx.next_id();
         connection.execute(
-            "INSERT INTO origin (id, system, ref, label, device_id, fills, config, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO origin (id, system, ref, label, device_id, fills, fills_kind, config, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, (SELECT kind FROM entity WHERE id = ?6), ?7, ?8)",
             rusqlite::params![
                 id, map.system, reference, label, device, fills, config, ctx.now
             ],
         )?;
         id
     };
-    let read = || {
-        connection.query_row(
+    let held = |connection: &Connection| -> Result<(Option<String>, Option<String>)> {
+        Ok(connection.query_row(
             "SELECT fills, device_id FROM origin WHERE id = ?1",
             [&id],
-            |row| {
-                Ok((
-                    row.get::<_, Option<String>>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                ))
-            },
-        )
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?)
     };
-    let (mut fills, device) = read()?;
-    if let Some(founds) = map.founds {
-        let color = origin.get("color").and_then(Json::as_str).filter(|color| {
-            container::LIST_COLORS.contains(color)
-                || container::PHONE_CALENDAR_COLORS.contains(color)
+    let (mut fills, device) = held(connection)?;
+    // The colour is a key of the palette (a lookup), or none.
+    let color = origin
+        .get("color")
+        .and_then(Json::as_str)
+        .map(str::trim)
+        .filter(|color| {
+            connection
+                .query_row(
+                    "SELECT 1 FROM vocab WHERE domain = 'palette' AND code = ?1",
+                    [color],
+                    |_| Ok(()),
+                )
+                .optional()
+                .ok()
+                .flatten()
+                .is_some()
         });
-        let made = founds(
+    // A system that fills a kind of home has one, found by the map (it keeps it too: one
+    // calendar of the vault per phone calendar, with the phone's colour) or, with no map to say,
+    // a plain container of the kind.
+    let made = if let Some(founds) = map.founds {
+        Some(founds(
             ctx,
             &Home {
                 origin: &id,
@@ -245,11 +286,17 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
                 label: &label,
                 color,
             },
-        )?;
-        if fills.as_deref() != Some(made.as_str()) {
-            connection.execute("UPDATE origin SET fills = ?2 WHERE id = ?1", [&id, &made])?;
-            fills = Some(made);
-        }
+        )?)
+    } else if fills.is_none() {
+        found_container(ctx, &system, &label, color)?
+    } else {
+        None
+    };
+    if let Some(made) = made
+        && fills.as_deref() != Some(made.as_str())
+    {
+        set_home(connection, &id, &made)?;
+        fills = Some(made);
     }
     Ok(OriginRow { id, fills, device })
 }
@@ -283,7 +330,11 @@ struct Record {
 type RecordKey = (String, Option<String>);
 
 /// The records a command carries, and the ones its system could not read.
-fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<(Vec<Record>, Vec<RecordKey>)> {
+fn records_of(
+    ctx: &CommandCtx<'_, '_>,
+    map: &SystemMap,
+    on_device: bool,
+) -> Result<(Vec<Record>, Vec<RecordKey>)> {
     let (mut records, mut refused) = (Vec::new(), Vec::new());
     for raw in ctx
         .input
@@ -303,11 +354,12 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<(Vec<Record>,
                 .and_then(Json::as_str)
                 .unwrap_or_default()
                 .to_owned(),
-            // A statement line is an account's, never a phone's.
+            // A record names a device only for a system that names one (a statement line is an
+            // account's, never a phone's: the `source` key refuses it too).
             device_id: raw
                 .get("device_id")
                 .and_then(Json::as_str)
-                .filter(|_| map.origin == OriginOf::Phone)
+                .filter(|_| on_device)
                 .map(str::to_owned),
             size: raw.get("size").and_then(Json::as_i64),
             fields: Map::new(),
@@ -315,16 +367,6 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<(Vec<Record>,
         if (map.shape)(ctx, &mut fields).is_err() {
             refused.push((record.external_id, record.device_id));
             continue;
-        }
-        // An instant is held in the clock's one form whatever the phone spelled, so what the
-        // row holds and what the source stated stay equal (an event's times are settled by
-        // its shape).
-        if map.kind != Kind::Event {
-            for name in ["due", "done_at", "starts", "ends", "taken_at"] {
-                if let Some(Json::String(text)) = fields.get_mut(name) {
-                    *text = crate::time::temporal::canonical(text);
-                }
-            }
         }
         // What a record may state is what the vault holds, not what a phone
         // spelled: the check follows the shape.
@@ -420,15 +462,30 @@ fn add(
     origin: &OriginRow,
     record: &Record,
 ) -> Result<String> {
+    // A kind that may not be named (a reading) states no title: the row's is empty, and the
+    // table says whether that is allowed.
     let title = record
         .fields
         .get("title")
         .and_then(Json::as_str)
-        .ok_or_else(|| VaultError::InvalidInput {
-            name: "fields.title".to_owned(),
-            detail: format!("a followed {} needs a title", map.kind.noun()),
-        })?;
-    let id = ctx.insert_entity(map.kind, title)?;
+        .unwrap_or_default();
+    // The row sits in the home the origin fills when the kind may sit in a home of that kind
+    // (`home_shape`: an event in a calendar, a document in a folder, a task in a project); a kind
+    // the origin's home is not the home of (a line of an account) reads it in its defaults.
+    let home = match origin.fills.as_deref() {
+        Some(home) => ctx
+            .connection()
+            .query_row(
+                "SELECT 1 FROM home_shape h JOIN entity e ON e.kind = h.home_kind
+                  WHERE h.kind = ?1 AND e.id = ?2",
+                [map.kind.as_str(), home],
+                |_| Ok(()),
+            )
+            .optional()?
+            .map(|()| home),
+        None => None,
+    };
+    let id = ctx.insert_entity_under(map.kind, title, home)?;
     let mut columns: Vec<(&str, rusqlite::types::Value)> = record
         .fields
         .iter()
@@ -612,20 +669,11 @@ fn match_existing(
         "SELECT e.id FROM entity e JOIN {} k ON k.id = e.id
           WHERE e.kind = ?1 AND e.deleted_at IS NULL
             AND NOT EXISTS (SELECT 1 FROM source s WHERE s.entity_id = e.id
-                              AND s.system NOT IN ({})
-                              AND s.stated <> '{{}}'
                               AND s.origin_id IN (SELECT id FROM origin WHERE retired_at IS NULL)
                               AND (?2 IS NULL OR s.device_id IS NULL OR s.device_id = ?2))
             AND {}
           ORDER BY e.created_at, e.id",
         crate::log::quoted(map.kind.host()),
-        // An item that only arrived once (a vCard, a Markdown file) is nobody's to follow
-        // yet: the store that now states it takes the row over.
-        arrival::SYSTEMS
-            .iter()
-            .map(|(system, _)| format!("'{system}'"))
-            .collect::<Vec<_>>()
-            .join(","),
         clauses.join(" AND ")
     );
     let candidates = connection
@@ -972,6 +1020,20 @@ fn settle_absent(
             tally.forgotten += 1;
             continue;
         }
+        // A record several stores state is not gone while another still states it: only this
+        // store's link goes, and the row stays followed by the rest (A9).
+        let stated_elsewhere: bool = connection.query_row(
+            "SELECT EXISTS (SELECT 1 FROM source s JOIN origin o ON o.id = s.origin_id
+                             WHERE s.entity_id = ?1 AND s.id <> ?2 AND s.gone_at IS NULL
+                               AND o.retired_at IS NULL)",
+            [entity_id, &row.id],
+            |found| found.get(0),
+        )?;
+        if stated_elsewhere {
+            connection.execute("DELETE FROM source WHERE id = ?1", [&row.id])?;
+            tally.forgotten += 1;
+            continue;
+        }
         let held = entity::require(connection, entity_id)?;
         if map.gone == Gone::Forget || edited(connection, map, entity_id, &row.stated)? {
             connection.execute("DELETE FROM source WHERE id = ?1", [&row.id])?;
@@ -1005,9 +1067,9 @@ fn forget_gone(ctx: &CommandCtx<'_, '_>, origin: &OriginRow, tally: &mut Tally) 
     Ok(())
 }
 
-/// A followed calendar the member trashed stays trashed: a pass is not a restore, and an event the
-/// phone states into it now goes to the trash with it, under the calendar's own stamp, so one
-/// restore of the calendar brings back exactly what went with it.
+/// A followed home the member trashed stays trashed: a pass is not a restore, and a row the
+/// store states into it now goes to the trash with it, under the home's own stamp and naming it
+/// (`trashed_by`, A13), so one restore of the home brings back exactly what went with it.
 fn keep_in_a_trashed_home(ctx: &CommandCtx<'_, '_>, origin: &OriginRow) -> Result<()> {
     let Some(home) = origin.fills.as_deref() else {
         return Ok(());
@@ -1015,8 +1077,7 @@ fn keep_in_a_trashed_home(ctx: &CommandCtx<'_, '_>, origin: &OriginRow) -> Resul
     let connection = ctx.connection();
     let stamp: Option<(String, Option<String>)> = connection
         .query_row(
-            "SELECT deleted_at, purge_at FROM entity WHERE id = ?1 AND kind = 'calendar'
-                AND deleted_at IS NOT NULL",
+            "SELECT deleted_at, purge_at FROM entity WHERE id = ?1 AND deleted_at IS NOT NULL",
             [home],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -1025,13 +1086,10 @@ fn keep_in_a_trashed_home(ctx: &CommandCtx<'_, '_>, origin: &OriginRow) -> Resul
         return Ok(());
     };
     connection.execute(
-        "UPDATE entity SET deleted_at = ?3, purge_at = ?4
-          WHERE deleted_at IS NULL
-            AND id IN (
-                SELECT ev.id FROM event ev
-                  JOIN source s ON s.entity_id = ev.id
-                 WHERE ev.calendar_id = ?1 AND s.origin_id = ?2
-            )",
+        "UPDATE entity SET deleted_at = ?3, purge_at = ?4, trashed_by = ?1
+          WHERE deleted_at IS NULL AND parent_id = ?1
+            AND id IN (SELECT entity_id FROM source
+                        WHERE origin_id = ?2 AND entity_id IS NOT NULL)",
         rusqlite::params![home, origin.id.as_str(), deleted_at, purge_at],
     )?;
     Ok(())
@@ -1040,6 +1098,11 @@ fn keep_in_a_trashed_home(ctx: &CommandCtx<'_, '_>, origin: &OriginRow) -> Resul
 /// Apply one batch of records from a system.
 pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Value> {
     let origin = upsert_origin(ctx, map)?;
+    // EVERY PASS IS THE STORE'S (B4): the revisions this commit writes say `store` and name the
+    // origin, said here, where the origin is known, and never read off the command's name.
+    ctx.tx.set_actor(Actor::Store {
+        origin_id: origin.id.clone(),
+    });
     // THE STORE'S CURSOR RIDES WITH THE RECORDS IT COVERS (#1183): one commit.
     if let Some(cursor) = ctx
         .input
@@ -1047,15 +1110,10 @@ pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Va
         .and_then(|origin| origin.get("cursor"))
         .and_then(Json::as_str)
     {
-        origin_cursor::advance(
-            ctx,
-            map.system,
-            ctx.input["origin"]["ref"].as_str().unwrap_or_default(),
-            origin.device.as_deref().unwrap_or_default(),
-            cursor,
-        )?;
+        origin_cursor::move_to(ctx.connection(), &origin.id, cursor)?;
     }
-    let (records, refused) = records_of(ctx, map)?;
+    let on_device = system_row(ctx.connection(), map.system)?.is_some_and(|row| row.on_device);
+    let (records, refused) = records_of(ctx, map, on_device)?;
     let mut tally = Tally {
         refused: refused.len(),
         ..Tally::default()

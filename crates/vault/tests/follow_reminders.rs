@@ -1,70 +1,18 @@
-//! The phone's Reminders, followed (#1185).
+//! The phone's Reminders, followed (#1185, #1214): each reminder is a task in the task list the
+//! origin fills; the member's edit of a field stands over the phone's word; a phone completion
+//! completes the task; a reminder gone from a complete read goes to the trash and comes back with
+//! the record; the phone alerts for what it states and the vault for what the member changed.
 
 mod common;
 
-use centraid_vault::commands::Registry;
-use centraid_vault::{Command, CommandStatus, Principal};
+use common::world::World;
 use serde_json::{Value, json};
-
-struct World {
-    scratch: common::Scratch,
-    registry: Registry,
-}
-
-impl World {
-    fn new() -> Self {
-        Self {
-            scratch: common::Scratch::founded("follow-reminders").expect("a vault"),
-            registry: Registry::with_system_commands().expect("a registry"),
-        }
-    }
-
-    fn run(&self, name: &str, input: Value) -> centraid_vault::CommandOutcome {
-        self.scratch
-            .vault
-            .execute(
-                &self.registry,
-                &Principal::owner("phone"),
-                &Command::new(name, input),
-            )
-            .unwrap_or_else(|error| panic!("`{name}`: {error}"))
-    }
-
-    fn ok(&self, name: &str, input: Value) -> Value {
-        let outcome = self.run(name, input);
-        assert_eq!(
-            outcome.status,
-            CommandStatus::Executed,
-            "{name}: {:?}",
-            outcome.reason
-        );
-        outcome.output
-    }
-
-    fn one<T: rusqlite::types::FromSql>(&self, sql: &str, params: &[&str]) -> T {
-        self.scratch
-            .vault
-            .read(|c| Ok(c.query_row(sql, rusqlite::params_from_iter(params), |r| r.get(0))?))
-            .expect("a row")
-    }
-
-    fn sql(&self, sql: &str, params: &[&str]) {
-        self.scratch
-            .vault
-            .commit(|tx| {
-                tx.set_producer("test.sql");
-                tx.connection()
-                    .execute(sql, rusqlite::params_from_iter(params))?;
-                Ok(())
-            })
-            .expect("a write");
-    }
-}
 
 fn follow(w: &World, records: Value, complete: bool) -> Value {
     w.ok(
         "follow.reminders",
-        json!({ "origin": { "ref": "list:1", "label": "Groceries" }, "complete": complete, "records": records }),
+        json!({ "origin": { "ref": "list:1", "label": "Groceries", "device_id": "phone-1" },
+                "complete": complete, "records": records }),
     )
 }
 
@@ -74,74 +22,242 @@ fn rec(id: &str, title: &str, extra: Value) -> Value {
         .as_object_mut()
         .unwrap()
         .extend(extra.as_object().unwrap().clone());
-    json!({ "external_id": id, "fields": fields })
+    json!({ "external_id": id, "device_id": "phone-1", "fields": fields })
+}
+
+fn task_of(w: &World, uid: &str) -> String {
+    w.one(
+        "SELECT entity_id FROM source WHERE external_id = ?1",
+        &[uid],
+    )
+}
+
+fn alerts_of(w: &World, task: &str) -> i64 {
+    w.vault()
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM alert a JOIN reminder r ON r.id = a.reminder_id WHERE r.entity_id = ?1",
+                [task],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("alerts")
 }
 
 #[test]
-fn a_reminder_arrives_edits_stand_and_a_phone_completion_completes_the_task() {
-    let w = World::new();
+fn a_reminder_arrives_in_its_list_edits_stand_and_a_phone_completion_completes_the_task() {
+    let w = World::new("remind_follow");
     let out = follow(
         &w,
         json!([rec(
             "r1",
             "Milk",
-            json!({ "due": "2026-12-01", "rule": "FREQ=WEEKLY", "remind_before_min": 10 })
+            json!({ "due": "2026-12-01", "rule": "FREQ=WEEKLY", "reminders": [10] })
         )]),
         true,
     );
-    assert_eq!(out["added"], 1);
-    let id: String = w.one("SELECT entity_id FROM source WHERE external_id = 'r1'", &[]);
+    assert_eq!(out["added"], 1, "{out}");
+    let id = task_of(&w, "r1");
+    // The list is a task list the origin fills, and the task is in it.
+    let project: String = w.one("SELECT fills FROM origin WHERE ref = 'list:1'", &[]);
+    assert_eq!(
+        w.one::<String>("SELECT parent_id FROM entity WHERE id = ?1", &[&id]),
+        project
+    );
+    assert_eq!(
+        w.one::<String>("SELECT kind FROM entity WHERE id = ?1", &[&project]),
+        "task_list"
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT due_timing || ' ' || due FROM task WHERE id = ?1",
+            &[&id]
+        ),
+        "all-day 2026-12-01"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT offset_min FROM reminder WHERE entity_id = ?1",
+            &[&id]
+        ),
+        10
+    );
     // The member edits the due day; the phone completes the reminder.
-    w.sql("UPDATE task SET due = '2026-12-05' WHERE id = ?1", &[&id]);
+    w.ok("task.edit", json!({ "id": &id, "due": "2026-12-05" }));
     let done = rec(
         "r1",
         "Milk",
-        json!({ "due": "2026-12-01", "rule": "FREQ=WEEKLY", "remind_before_min": 10, "status": "done", "done_at": "2026-11-30T10:00:00Z" }),
+        json!({ "due": "2026-12-01", "rule": "FREQ=WEEKLY", "reminders": [10],
+                "status": "done", "done_at": "2026-11-30T10:00:00Z" }),
     );
     let out = follow(&w, json!([done]), true);
     assert_eq!(out["updated"], 1);
-    let status: String = w.one("SELECT status FROM task WHERE id = ?1", &[&id]);
-    let due: String = w.one("SELECT due FROM task WHERE id = ?1", &[&id]);
-    assert_eq!(status, "done");
-    assert_eq!(due, "2026-12-05", "the member's own due day stands");
+    assert_eq!(
+        w.one::<String>("SELECT status FROM task WHERE id = ?1", &[&id]),
+        "done"
+    );
+    assert_eq!(
+        w.one::<String>("SELECT due FROM task WHERE id = ?1", &[&id]),
+        "2026-12-05",
+        "the member's own due day stands"
+    );
+    assert_eq!(
+        w.one::<String>("SELECT done_at FROM task WHERE id = ?1", &[&id]),
+        "2026-11-30T10:00:00.000Z"
+    );
 }
 
 #[test]
-fn a_reminder_losing_its_due_loses_its_rule_in_one_write() {
-    let w = World::new();
+fn a_reminder_losing_its_due_loses_its_rule_and_its_alerts_in_one_write() {
+    let w = World::new("remind_follow_due");
     follow(
         &w,
         json!([rec(
             "r1",
             "Milk",
-            json!({ "due": "2026-12-01", "rule": "FREQ=WEEKLY" })
+            json!({ "due": "2026-12-01", "rule": "FREQ=WEEKLY", "reminders": [10] })
         )]),
         true,
     );
+    let id = task_of(&w, "r1");
     let out = follow(
         &w,
-        json!([rec("r1", "Milk", json!({ "due": null, "rule": null }))]),
+        json!([rec(
+            "r1",
+            "Milk",
+            json!({ "due": null, "rule": null, "reminders": null })
+        )]),
         true,
     );
-    assert_eq!(out["updated"], 1);
+    assert_eq!(out["updated"], 1, "{out}");
+    assert_eq!(
+        w.one::<String>(
+            "SELECT ifnull(due, '-') || ifnull(rule, '-') FROM task WHERE id = ?1",
+            &[&id]
+        ),
+        "--"
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM reminder WHERE entity_id = ?1", &[&id]),
+        0
+    );
 }
 
 #[test]
-fn a_reminder_gone_from_a_complete_read_goes_to_the_trash_and_an_older_arrival_is_taken_over() {
-    let w = World::new();
+fn a_reminder_gone_from_a_complete_read_goes_to_the_trash_comes_back_and_an_older_arrival_is_taken_over()
+ {
+    let w = World::new("remind_follow_gone");
     follow(
         &w,
         json!([rec("r1", "Milk", json!({})), rec("r2", "Eggs", json!({}))]),
         true,
     );
+    let eggs = task_of(&w, "r2");
     let out = follow(&w, json!([rec("r1", "Milk", json!({}))]), true);
     assert_eq!(out["trashed"], 1);
+    assert!(
+        w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&eggs])
+            .is_some()
+    );
+    // Gone and back: the same reminder in a later read restores the same row.
+    follow(
+        &w,
+        json!([rec("r1", "Milk", json!({})), rec("r2", "Eggs", json!({}))]),
+        true,
+    );
+    assert!(
+        w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&eggs])
+            .is_none()
+    );
     // A task with no source at all is matched by title.
     w.ok("task.add", json!({ "title": "Bread" }));
     let out = follow(
         &w,
-        json!([rec("r1", "Milk", json!({})), rec("r3", "Bread", json!({}))]),
+        json!([
+            rec("r1", "Milk", json!({})),
+            rec("r2", "Eggs", json!({})),
+            rec("r3", "Bread", json!({}))
+        ]),
         true,
     );
-    assert_eq!(out["matched"], 1);
+    assert_eq!(out["matched"], 1, "{out}");
+}
+
+#[test]
+fn the_phone_alerts_for_what_it_states_and_the_vault_for_what_the_member_changed() {
+    let w = World::new("remind_follow_alerts");
+    follow(
+        &w,
+        json!([rec(
+            "r1",
+            "Call Mum",
+            json!({ "due": "2026-03-02T09:00", "reminders": [30] })
+        )]),
+        true,
+    );
+    let id = task_of(&w, "r1");
+    // One alert per real thing: the phone's Reminders alert for it, so the vault holds the row and says nothing.
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM reminder WHERE entity_id = ?1", &[&id]),
+        1
+    );
+    assert_eq!(
+        alerts_of(&w, &id),
+        0,
+        "what the phone states, the phone alerts"
+    );
+    // The member adds a lead: now it is Centraid's, all of it.
+    w.ok("task.edit", json!({ "id": &id, "reminders": [30, 5] }));
+    assert_eq!(alerts_of(&w, &id), 2);
+    // The phone's next word on the leads does not undo the member's.
+    follow(
+        &w,
+        json!([rec(
+            "r1",
+            "Call Mum",
+            json!({ "due": "2026-03-02T09:00", "reminders": [30, 60] })
+        )]),
+        true,
+    );
+    assert_eq!(
+        w.strings("SELECT CAST(offset_min AS TEXT) FROM reminder WHERE entity_id = ?1 ORDER BY offset_min", &[&id]),
+        vec!["5", "30"]
+    );
+    // A reminder with a bad alert is left out and counted.
+    let out = follow(
+        &w,
+        json!([rec(
+            "r9",
+            "Bad",
+            json!({ "due": "2026-03-02", "reminders": ["soon"] })
+        )]),
+        false,
+    );
+    assert_eq!(out["refused"], 1, "{out}");
+}
+
+#[test]
+fn a_read_that_lost_most_of_the_list_trashes_none_of_its_reminders() {
+    let w = World::new("remind_doubted");
+    let all: Vec<Value> = (0..6)
+        .map(|i| rec(&format!("r{i}"), &format!("R{i}"), json!({})))
+        .collect();
+    follow(&w, json!(all), true);
+    // Five of six gone from a complete read is a glitch of the phone's store, not a delete.
+    let told = follow(&w, json!([all[0].clone()]), true);
+    assert_eq!(
+        (told["trashed"].as_i64(), told["doubted"].as_i64()),
+        (Some(0), Some(5)),
+        "{told}"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM entity WHERE kind = 'task' AND deleted_at IS NOT NULL",
+            &[]
+        ),
+        0
+    );
+    // Four of six is an ordinary removal.
+    let told = follow(&w, json!(all[..2]), true);
+    assert_eq!(told["trashed"].as_i64(), Some(4), "{told}");
 }

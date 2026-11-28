@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Filter</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Filter</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">The funnel's whole menu: checked options, then sort.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">MENU WITH CLEAR FILTERS</div>
+  <div>
+    <!-- variant:menu -->
+    <div role="menu" aria-label="Filter and sort, on" style="position: absolute; top: 106px; right: 16px; width: 262px; border-radius: 22px; border: 1px solid var(--surface-border); background: var(--glass-bar); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 6px 20px var(--shadow-card); overflow: hidden; font-size: 16px;">
+      <div data-slot="t0" role="menuitem" style="display: flex; align-items: center; height: 44px; padding: 0 16px 0 40px;">Clear filters</div>
+      <div aria-hidden="true" style="height: 6px; background: var(--surface-line);"></div>
+
+      <div role="menuitem" aria-haspopup="menu" style="display: flex; align-items: center; height: 44px; padding: 0 14px 0 40px; border-bottom: 1px solid var(--surface-line);">
+        <span data-slot="t1" style="flex-grow: 1;">Type · PDFs</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-meta)" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </div>
+      <div role="menuitem" aria-haspopup="menu" style="display: flex; align-items: center; height: 44px; padding: 0 14px 0 40px; border-bottom: 1px solid var(--surface-line);">
+        <span data-slot="t2" style="flex-grow: 1;">Modified · Any time</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-meta)" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </div>
+      <div role="menuitem" aria-haspopup="menu" style="display: flex; align-items: center; height: 44px; padding: 0 14px 0 40px;">
+        <span data-slot="t3" style="flex-grow: 1;">Label · Any label</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-meta)" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </div>
+      <div aria-hidden="true" style="height: 6px; background: var(--surface-line);"></div>
+
+      <div data-slot="t4" style="font-size: 13px; color: var(--text-meta); padding: 8px 16px 2px 40px;">Sort</div>
+      <div role="menuitemradio" aria-checked="true" style="display: flex; align-items: center; height: 40px; padding: 0 14px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0;"><path d="M5 12l5 5 9-10"></path></svg>
+        <span data-slot="t5" style="margin-left: 10px;">Date changed · Newest first</span>
+      </div>
+      <div data-slot="t6" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Date changed · Oldest first</div>
+      <div data-slot="t7" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Name · A to Z</div>
+      <div data-slot="t8" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Name · Z to A</div>
+      <div data-slot="t9" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Kind · A to Z</div>
+      <div data-slot="t10" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 0 40px;">Size · Largest first</div>
+      <div aria-hidden="true" style="height: 6px; background: var(--surface-line); margin-top: 4px;"></div>
+
+      <div data-slot="t11" style="font-size: 13px; color: var(--text-meta); padding: 8px 16px 2px 40px;">View</div>
+      <div role="menuitemradio" aria-checked="true" style="display: flex; align-items: center; height: 40px; padding: 0 14px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0;"><path d="M5 12l5 5 9-10"></path></svg>
+        <span data-slot="t12" style="margin-left: 10px;">List</span>
+      </div>
+      <div role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; height: 40px; padding: 0 14px 4px 40px;">
+        Grid
+      </div>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

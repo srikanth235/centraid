@@ -43,24 +43,22 @@ enum NotificationStartupTrace {
 import Foundation
 import UserNotifications
 
-/// THE NOTIFICATION PERFORMER (#1173, Agenda wave 1c): hold Rust's future alarms, apply its explicit
-/// delivered-card withdrawals, and hand back what the member pressed.
-///
-/// Rust decides WHICH notifications exist, WHEN each fires and WHAT each says (`agenda.notify`);
-/// this file only performs `ScheduleNotifications` and answers it under its `effect_id`
-/// (`NotificationsScheduled`), and sends a tap or a button back as
-/// `ShellFact.notificationAnswered`. It decides nothing and holds no word: the titles, bodies and
-/// button labels all arrive from Rust.
-///
-/// THE SET IS DECLARATIVE: `all` is wanted pending work. `liveIds` supports the older
-/// whole-set contract; explicit retention uses Rust's delivered-card withdrawals instead.
-/// Actual delivered IDs and source fingerprints go back to Rust, so passing a moment
-/// alone never removes an unresolved reminder and a changed source can withdraw it.
 enum Notifications {
-    /// The key the notification's id travels under in `userInfo`, besides the request identifier.
     private static let idKey = "notification_id"
     private static let fingerprintKey = "notification_source_fingerprint"
+    private static let entityIDKey = "notification_entity_id"
+    private static let dateIDKey = "notification_date_id"
+    private static let fieldIDKey = "notification_field_id"
+    private static let channelIDKey = "notification_channel_id"
+    private static let openURLKey = "notification_open_url"
     private static let immediatesKey = "centraid.notification.immediates"
+    static let pendingCap: UInt32 = 64
+    static let doneActionID = "done"
+    static let snoozeActionID = "snooze"
+    static let taskCategoryID = "alert.task"
+    static let eventCategoryID = "alert.event"
+    static let personCategoryID = "alert.person"
+    static let lockerItemCategoryID = "alert.locker_item"
 
     /// Perform `ScheduleNotifications` and say what the OS said.
     @MainActor static func schedule(_ schedule: Centraid_Core_V1_ScheduleNotifications) async -> Centraid_Core_V1_NotificationsScheduled {
@@ -90,7 +88,7 @@ enum Notifications {
             answer.permission = .granted
         }
 
-        center.setNotificationCategories(Set(schedule.categories.map(category)))
+        center.setNotificationCategories(Set(notificationCategories(from: schedule.categories)))
 
         // Diff against the actual OS inventory, preserving the upstream pending/live plan.
         let now = Date()
@@ -108,8 +106,9 @@ enum Notifications {
         if !plan.removePending.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: plan.removePending)
         }
-        if !plan.removeDelivered.isEmpty {
-            center.removeDeliveredNotifications(withIdentifiers: plan.removeDelivered)
+        let removeDelivered = Array(Set(plan.removeDelivered + schedule.cancelDeliveredIds)).sorted()
+        if !removeDelivered.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: removeDelivered)
         }
 
         // Only IDs are remembered: dismissing an Undo receipt must not resurrect it on
@@ -140,14 +139,84 @@ enum Notifications {
         return answer
     }
 
-    private static func category(_ category: Centraid_Core_V1_NotificationCategory) -> UNNotificationCategory {
-        // THE ACTION'S IDENTIFIER IS THE VERB'S NUMBER, sent back unchanged. No `.foreground`:
-        // Done, Snooze, Tomorrow and Undo run in the background; the tap is the default action.
-        // No `.authenticationRequired` either: they work from the lock screen without unlocking
-        // (#1188, NA4), and each is reversible through Undo and history.
-        let actions = category.actions.map { action in
-            UNNotificationAction(identifier: String(action.verb.rawValue), title: action.label, options: [])
+    static func allowsDone(forCategoryID categoryID: String) -> Bool {
+        switch categoryID {
+        case eventCategoryID, personCategoryID, lockerItemCategoryID:
+            return false
+        default:
+            return true
         }
+    }
+
+    static func actionIdentifier(for verb: Centraid_Core_V1_NotificationVerb) -> String {
+        switch verb {
+        case .done: return doneActionID
+        case .snoozeHour: return snoozeActionID
+        default: return String(verb.rawValue)
+        }
+    }
+
+    static func verb(forActionIdentifier identifier: String) -> Centraid_Core_V1_NotificationVerb? {
+        if identifier == UNNotificationDefaultActionIdentifier {
+            return .open
+        }
+        if identifier == doneActionID {
+            return .done
+        }
+        if identifier == snoozeActionID {
+            return .snoozeHour
+        }
+        return Int(identifier).flatMap { Centraid_Core_V1_NotificationVerb(rawValue: $0) }
+    }
+
+    static func notificationCategories(
+        from categories: [Centraid_Core_V1_NotificationCategory]
+    ) -> [UNNotificationCategory] {
+        var byID: [String: UNNotificationCategory] = [:]
+        var doneTitle = KitWords.DONE
+        var snoozeTitle = "Snooze"
+
+        for item in categories {
+            for action in item.actions {
+                if action.verb == .done, !action.label.isEmpty { doneTitle = action.label }
+                if action.verb == .snoozeHour, !action.label.isEmpty { snoozeTitle = action.label }
+            }
+            byID[item.categoryID] = category(item)
+        }
+
+        let defaultSpecs: [(String, [UNNotificationAction])] = [
+            (
+                taskCategoryID,
+                [
+                    UNNotificationAction(identifier: doneActionID, title: doneTitle, options: []),
+                    UNNotificationAction(identifier: snoozeActionID, title: snoozeTitle, options: []),
+                ]
+            ),
+            (eventCategoryID, [UNNotificationAction(identifier: snoozeActionID, title: snoozeTitle, options: [])]),
+            (personCategoryID, [UNNotificationAction(identifier: snoozeActionID, title: snoozeTitle, options: [])]),
+            (lockerItemCategoryID, [UNNotificationAction(identifier: snoozeActionID, title: snoozeTitle, options: [])]),
+        ]
+
+        for (id, actions) in defaultSpecs where byID[id] == nil {
+            byID[id] = UNNotificationCategory(identifier: id, actions: actions, intentIdentifiers: [], options: [])
+        }
+        return byID.values.sorted { $0.identifier < $1.identifier }
+    }
+
+    private static func category(_ category: Centraid_Core_V1_NotificationCategory) -> UNNotificationCategory {
+        // No `.foreground` and no `.authenticationRequired`: actions run in the background from the
+        // lock screen without unlocking (#1188, NA4), and every write is reversible via Undo.
+        // Only task alerts allow Done (app-plane.md §9).
+        let canDone = allowsDone(forCategoryID: category.categoryID)
+        let actions = category.actions
+            .filter { canDone || $0.verb != .done }
+            .map { action in
+                UNNotificationAction(
+                    identifier: actionIdentifier(for: action.verb),
+                    title: action.label,
+                    options: []
+                )
+            }
         return UNNotificationCategory(identifier: category.categoryID, actions: actions, intentIdentifiers: [], options: [])
     }
 
@@ -159,7 +228,15 @@ enum Notifications {
         content.categoryIdentifier = item.categoryID
         content.threadIdentifier = item.threadID
         content.sound = .default
-        content.userInfo = [idKey: item.notificationID, fingerprintKey: item.sourceFingerprint]
+        content.userInfo = [
+            idKey: item.notificationID,
+            fingerprintKey: item.sourceFingerprint,
+            entityIDKey: item.entityID,
+            dateIDKey: item.dateID,
+            fieldIDKey: item.fieldID,
+            channelIDKey: item.channelID,
+            openURLKey: item.openURL,
+        ]
 
         var trigger: UNNotificationTrigger?
         if !item.immediate {
@@ -193,16 +270,26 @@ enum Notifications {
     /// arrived as. A tap on the notification itself is the default action and means open.
     /// A COLD LAUNCH FROM A NOTIFICATION has no store yet: opening the vaults is `ShellModel`'s
     /// (touched here), and the answer waits a bounded time for the store, as a background window does.
-    @MainActor static func answered(id: String, action: String) async {
-        let verb: Centraid_Core_V1_NotificationVerb?
-        if action == UNNotificationDefaultActionIdentifier {
-            verb = .open
-        } else {
-            verb = Int(action).flatMap { Centraid_Core_V1_NotificationVerb(rawValue: $0) }
+    @MainActor static func answered(
+        id: String,
+        action: String,
+        entityID: String = "",
+        dateID: String = "",
+        fieldID: String = "",
+        openURL: String = ""
+    ) async {
+        guard let verb = verb(forActionIdentifier: action) else { return }
+        if verb == .open, !openURL.isEmpty, let url = URL(string: openURL) {
+            ShellModel.shared.handleOpenURL(url)
+            return
         }
-        guard let verb else { return }
-        // Persist the upstream idempotent press before cold startup can suspend this callback.
-        let press = NotificationOutbox.add(notificationID: id, verb: verb.rawValue)
+        let press = NotificationOutbox.add(
+            notificationID: id,
+            verb: verb.rawValue,
+            entityID: entityID,
+            dateID: dateID,
+            fieldID: fieldID
+        )
         NotificationStartupTrace.mark(.shellModelTouchStarted)
         _ = ShellModel.shared
         NotificationStartupTrace.mark(.shellModelTouched)
@@ -212,14 +299,73 @@ enum Notifications {
             return
         }
         NotificationStartupTrace.mark(.storeWaitCompleted)
+        if !entityID.isEmpty, let proto = press.proto() {
+            await sendPresses([proto], core: store.notifyCore)
+        }
         let matched = await store.answerNotification(id: id, verb: verb, pressID: press.pressID)
         NotificationStartupTrace.mark(.answerReturned, succeeded: matched)
         if matched { NotificationOutbox.remove(press.pressID) }
     }
 
-    /// Replay every persisted press through its original idempotency key. A startup failure
-    /// or callback expiry leaves it in the outbox; only its exact terminal schedule removes it.
+    @MainActor static func launch(core: any ScreenCore) async {
+        var launched = Centraid_Core_V1_NotifyLaunched()
+        launched.pendingCap = pendingCap
+        launched.zone = TimeZone.current.identifier
+        launched.locale = Locale.current.identifier
+        var notifyReq = Centraid_Core_V1_NotifyRequest()
+        notifyReq.kind = .launched(launched)
+        await applyNotify(notifyReq, core: core)
+    }
+
+    @MainActor static func askPermission(core: any ScreenCore) async {
+        var notifyReq = Centraid_Core_V1_NotifyRequest()
+        notifyReq.kind = .askPermission(Centraid_Core_V1_NotifyAskPermission())
+        await applyNotify(notifyReq, core: core)
+    }
+
+    @MainActor static func sendPresses(_ items: [Centraid_Core_V1_NotifyPress], core: any ScreenCore) async {
+        guard !items.isEmpty else { return }
+        var presses = Centraid_Core_V1_NotifyPresses()
+        presses.items = items
+        var notifyReq = Centraid_Core_V1_NotifyRequest()
+        notifyReq.kind = .presses(presses)
+        await applyNotify(notifyReq, core: core)
+    }
+
+    @MainActor static func applyScheduleAndReport(_ set: Centraid_Core_V1_ScheduleNotifications, core: any ScreenCore) async {
+        let scheduled = await schedule(set)
+        var notifyReq = Centraid_Core_V1_NotifyRequest()
+        notifyReq.kind = .scheduled(scheduled)
+        var request = Centraid_Core_V1_Request()
+        request.kind = .notify(notifyReq)
+        _ = try? await core.call(request)
+    }
+
+    @MainActor private static func applyNotify(_ notifyReq: Centraid_Core_V1_NotifyRequest, core: any ScreenCore) async {
+        var request = Centraid_Core_V1_Request()
+        request.kind = .notify(notifyReq)
+        guard let response = try? await core.call(request),
+              case .notify(let answer)? = response.kind
+        else { return }
+        for result in answer.results {
+            switch result.outcome {
+            case .applied, .already, .expired:
+                NotificationOutbox.remove(result.id)
+            case .refused, .unspecified, .UNRECOGNIZED:
+                break
+            }
+        }
+        if answer.hasSchedule {
+            await applyScheduleAndReport(answer.schedule, core: core)
+        }
+    }
+
     @MainActor static func drain(_ store: ScreenStore) async {
+        let pending = NotificationOutbox.pending()
+        let protoPresses = pending.filter { !$0.entityID.isEmpty }.compactMap { $0.proto() }
+        if !protoPresses.isEmpty {
+            await sendPresses(protoPresses, core: store.notifyCore)
+        }
         for press in NotificationOutbox.pending() {
             guard let verb = Centraid_Core_V1_NotificationVerb(rawValue: press.verb) else {
                 NotificationOutbox.remove(press.pressID)
@@ -259,8 +405,20 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Se
         NotificationStartupTrace.mark(.callbackEntered)
         let id = response.notification.request.identifier
         let action = response.actionIdentifier
+        let userInfo = response.notification.request.content.userInfo
+        let entityID = userInfo["notification_entity_id"] as? String ?? ""
+        let dateID = userInfo["notification_date_id"] as? String ?? ""
+        let fieldID = userInfo["notification_field_id"] as? String ?? ""
+        let openURL = userInfo["notification_open_url"] as? String ?? ""
         NotificationHandoff.perform(answer: {
-            await Notifications.answered(id: id, action: action)
+            await Notifications.answered(
+                id: id,
+                action: action,
+                entityID: entityID,
+                dateID: dateID,
+                fieldID: fieldID,
+                openURL: openURL
+            )
         }, completion: {
             NotificationStartupTrace.mark(.callbackCompleted)
             completionHandler()

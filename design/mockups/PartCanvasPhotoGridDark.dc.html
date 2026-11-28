@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Canvas: photo grid (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div data-theme="dark" style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Canvas: photo grid</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">The justified grid of library photos, by year, month or all.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">JUSTIFIED ROWS</div>
+  <div>
+    <!-- variant:grid -->
+    <div style="display: flex; gap: 2px; height: 140px;">
+      <a data-keep href="PhotoViewerDark.dc.html" aria-label="Photo, Morning walk before work, 07:48" style="display: block; width: 140px; flex-shrink: 0; background: linear-gradient(170deg, #B9D3A0, #5F8F4A 55%, #3E6B36);"></a>
+      <div data-keep role="img" aria-label="Live photo, 12:10" style="position: relative; width: 108px; flex-shrink: 0; background: linear-gradient(160deg, #F2C9A0, #D9784E 60%, #A84A3A);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="2" aria-hidden="true" style="position: absolute; left: 6px; top: 6px;"><circle cx="12" cy="12" r="3"></circle><circle cx="12" cy="12" r="7" stroke-dasharray="2 2.4"></circle></svg>
+      </div>
+      <div data-keep role="img" aria-label="Photo, 18:05" style="flex-grow: 1; background: linear-gradient(180deg, #F0B86A, #C46A4A 50%, #4A3F66);"></div>
+    </div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">ZOOM CONTROL</div>
+  <div>
+    <!-- variant:zoom -->
+    <div style="position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%); height: 36px; padding: 3px; box-sizing: border-box; border-radius: 18px; border: 1px solid var(--glass-bar); background: var(--glass-bar); box-shadow: 0 6px 20px var(--shadow-card); display: flex; gap: 2px; font-size: 13px;" role="radiogroup" aria-label="Zoom">
+      <button data-slot="t0" role="radio" aria-checked="false" style="border: none; background: none; border-radius: 15px; padding: 0 14px; color: var(--text-meta);">Years</button>
+      <button data-slot="t1" role="radio" aria-checked="false" style="border: none; background: none; border-radius: 15px; padding: 0 14px; color: var(--text-meta);">Months</button>
+      <button data-slot="t2" role="radio" aria-checked="true" style="border: none; background: var(--surface-card); border-radius: 15px; padding: 0 18px; color: var(--text-ink); font-weight: 600;">All</button>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

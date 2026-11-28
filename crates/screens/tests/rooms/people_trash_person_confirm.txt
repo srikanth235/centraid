@@ -1,0 +1,4 @@
+room sheet key="person/01900000-0000-7000-8000-000000000010/trash-confirm"
+  header title="Move to trash"
+  ready
+    confirm outlined "Move Priya Nair to trash?" body="2 catch-ups with only Priya Nair move to trash too. Notes, events, photos, payments and docs stay." yes="Move to trash"#confirm/yes no="Cancel"#confirm/no

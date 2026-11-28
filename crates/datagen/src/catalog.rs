@@ -1,9 +1,9 @@
 //! STAGE 0, THE CATALOG: the only schema the pipeline reads.
 //!
 //! Nothing here is a second copy of what the runtime knows. Kinds, fields, fixed-list values,
-//! links and verbs come from `centraid_assist::native::meta` (itself generated from the app
-//! manifests, `crates/assist/build.rs`); the app that owns a kind comes from the manifest that
-//! declares it; the stock category and workout-kind lists are read out of the founding schema,
+//! links and verbs come from `centraid_assist::native::meta` (itself generated from
+//! `crates/domain`'s chat kinds and actions, `crates/assist/build.rs`); the app that owns a kind is
+//! the one that declares it; the stock category and workout-kind lists are read out of the founding schema,
 //! `contracts/migrations/001_baseline.sql`. What this file adds is what the runtime does not
 //! state: each `do` verb's argument class (the #1166 table), the new eight-tool surface and the
 //! compute ops the pipeline will plan, each marked `live` while the runtime does not run it yet.
@@ -12,7 +12,6 @@
 use std::collections::BTreeMap;
 
 use centraid_assist::native::meta::{self, FieldType, KINDS, VERBS};
-use centraid_nativetools::export::manifests;
 use serde::Serialize;
 
 /// The founding schema, whose concept rows state the stock category and workout-kind lists.
@@ -46,10 +45,13 @@ const VERB_CLASSES: &[(&str, ArgClass)] = &[
     ("reschedule", ArgClass::Date),
     ("add_to", ArgClass::Row),
     ("remove_from", ArgClass::Row),
+    ("link", ArgClass::Row),
     ("tag", ArgClass::Label),
     ("untag", ArgClass::Label),
+    ("categorize", ArgClass::Label),
     ("log", ArgClass::Choice),
     ("reveal", ArgClass::Choice),
+    ("respond", ArgClass::Choice),
 ];
 
 /// Verbs that are tools of their own (`create`, `edit`), not `do` verbs.
@@ -155,43 +157,33 @@ pub enum CatalogError {
     UnownedKind(String),
 }
 
-fn stock_list(prefix: &str) -> Vec<String> {
-    let mut found = Vec::new();
+/// The stock rows of the founding schema that start with `prefix`: `(key, title)`, in the order
+/// the schema seeds them. A row reads `('category:food.dining', 'category', 'Dining out', 'category:food'),`.
+fn stock_rows(prefix: &str) -> Vec<(String, String)> {
+    let mut found: Vec<(String, String)> = Vec::new();
     for line in BASELINE.lines() {
-        // Concept rows read `('category:food.dining', 'category', 'food.dining', 'category:food')`;
-        // the title rows beside them carry a display title and two stamps instead.
-        let Some(rest) = line.trim().strip_prefix("('") else {
+        if !line.trim().starts_with("('") {
             continue;
-        };
-        let Some((id, tail)) = rest.split_once("', '") else {
-            continue;
-        };
-        let Some(key) = id.strip_prefix(prefix) else {
-            continue;
-        };
-        if tail.contains(&format!("', '{key}'")) && !found.iter().any(|k| k == key) {
-            found.push(key.to_owned());
+        }
+        // The quoted words of the row, in order: `id`, `kind`, `title`, `parent`.
+        let fields: Vec<&str> = line.split('\'').skip(1).step_by(2).collect();
+        if let [id, _, title, ..] = fields.as_slice()
+            && let Some(key) = id.strip_prefix(prefix)
+            && !found.iter().any(|(known, _)| known == key)
+        {
+            found.push((key.to_owned(), (*title).to_owned()));
         }
     }
     found
 }
 
-/// `key -> title` of the stock concepts under `prefix`: the title rows of the founding schema read
-/// `('category:food.groceries', 'category', 'Groceries', <stamp>, <stamp>)`.
+fn stock_list(prefix: &str) -> Vec<String> {
+    stock_rows(prefix).into_iter().map(|(key, _)| key).collect()
+}
+
+/// `key -> title` of the stock concepts under `prefix`.
 fn stock_titles(prefix: &str) -> BTreeMap<String, String> {
-    let mut found = BTreeMap::new();
-    for line in BASELINE.lines() {
-        let Some(rest) = line.trim().strip_prefix("('") else {
-            continue;
-        };
-        let fields: Vec<&str> = rest.split("', '").collect();
-        if let [id, _, title, _, _] = fields.as_slice()
-            && let Some(key) = id.strip_prefix(prefix)
-        {
-            found.insert(key.to_owned(), (*title).to_owned());
-        }
-    }
-    found
+    stock_rows(prefix).into_iter().collect()
 }
 
 impl Catalog {
@@ -201,15 +193,15 @@ impl Catalog {
     ///
     /// If the verb table and the runtime disagree, or a kind has no owning app.
     pub fn build() -> Result<Self, CatalogError> {
-        let manifests = manifests();
-        let apps: Vec<String> = manifests.iter().map(|(app, _)| (*app).to_owned()).collect();
+        let mut apps: Vec<String> = Vec::new();
+        for spec in KINDS {
+            if !apps.iter().any(|app| app == spec.app) {
+                apps.push(spec.app.to_owned());
+            }
+        }
         let mut kinds = Vec::new();
         for spec in KINDS {
-            let owner = manifests
-                .iter()
-                .find(|(_, manifest)| manifest.kinds.iter().any(|k| k.name == spec.name))
-                .map(|(app, _)| (*app).to_owned())
-                .ok_or_else(|| CatalogError::UnownedKind(spec.name.to_owned()))?;
+            let owner = spec.app.to_owned();
             kinds.push(Kind {
                 name: spec.name.to_owned(),
                 plural: spec.plural.to_owned(),
@@ -271,6 +263,10 @@ impl Catalog {
             let choices = match spec.name {
                 "log" => meta::LOG_KINDS.iter().map(|c| (*c).to_owned()).collect(),
                 "reveal" => sealed.clone(),
+                "respond" => ["accepted", "declined", "tentative"]
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
                 _ => Vec::new(),
             };
             verbs.push(Verb {

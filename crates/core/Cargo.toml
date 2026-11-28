@@ -21,50 +21,18 @@ default = []
 debug-fault = []
 
 [dependencies]
+centraid-domain = { path = "../domain" }
 centraid-api-proto = { path = "../api-proto" }
-# LOCKER'S PHONE LOADERS (#1047 L1): `app_query::locker` asks
-# `centraid_apps_locker::phone` for the list, the item and the counts.
-centraid-apps-locker = { path = "../apps/locker" }
-# MONEY'S PHONE ANSWERS, import plan and Home's tile (#1099): `app_query::money`.
-centraid-apps-money = { path = "../apps/money" }
-# Health (#1129): today, series, trends and workouts, folded in the app crate (R-1129-12).
-centraid-apps-health = { path = "../apps/health" }
-# A LOCKER ONE-TIME CODE (#1047, Q-1047-16): RFC 6238 is HMAC-SHA-1, fixed by
-# the specification every authenticator shares. Used by `locker::phone` alone,
-# over a seed opened under `K` after the code's receipt lands; see the
-# workspace manifest's note beside `sha1`.
-hmac.workspace = true
 # The manifest's input schemas, which `act` validates an input against (#1135).
 jsonschema.workspace = true
-sha1.workspace = true
-# THE APP QUERIES THE PHONE ASKS FOR BY NAME (#1046). Agenda's `upcoming` joins
-# six-plus tables and expands every series through the one recurrence engine,
-# so it runs HERE, over the page door, and a shell draws its typed answer —
-# rather than a second engine in each shell (D-1020-S1). `app_query` is the one
-# module that reaches it.
-centraid-apps-calendar = { path = "../apps/calendar" }
-centraid-apps-reminders = { path = "../apps/reminders" }
-# Tasks' board, one task, projects, search and catch-up (#1046): the families,
-# the recurrence collapse and every civil reading run here, over the page door.
-# Docs' drive, search, document and activity (#1046), the same way.
-centraid-apps-docs = { path = "../apps/docs" }
-# People's five phone queries (#1046) — the roster, Touch, the sheet, search and
-# the trash shelf — answered the way Agenda's are, through `app_query`.
-centraid-apps-people = { path = "../apps/people" }
-# Notes' folds, for the `notes_*` app-query arms (#1046).
-centraid-apps-notes = { path = "../apps/notes" }
-# Photos' own search (#1097, R-1097-25..27): the photographs the full-text door
-# names, opened as live assets.
-centraid-apps-photos = { path = "../apps/photos" }
-# The door an app crate reads through (`PageDoor`), and the rows it answers.
-centraid-apps-kit = { path = "../apps/kit" }
 # THE ON-DEVICE CHAT PLANE: the native tool runtime, its turn loop, the attached
 # and free replies and the `Model` trait an engine implements. It holds no
 # vault; this crate gives it one through `assist::door::CoreDoor`.
 centraid-assist = { path = "../assist" }
-# THE FTS DOOR, for the app queries' search. It owns every `MATCH` in the workspace and
+# THE FTS DOOR, for the chat threads' search. It owns every `MATCH` in the workspace and
 # takes a connection; the core hands it `Vault::read`'s, and writes no SQL.
 centraid-search = { path = "../search" }
+rand.workspace = true
 # THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a
 # core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
 # door and this is the crate that has both halves in scope.
@@ -118,6 +86,7 @@ prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+zeroize = "1"
 tracing.workspace = true
 
 [dev-dependencies]

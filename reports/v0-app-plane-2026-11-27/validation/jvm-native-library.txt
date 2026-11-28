@@ -1,0 +1,9 @@
+Host FFI rebuilt with the Photos owner-ref source changes committed alongside this receipt.
+
+Command: cargo xtask gate --profile mobile-jvm (includes cargo build -p centraid-core-ffi).
+Result: PASS. Library: target/debug/libcentraid_core_ffi.so
+SHA-256: 4da92af2ba99d0d33cc81e3fddee58c4693860b04d664d7035cb579310fc20e4
+
+Fresh ABI run: gradle -p mobile :core:jvmTest --rerun-tasks --no-build-cache --no-daemon
+Result: 40 tests, 0 failures/errors/skips across 10 JUnit suites. Every Gradle task was executed; no test-cache pass is claimed.
+Log: /tmp/centraid-jvm-photo-final-rerun.txt

@@ -22,10 +22,21 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 abi="${1:-arm64-v8a}"
-api="${CENTRAID_ANDROID_API:-35}"
+api="${CENTRAID_ANDROID_API:-24}"
 ndk_version="${CENTRAID_NDK:-27.0.12077973}"
 sdk="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
-toolchain="$sdk/ndk/$ndk_version/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+host_os="$(uname -s)"
+host_arch="$(uname -m)"
+case "$host_os:$host_arch" in
+  Linux:x86_64) host_tag=linux-x86_64 ;;
+  Darwin:arm64)
+    host_tag=darwin-arm64
+    [ -d "$sdk/ndk/$ndk_version/toolchains/llvm/prebuilt/$host_tag" ] || host_tag=darwin-x86_64
+    ;;
+  Darwin:x86_64) host_tag=darwin-x86_64 ;;
+  *) echo "unsupported Android NDK host: $host_os/$host_arch" >&2; exit 1 ;;
+esac
+toolchain="$sdk/ndk/$ndk_version/toolchains/llvm/prebuilt/$host_tag/bin"
 
 case "$abi" in
   arm64-v8a) triple=aarch64-linux-android; cc_prefix=aarch64-linux-android ;;

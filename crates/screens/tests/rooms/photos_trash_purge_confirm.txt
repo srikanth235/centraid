@@ -1,0 +1,4 @@
+room sheet key="photos/trash/purge/01900000-0000-7000-8000-000000003020"
+  header title="Delete this photo forever?"
+  ready
+    confirm outlined "Delete this photo forever?" body="Erased from this phone now. Copies on your backup devices go when old backups age out. This cannot be undone." warning="This photo isn't backed up yet. No backup device can bring it back." yes="Delete forever"#confirm/yes no="Cancel"#confirm/no

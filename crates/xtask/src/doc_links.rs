@@ -1,5 +1,5 @@
-//! `doc-links` — every relative link and in-repo anchor in the repository's
-//! markdown resolves (Q-1005-1, the owner's ruling of 2026-10-15).
+//! `doc-links` — every relative link, in-repo anchor, and backticked repository path in the
+//! repository's markdown resolves (Q-1005-1, the owner's ruling of 2026-10-15).
 //!
 //! "Docs are load-bearing: stale docs are bugs, broken internal links are
 //! bugs" — and the second half is decidable, so it is a gate.
@@ -9,6 +9,13 @@
 //! or `src` in embedded HTML, that is not an external URL. The file part must
 //! be a file or directory git knows about; the `#fragment` part, when the target
 //! is markdown, must be a heading's GitHub slug or an explicit `id`/`name`.
+//! Backticked repo-rooted and crate-relative paths (for example
+//! `crates/core/src/lib.rs` or `src/lib.rs` in a crate README) must also name a file or directory
+//! git knows about; trailing line-number citations are allowed. A `(target)` mark permits a
+//! not-yet-built path. Documents whose first lines identify them as historical are retained as
+//! records and their backticked path citations are not required to match today's tree.
+//! Backticked path examples inside security skills copied verbatim from upstream are interpreted
+//! using the generated security `INDEX.md` provenance; their Markdown links remain checked.
 //! Files are taken from `git ls-files` (tracked, plus untracked and not
 //! ignored), not from the disk: a link to a file git ignores resolves on this
 //! machine and 404s everywhere else, and a case difference resolves on macOS
@@ -25,8 +32,10 @@
 //! phrase around it. It stays a reviewer's principle.
 //!
 //! **What it skips, and why.** Only the append-only record, where a finding
-//! could never be fixed: `QUALITY.md`'s "Resolved" section (its links point at
-//! code that has since gone, which is what such a record looks like).
+//! could never be fixed: `QUALITY.md`'s "Resolved" section. Backticked paths in
+//! verbatim security skill copies are also not local citations: the generated
+//! security index records their upstream repository and commit. Links in those
+//! skills are still checked, including links rewritten to upstream URLs.
 //!
 //! None of this is an allowlist of findings. Links *into* a frozen section are
 //! still checked, and every skip is named in the step's own line so it is not
@@ -263,6 +272,7 @@ pub fn check_files(
         }
     }
     let mut anchors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut vendored_sources = BTreeSet::new();
     let mut report = Report {
         skipped: exclusions.describe(),
         ..Report::default()
@@ -271,6 +281,47 @@ pub fn check_files(
         let Some(text) = read(file) else { continue };
         report.files += 1;
         let frozen = exclusions.frozen_lines(file, &text);
+        let historical = text
+            .lines()
+            .take(8)
+            .any(|line| line.to_ascii_lowercase().contains("historical:"));
+        let vendored_source = synced_security_source(file, read);
+        if let Some(source) = &vendored_source {
+            vendored_sources.insert(source.clone());
+        }
+        let mut in_comment = false;
+        for (line, source) in prose_lines(&text) {
+            if historical {
+                break;
+            }
+            if frozen
+                .iter()
+                .any(|(from, to)| (*from..=*to).contains(&line))
+            {
+                continue;
+            }
+            let visible = strip_comments(source, &mut in_comment);
+            let marked_target = visible.contains("(target)");
+            for path in backticked_paths(&visible) {
+                if vendored_source.is_some() {
+                    continue;
+                }
+                let Some(target) = repository_path(file, &path, files, &directories) else {
+                    continue;
+                };
+                if !marked_target
+                    && !files.contains(&target)
+                    && !directories.contains(target.as_str())
+                {
+                    report.findings.push(Finding {
+                        file: file.clone(),
+                        line,
+                        dest: path,
+                        why: format!("{target} does not exist in the repository"),
+                    });
+                }
+            }
+        }
         for link in extract(&text) {
             if frozen
                 .iter()
@@ -333,7 +384,160 @@ pub fn check_files(
             }
         }
     }
+    if !vendored_sources.is_empty() {
+        let citations = vendored_sources.into_iter().collect::<Vec<_>>().join(", ");
+        let note = format!(
+            "backticked path examples in synced security sources ({citations}); Markdown links remain checked"
+        );
+        report.skipped = [report.skipped, note]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(", ");
+    }
     report
+}
+
+/// Return source provenance only for a skill path listed by the generated
+/// security index. This preserves verbatim upstream examples while keeping
+/// live repository docs under the normal path checks.
+fn synced_security_source(file: &str, read: &dyn Fn(&str) -> Option<String>) -> Option<String> {
+    let remainder = file.strip_prefix(".claude/skills/stack/security/general/")?;
+    let mut parts = remainder.split('/');
+    let upstream = parts.next()?;
+    let skill = parts.next()?;
+    if !matches!(upstream, "getsentry" | "trailofbits") {
+        return None;
+    }
+    let index = read(".claude/skills/stack/security/general/INDEX.md")?;
+    let source_prefix = match upstream {
+        "getsentry" => "Source: https://github.com/getsentry/skills at `",
+        "trailofbits" => "Source: https://github.com/trailofbits/skills at `",
+        _ => return None,
+    };
+    let section = index.split(&format!("## {upstream}\n")).nth(1)?;
+    let source_line = section.lines().find(|line| line.starts_with("Source: "))?;
+    let commit = source_line.strip_prefix(source_prefix)?.split('`').next()?;
+    let indexed_skill = format!("({upstream}/{skill}/SKILL.md)");
+    section
+        .lines()
+        .any(|line| line.contains(&indexed_skill))
+        .then(|| format!("{upstream}@{commit}"))
+}
+
+/// Backticked inline-code spans, used for repository path citations in prose.
+fn backticked_paths(line: &str) -> Vec<String> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut paths = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] != '`' {
+            i += 1;
+            continue;
+        }
+        let run = chars[i..].iter().take_while(|c| **c == '`').count();
+        let start = i + run;
+        let mut j = start;
+        let mut close = None;
+        while j < chars.len() {
+            if chars[j] == '`' {
+                let length = chars[j..].iter().take_while(|c| **c == '`').count();
+                if length == run {
+                    close = Some(j);
+                    break;
+                }
+                j += length;
+            } else {
+                j += 1;
+            }
+        }
+        if let Some(end) = close {
+            let value: String = chars[start..end].iter().collect();
+            let after = end + run;
+            let is_link_label =
+                chars.get(after) == Some(&']') && chars.get(after + 1) == Some(&'(');
+            if value.contains('/') && !is_link_label {
+                paths.push(value);
+            }
+            i = end + run;
+        } else {
+            break;
+        }
+    }
+    paths
+}
+
+/// A path citation that looks repository-rooted, normalized for an optional line suffix.
+fn repository_path(
+    markdown_file: &str,
+    value: &str,
+    files: &BTreeSet<String>,
+    directories: &BTreeSet<&str>,
+) -> Option<String> {
+    let mut value = value.trim().trim_end_matches([',', ';', ')', ']', '}']);
+    if let Some((path, line)) = value.rsplit_once(':') {
+        let line_number = line.split_once('-').map_or(line, |(first, _)| first);
+        if !line_number.is_empty() && line_number.chars().all(|c| c.is_ascii_digit()) {
+            value = path;
+        }
+    }
+    if let Some(rest) = value.strip_prefix("/workspace/centraid/") {
+        value = rest;
+    } else if value.starts_with('/') {
+        return None;
+    }
+    value = value.strip_prefix("./").unwrap_or(value);
+    value = value.trim_end_matches('/');
+    let value = value.split('#').next().unwrap_or(value);
+    if value.is_empty()
+        || value.chars().any(char::is_whitespace)
+        || value.contains(['*', '?', '[', ']', '{', '}', '<', '>'])
+        || value.contains("...")
+        || value.contains("::")
+    {
+        return None;
+    }
+    let root = value.split('/').next()?;
+    let known_root = files
+        .iter()
+        .any(|file| file.starts_with(&format!("{root}/")))
+        || directories
+            .iter()
+            .any(|directory| *directory == root || directory.starts_with(&format!("{root}/")));
+    let package_relative_root = matches!(root, "src" | "tests" | "test" | "include" | "benches");
+    if known_root && !package_relative_root {
+        return Some(value.to_owned());
+    }
+    let parent = markdown_file
+        .rsplit_once('/')
+        .map_or("", |(parent, _)| parent);
+    let local = if parent.is_empty() {
+        value.to_owned()
+    } else {
+        format!("{parent}/{value}")
+    };
+    if files.contains(&local) || directories.contains(local.as_str()) {
+        return Some(local);
+    }
+    let suffix = format!("/{value}");
+    if let Some(existing) = files
+        .iter()
+        .map(String::as_str)
+        .find(|file| file.ends_with(&suffix))
+        .or_else(|| {
+            directories
+                .iter()
+                .copied()
+                .find(|dir| dir.ends_with(&suffix))
+        })
+    {
+        return Some(existing.to_owned());
+    }
+    let crate_relative = package_relative_root;
+    let crate_doc = markdown_file.starts_with("crates/")
+        || markdown_file.starts_with("mobile/")
+        || markdown_file.starts_with("scripts/");
+    (crate_relative && crate_doc).then_some(local)
 }
 
 /// A scheme (`https:`, `mailto:`) or a protocol-relative `//`.
@@ -971,6 +1175,120 @@ mod tests {
             report.findings[0].why
         );
         assert_eq!(report.links, 2);
+    }
+
+    #[test]
+    fn a_missing_backticked_repo_path_is_a_finding_with_line_suffix_allowed() {
+        let report = run(&[
+            (
+                "docs/a.md",
+                "See `crates/missing/src/lib.rs:17` and `ordinary words/are not paths`.\n",
+            ),
+            ("crates/domain/src/lib.rs", ""),
+        ]);
+        assert_eq!(
+            broken(&report),
+            [(
+                "docs/a.md".to_owned(),
+                1,
+                "crates/missing/src/lib.rs:17".to_owned()
+            )]
+        );
+        assert!(report.findings[0].why.contains("crates/missing/src/lib.rs"));
+    }
+
+    #[test]
+    fn absolute_external_paths_and_placeholder_examples_are_not_repo_paths() {
+        let report = run(&[(
+            "docs/a.md",
+            "A local script writes `/data/local/tmp/run.json`; see `mobile/core/.../Bridge.kt`.\n",
+        )]);
+        assert!(report.findings.is_empty(), "{:?}", report.findings);
+    }
+
+    #[test]
+    fn backticked_paths_in_fences_and_comments_are_not_checked() {
+        let report = run(&[
+            (
+                "docs/a.md",
+                "```\n`crates/missing/file.rs`\n```\n<!-- `crates/missing/file.rs` -->\n",
+            ),
+            ("crates/domain/src/lib.rs", ""),
+        ]);
+        assert!(report.findings.is_empty(), "{:?}", report.findings);
+    }
+
+    #[test]
+    fn a_missing_backticked_path_marked_as_target_is_allowed() {
+        let report = run(&[(
+            "docs/a.md",
+            "The future reader is `crates/new/src/lib.rs` (target).\n",
+        )]);
+        assert!(report.findings.is_empty(), "{:?}", report.findings);
+    }
+
+    #[test]
+    fn existing_crate_relative_backticked_paths_resolve_from_the_document() {
+        let report = run(&[
+            ("crates/assist/README.md", "See `src/native.rs`.\n"),
+            ("crates/assist/src/native.rs", ""),
+        ]);
+        assert!(report.findings.is_empty(), "{:?}", report.findings);
+    }
+
+    #[test]
+    fn a_backticked_path_link_label_uses_its_link_destination_check() {
+        let report = run(&[
+            ("docs/a.md", "See [`src/old_name.rs`](b.md).\n"),
+            ("docs/b.md", ""),
+        ]);
+        assert!(report.findings.is_empty(), "{:?}", report.findings);
+    }
+
+    #[test]
+    fn vendored_security_examples_use_index_provenance_but_links_are_checked() {
+        let report = run(&[
+            (
+                ".claude/skills/stack/security/general/INDEX.md",
+                "## getsentry\nSource: https://github.com/getsentry/skills at `a582c51ee29d`, Apache-2.0.\n| [gha-security-review](getsentry/gha-security-review/SKILL.md) | audit workflows |\n",
+            ),
+            (
+                ".claude/skills/stack/security/general/getsentry/gha-security-review/SKILL.md",
+                "",
+            ),
+            (
+                ".claude/skills/stack/security/general/getsentry/gha-security-review/references/pwn-request.md",
+                "The upstream example modifies `.github/actions/setup-go/action.yaml`. See [a local note](missing.md).\n",
+            ),
+            (
+                "docs/live.md",
+                "Centraid does not have `.github/actions/setup-go/action.yaml`.\n",
+            ),
+            (".github/workflows/gate.yml", ""),
+        ]);
+        assert_eq!(
+            broken(&report),
+            [(
+                ".claude/skills/stack/security/general/getsentry/gha-security-review/references/pwn-request.md".to_owned(),
+                1,
+                "missing.md".to_owned(),
+            ), (
+                "docs/live.md".to_owned(),
+                1,
+                ".github/actions/setup-go/action.yaml".to_owned(),
+            )]
+        );
+        assert!(report.skipped.contains("getsentry@a582c51ee29d"));
+        assert!(report.skipped.contains("Markdown links remain checked"));
+    }
+
+    #[test]
+    fn historical_documents_keep_old_path_citations_as_record() {
+        let report = run(&[(
+            "docs/archive.md",
+            "# Historical: old tree\n\nThe former file was `crates/removed/src/lib.rs`.\n",
+        )]);
+        assert!(report.findings.is_empty(), "{:?}", report.findings);
     }
 
     #[test]

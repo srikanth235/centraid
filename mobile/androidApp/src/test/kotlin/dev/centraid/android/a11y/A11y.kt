@@ -56,7 +56,7 @@ internal object A11y {
             c.contains(SemanticsActions.SetText)
     }
 
-    private fun SemanticsNode.hidden(): Boolean = config.contains(SemanticsProperties.InvisibleToUser)
+    private fun SemanticsNode.hidden(): Boolean = config.contains(SemanticsProperties.HideFromAccessibility)
 
     /** Every node under this one that a reader can reach: what hangs under a hidden node is hidden with it. */
     private fun SemanticsNode.walk(into: MutableList<SemanticsNode>) {

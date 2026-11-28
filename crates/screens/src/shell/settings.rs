@@ -398,18 +398,6 @@ impl Settings {
                             download.pressable = true;
                             download
                         },
-                        // THE STORES THE VAULT FOLLOWED ON ANOTHER PHONE, offered again (#1185).
-                        row(
-                            "reconnect",
-                            words::settings_reconnect(locale),
-                            String::new(),
-                            "Backup",
-                            Some(crate::follow::reconnect::route(&words::settings_title(
-                                locale,
-                            ))),
-                            "neutral",
-                            String::new(),
-                        ),
                         // EVERYTHING BUT LOCKER as one archive: the kit's export page, behind the owner
                         // check (#1185).
                         row(

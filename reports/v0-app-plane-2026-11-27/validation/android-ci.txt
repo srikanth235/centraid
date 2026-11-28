@@ -1,0 +1,10 @@
+Hosted Android CI limitation (read-only diagnosis)
+
+Workflow run: `46031385998` (gate, PR #1215)
+Source commit: `53311bea8b9318095de4a00ab23ddee1f47dc858`
+Android job: `140615784197`
+Roborazzi artifact: `15214138687` (`roborazzi-compare`, SHA-256 `79678b74a0be95bb5fe50fd04d1ca4af2182ea1b0370a9254489e0ef0b4aeb3f`)
+
+Result: Kotlin compilation and shared-fixture tests succeeded. The verify/unit step reports 212 tests, 1 failure, 2 skips. All block goldens (including `slot_band.png`, `slot_search.png`, and `slot_selection.png`) matched with zero pixel differences. The failure is `RoomBlockGoldensTest` while capturing `room_home`: `Roborazzi: The original file(/home/runner/work/centraid/centraid/mobile/androidApp/build/outputs/roborazzi/screens/room_home.png) was not found.` The artifact contains `room_home_actual.png` and a compare showing no reference image.
+
+This `captureScreen` path and `SCREEN_RENDERS_DIR = "build/outputs/roborazzi/screens"` were introduced in commit `7a6406d337547a8e34bae3d1b772f7df7bed8821` (2026-11-26), before the band tint change. There is no tracked screenshot reference at that path. The local full verify had passed only with existing ignored screen renders in the workspace; it is not evidence of a clean-checkout CI pass. No test/CI/golden checks were weakened and no unrelated source changes were made.

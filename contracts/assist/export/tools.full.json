@@ -238,9 +238,6 @@
           "cadence": {
             "type": "string"
           },
-          "card_number": {
-            "type": "string"
-          },
           "carry": {
             "type": "string"
           },
@@ -250,16 +247,10 @@
           "climb": {
             "type": "string"
           },
-          "code": {
-            "type": "string"
-          },
           "completed": {
             "type": "string"
           },
           "currency": {
-            "type": "string"
-          },
-          "cvv": {
             "type": "string"
           },
           "date": {
@@ -272,9 +263,6 @@
             "type": "string"
           },
           "duration": {
-            "type": "string"
-          },
-          "effort": {
             "type": "string"
           },
           "end": {
@@ -300,6 +288,9 @@
             "type": "string"
           },
           "list": {
+            "type": "string"
+          },
+          "match": {
             "type": "string"
           },
           "met": {
@@ -334,12 +325,6 @@
             "type": "string"
           },
           "opening_on": {
-            "type": "string"
-          },
-          "parent": {
-            "type": "string"
-          },
-          "password": {
             "type": "string"
           },
           "pinned": {
@@ -408,9 +393,6 @@
           "cadence": {
             "type": "string"
           },
-          "card_number": {
-            "type": "string"
-          },
           "carry": {
             "type": "string"
           },
@@ -420,16 +402,10 @@
           "climb": {
             "type": "string"
           },
-          "code": {
-            "type": "string"
-          },
           "completed": {
             "type": "string"
           },
           "currency": {
-            "type": "string"
-          },
-          "cvv": {
             "type": "string"
           },
           "date": {
@@ -442,9 +418,6 @@
             "type": "string"
           },
           "duration": {
-            "type": "string"
-          },
-          "effort": {
             "type": "string"
           },
           "end": {
@@ -466,6 +439,9 @@
             "type": "string"
           },
           "list": {
+            "type": "string"
+          },
+          "match": {
             "type": "string"
           },
           "met": {
@@ -500,12 +476,6 @@
             "type": "string"
           },
           "opening_on": {
-            "type": "string"
-          },
-          "parent": {
-            "type": "string"
-          },
-          "password": {
             "type": "string"
           },
           "pinned": {
@@ -592,6 +562,9 @@
               "undo",
               "tag",
               "untag",
+              "respond",
+              "categorize",
+              "link",
               "unlink",
               "archive",
               "unarchive"

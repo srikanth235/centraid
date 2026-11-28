@@ -20,43 +20,131 @@ fn plan(scratch: &common::Scratch, sql: &str, binds: &[&str]) -> String {
         .expect("a plan")
 }
 
-fn walks(plan: &str, index: &str) {
+#[test]
+fn a_viewport_is_one_rtree_query_joined_to_entity_by_its_key() {
+    let scratch = common::Scratch::founded("walk-geo").expect("a vault");
+    let plan = plan(
+        &scratch,
+        centraid_vault::index::VIEWPORT,
+        &["-10", "30", "35", "60", "100"],
+    );
     assert!(
-        plan.contains(&format!("INDEX {index}")),
-        "{index} is not used: {plan}"
+        plan.contains("VIRTUAL TABLE INDEX"),
+        "the R-tree is searched: {plan}"
+    );
+    assert!(
+        plan.contains("USING INTEGER PRIMARY KEY"),
+        "and `entity` is read by `n`, once per point: {plan}"
+    );
+    assert!(
+        !plan.contains("SCAN entity") && !plan.contains("SCAN e "),
+        "{plan}"
     );
     assert!(!plan.contains("TEMP B-TREE"), "the read sorts: {plan}");
 }
 
+/// A search reads the index file through the same connection: a MATCH on `search`, then each hit's
+/// row by `n`, the trash filter on the entity. No scan of the entity table, no sort of its own
+/// beyond the rank the index hands over.
 #[test]
-fn a_guests_address_finds_its_person_by_the_contact_point_index() {
-    let scratch = common::Scratch::founded("walk-contact").expect("a vault");
-    walks(
-        &plan(
-            &scratch,
-            centraid_vault::commands::event::PERSON_OF_EMAIL,
-            &["a@example.com"],
-        ),
-        "contact_point_by_value",
-    );
+fn a_search_is_a_match_joined_to_entity_by_its_key() {
+    let scratch = common::Scratch::founded("walk-search").expect("a vault");
+    let sql = "SELECT e.id FROM search s JOIN entity e ON e.n = s.rowid
+                WHERE search MATCH ?1 AND e.deleted_at IS NULL ORDER BY s.rank LIMIT 20";
+    let plan = plan(&scratch, sql, &["apple*"]);
+    assert!(plan.contains("VIRTUAL TABLE INDEX"), "{plan}");
+    assert!(plan.contains("USING INTEGER PRIMARY KEY"), "{plan}");
+    assert!(!plan.contains("SCAN entity"), "{plan}");
 }
 
-/// A category's plans are read by the primary key `(category_id, month)`, which the statement the
-/// merge of two categories runs seeks; no secondary index serves it. The reads of a month across
-/// categories (`budget_by_month`), the series (`event_by_rule`) and the newest statement line
-/// (`source_by_seen`) are app statements, so the vault cannot name them: their proofs plan the
-/// apps' own statements in `crates/core/tests/query_plans.rs` (`the_named_reads_walk_their_index`).
+/// The queue the idle pass reads: the whole-entity rows in `n` order, and a label's next piece. Both
+/// walk the key; neither sorts, so the cost of a batch is the batch.
 #[test]
-fn a_categorys_plans_are_a_seek_of_the_budget_key() {
-    let scratch = common::Scratch::founded("walk-budget").expect("a vault");
-    let per_category = plan(
-        &scratch,
-        centraid_vault::commands::money::PLANS_OF_CATEGORY,
-        &["category:food"],
-    );
-    assert!(
-        per_category.contains("SEARCH budget USING PRIMARY KEY"),
-        "{per_category}"
+fn the_owed_queue_is_read_in_key_order_without_a_sort() {
+    let scratch = common::Scratch::founded("walk-owed").expect("a vault");
+    for (sql, binds) in [
+        (
+            "SELECT n FROM search_owed WHERE after IS NULL ORDER BY n LIMIT ?1",
+            &["50"][..],
+        ),
+        (
+            "SELECT n, after FROM search_owed WHERE after IS NOT NULL ORDER BY n LIMIT 1",
+            &[][..],
+        ),
+    ] {
+        let plan = plan(&scratch, sql, binds);
+        assert!(plan.contains("search_owed"), "{plan}");
+        assert!(
+            !plan.contains("TEMP B-TREE"),
+            "the queue read sorts: {plan}"
+        );
+    }
+}
+
+/// BOUNDED BY CONSTRUCTION, ASSERTED ON ROWS: a batch of the idle pass changes the rows of at most
+/// `OWED_BATCH` entities, whatever is owed, and so a restored vault of any size is drained in
+/// pieces that never grow.
+#[test]
+fn an_idle_batch_changes_a_bounded_number_of_rows_however_much_is_owed() {
+    let scratch = common::Scratch::founded("walk-batch").expect("a vault");
+    let vault = &scratch.vault;
+    vault
+        .commit(|tx| {
+            for n in 0..400 {
+                common::add_person(
+                    tx,
+                    &vault.ids().next(),
+                    &format!("Person {n} walker"),
+                    "2020-01-01T00:00:00.000Z",
+                )?;
+            }
+            Ok(())
+        })
+        .expect("people");
+    // A pass of the commit's own wrote the first thousand; make the whole of it owed again, as a
+    // restore does.
+    vault
+        .read(|c| {
+            let _ = c;
+            Ok(())
+        })
+        .expect("reads");
+    vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO search_owed (n) SELECT n FROM entity WHERE true ON CONFLICT (n) DO NOTHING",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("owes everything");
+    let owed_before: i64 = vault
+        .read(|c| Ok(c.query_row("SELECT count(*) FROM search_owed", [], |r| r.get(0))?))
+        .expect("counts");
+    assert!(owed_before > 400);
+    let mut batches = 0;
+    loop {
+        let before = vault.read(|c| Ok(c.total_changes())).expect("changes");
+        let more = vault.reindex_owed().expect("a batch");
+        let after = vault.read(|c| Ok(c.total_changes())).expect("changes");
+        // Per entity: its search row, its words, its owed row, and the state row once.
+        let bound = centraid_vault::index::OWED_BATCH as u64 * 40 + 8;
+        assert!(
+            after - before <= bound,
+            "a batch changed {} rows, over {bound}",
+            after - before
+        );
+        batches += 1;
+        if more == 0 {
+            break;
+        }
+    }
+    let expected = (owed_before as usize).div_ceil(centraid_vault::index::OWED_BATCH);
+    assert_eq!(
+        batches,
+        expected,
+        "{owed_before} rows owed, in batches of {}",
+        centraid_vault::index::OWED_BATCH
     );
 }
 
@@ -75,55 +163,5 @@ fn the_content_listing_walks_the_hash_index_and_never_sorts() {
     assert!(
         plan.contains("USING INDEX") && !plan.contains("TEMP B-TREE"),
         "the listing sorts or does not use the hash index: {plan}"
-    );
-}
-
-/// V6: `edge_order` has a reader and no other index serves it as well, so it stays. The plan is the
-/// evidence, on a list of 3,000 members after `ANALYZE`: with `edge_order` the next position in the
-/// list is the end of an index walk (and the commands now ask for it that way: the old
-/// `MAX(position)` could not use a partial index at all); without it the same read goes through
-/// `edge_key` and sorts every member. (The Locker's type index had no reader any page or statement
-/// plans through, and is gone: `every_index_has_a_reader` in `core/tests/query_plans.rs`.)
-#[test]
-fn the_edge_order_index_has_a_reader_and_is_kept() {
-    let scratch = common::Scratch::founded("walk-kept").expect("a vault");
-    scratch
-        .vault
-        .commit(|tx| {
-            let c = tx.connection();
-            c.execute_batch(
-                "INSERT INTO entity (id, kind, title, created_at, updated_at)
-                   VALUES ('list-1', 'list', 'Big list', '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z');
-                 INSERT INTO container (id, kind) VALUES ('list-1', 'list');
-                 WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3000)
-                   INSERT INTO entity (id, kind, title, created_at, updated_at)
-                   SELECT 'p' || i, 'person', 'P' || i, '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z' FROM n;
-                 INSERT INTO person (id) SELECT id FROM entity WHERE kind = 'person' AND id LIKE 'p%';
-                 INSERT INTO edge (from_id, rel, to_id, position, created_at)
-                   SELECT 'list-1', 'contains', id, rowid, '2026-03-01T09:00:00.000Z' FROM entity WHERE id LIKE 'p%';
-                 ANALYZE;",
-            )?;
-            Ok(())
-        })
-        .expect("a big list");
-    // The statement `edge.add` and a restore run for the next position.
-    let read = centraid_vault::commands::edge::NEXT_POSITION;
-    let with = plan(&scratch, read, &["list-1"]);
-    assert!(
-        with.contains("INDEX edge_order"),
-        "the next position reads the ordered index: {with}"
-    );
-    scratch
-        .vault
-        .commit(|tx| {
-            tx.connection().execute_batch("DROP INDEX edge_order")?;
-            Ok(())
-        })
-        .expect("drops");
-    let without = plan(&scratch, read, &["list-1"]);
-    assert!(
-        !without.contains("edge_order")
-            && (without.contains("TEMP B-TREE") || without.contains("SCAN")),
-        "without it the read sorts or scans every member of the list: {without}"
     );
 }

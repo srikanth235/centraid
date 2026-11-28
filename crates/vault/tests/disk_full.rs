@@ -58,7 +58,7 @@ fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
                 // A long value, so the row is worth a page.
                 common::add_person(
                     tx,
-                    &format!("full-{index}-{inner}"),
+                    &format!("{index:08x}-0000-7000-8000-{inner:012x}"),
                     &"X".repeat(400),
                     "2026-01-01T00:00:00.000Z",
                 )?;
@@ -111,7 +111,12 @@ fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
         .vault
         .commit(|tx| {
             tx.set_producer("test.after");
-            common::add_person(tx, "after-full", "After", "2026-01-01T00:00:00.000Z")?;
+            common::add_person(
+                tx,
+                "01900000-0000-7000-8000-00000000ffff",
+                "After",
+                "2026-01-01T00:00:00.000Z",
+            )?;
             Ok(())
         })
         .expect("the vault still works");

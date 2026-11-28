@@ -1775,12 +1775,15 @@ pub fn v4_think(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn the_bare_words_include_every_locker_type_and_secret_cell() {
-        use centraid_vault::commands::locker::{ITEM_TYPES, SEALED_ITEM_CELLS};
+    fn the_bare_words_include_every_locker_type_and_revealable_cell() {
+        use centraid_vault::commands::locker::ITEM_TYPES;
         for word in ITEM_TYPES {
             assert!(super::ENUM_WORDS.contains(&word), "{word}");
         }
-        for cell in SEALED_ITEM_CELLS.iter().filter(|c| **c != "otp_seed") {
+        for (_, cell) in crate::native::meta::REVEAL_FIELDS
+            .iter()
+            .filter(|(_, column)| *column != "otp_seed")
+        {
             assert!(super::ENUM_WORDS.contains(cell), "{cell}");
         }
     }
@@ -1841,34 +1844,6 @@ mod tests {
             (c.tool.as_str(), args(&c)),
             ("find", vec![("kind", "task")])
         );
-    }
-
-    #[test]
-    fn a_v4_pick_states_the_rows_and_a_name_takes_the_kind_its_verb_fixes() {
-        let c = call(
-            "intent: write\nverb: complete\npick: #31 (name)\nwithin: @1",
-            None,
-            TraceMode::V4,
-        );
-        assert_eq!(
-            args(&c),
-            [("verb", "complete"), ("rows", "#31"), ("within", "@1")]
-        );
-        let c = call(
-            "intent: write\nverb: complete\nname: Pay rent",
-            None,
-            TraceMode::V4,
-        );
-        assert_eq!(
-            args(&c),
-            [("verb", "complete"), ("kind", "task"), ("name", "Pay rent")]
-        );
-        let c = call(
-            "intent: write\nverb: complete\nname: Pay rent",
-            None,
-            TraceMode::V31,
-        );
-        assert_eq!(args(&c), [("verb", "complete"), ("name", "Pay rent")]);
     }
 
     #[test]

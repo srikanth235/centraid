@@ -60,7 +60,7 @@ fn the_entity_map_names_every_kind_once_under_its_host() {
     let page = page();
     let map = &page[page.find("<div class=\"kindgrid\">").expect("the map")..];
     let map = &map[..map
-        .find("Nine relations join them")
+        .find("Seven relations join them")
         .expect("the relations follow")];
     let zones: Vec<&str> = map.split("<div class=\"zone\">").skip(1).collect();
     assert_eq!(zones.len(), 3, "one zone per host");
@@ -105,13 +105,13 @@ fn the_relations_and_the_counts_are_the_codes() {
     assert_eq!(count("relations"), Rel::ALL.len());
     assert_eq!(count("tables"), TABLES.len());
     // The map's heading says the same numbers in words.
-    for word in ["Twenty-six kinds", "three hosts", "nine relations"] {
+    for word in ["Twenty-five kinds", "three hosts", "seven relations"] {
         assert!(
             page.contains(word),
             "the map heading no longer says `{word}`"
         );
     }
-    assert_eq!((Kind::ALL.len(), Rel::ALL.len()), (26, 9));
+    assert_eq!((Kind::ALL.len(), Rel::ALL.len()), (25, 7));
 }
 
 #[test]

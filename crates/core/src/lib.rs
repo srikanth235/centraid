@@ -47,7 +47,7 @@
 pub(crate) mod act;
 pub mod api;
 /// AN APP'S OWN QUERY, RUN IN THE CORE (#1046): the page door an app crate
-/// reads through, and Agenda's answers as `agenda.proto` spells them.
+/// reads through for chat and app queries.
 pub mod app_query;
 /// THE ON-DEVICE CHAT'S DOOR: sessions in memory, the reads each tool runs
 /// through the query path, and `Request::Assist`'s arm. The plane itself is
@@ -56,16 +56,15 @@ pub mod assist;
 pub(crate) mod catalog;
 pub mod config;
 pub mod convert;
+pub mod device;
 pub mod error;
 pub mod events;
-/// THE DEMO SCENARIO: one weekend at Tahoe across seven apps, seeded through
-/// the command plane into a dev fixture vault (`seed-demo-vault`) or a test's
-/// vault — never by a found, never into a member's vault. No Locker.
 pub mod example;
+pub mod follow;
 pub mod handle;
 pub mod identity;
 pub mod load;
-pub mod locker;
+pub mod notify;
 /// THE ORIGINALS ON THIS PHONE, AND THE ALBUMS WHOSE ORIGINALS STAY (#1029,
 /// the photos port). See `originals.proto`.
 pub mod originals;
@@ -73,6 +72,7 @@ pub mod originals;
 /// the status the shell draws, and the doors beside the pass. See
 /// `phone.proto`.
 pub mod phone;
+pub mod rooms;
 pub mod screens;
 /// THE SHELL'S OWN CATALOGUE (#1135): the reads that are no one app's, named in
 /// one manifest beside the eight apps' and served by `load` the same way.

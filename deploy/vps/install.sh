@@ -3,7 +3,7 @@
 # data directory, no service unless you ask for one.
 #
 # Three rules, each carried from the v0 installer it replaces
-# (`scripts/install-gateway.sh`, `scripts/install-gateway.mjs`):
+# (`scripts/install-gateway.sh`):
 #
 #   1. `set -euo pipefail`. A pipeline that half-worked must not look installed.
 #   2. It NEVER installs an OS service silently. `--with-service` PRINTS the

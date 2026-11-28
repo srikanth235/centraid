@@ -1,0 +1,398 @@
+   Compiling centraid-core v1.0.0-alpha.0 (/workspace/centraid/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.99s
+     Running unittests src/lib.rs (target/debug/deps/centraid_core-fe2f0256cd3094d9)
+
+running 175 tests
+test api::tests::a_query_with_no_order_is_refused ... ok
+test api::tests::a_local_day_column_is_each_instants_day_in_the_stated_zone ... ok
+test api::tests::a_blank_display_name_is_refused_and_founds_nothing ... ok
+test api::tests::a_second_found_is_refused_and_the_vault_already_here_is_untouched ... ok
+test api::tests::a_table_no_screen_pages_is_refused_and_one_a_screen_pages_still_answers ... ok
+test app_query::chat::tests::every_outcome_word_the_schema_allows_has_a_value ... ok
+test app_query::chat::tests::every_refusal_word_the_schema_allows_has_a_reason ... ok
+test api::tests::founding_turns_a_created_file_into_a_vault_that_can_name_itself ... ok
+test api::tests::a_zero_limit_and_a_missing_order_column_reach_the_shell_as_invalid_request ... ok
+test assist::attach::tests::a_request_takes_one_photo_and_one_document_and_each_must_name_something ... ok
+test assist::attach::tests::an_image_over_the_byte_ceiling_is_too_large_before_it_is_decoded ... ok
+test assist::attach::tests::bytes_that_are_not_an_image_are_unreadable ... ok
+test assist::attach::tests::a_small_image_is_not_blown_up_and_alpha_is_flattened ... ok
+test assist::files::tests::a_model_that_did_not_arrive_is_a_model_to_fetch_again ... ok
+test assist::files::tests::a_model_older_than_the_window_says_an_update_is_needed_and_is_not_deleted_yet ... ok
+test assist::files::tests::a_phone_with_too_little_memory_is_told_why_and_nothing_is_fetched ... ok
+test assist::files::tests::an_adapter_alone_is_not_a_model_and_does_not_say_an_update_is_needed ... ok
+test assist::files::tests::an_adapter_that_lands_with_no_turn_running_loads_at_once ... ok
+test assist::files::tests::an_adapter_that_lands_under_a_running_turn_loads_when_the_chat_opens_again ... ok
+test assist::files::tests::an_unknown_amount_of_space_or_memory_is_not_too_little ... ok
+test assist::files::tests::nothing_is_fetched_until_the_member_taps_and_then_only_the_adapter ... ok
+test assist::files::tests::on_mobile_data_the_member_is_asked_first_and_waiting_for_wifi_uses_none ... ok
+test assist::files::tests::once_the_current_model_is_in_use_the_old_files_beside_it_go ... ok
+test assist::files::tests::one_bar_runs_over_the_model_and_its_adapter ... ok
+test assist::files::tests::the_model_before_the_current_one_keeps_working_and_nothing_is_deleted_yet ... ok
+test assist::files::tests::the_adapter_rides_after_the_model_and_a_missing_adapter_is_not_an_error ... ok
+test assist::files::tests::the_quote_counts_the_adapter_so_a_phone_without_room_for_both_is_told_first ... ok
+test assist::files::tests::the_offer_cases_in_the_shared_fixture_hold ... ok
+test assist::files::tests::wifi_is_the_default_and_the_download_carries_no_permission_for_mobile_data ... ok
+test assist::store::tests::a_busy_turn_and_a_stop_are_not_refusals_to_save ... ok
+test assist::store::tests::a_card_saves_the_item_and_a_closed_code_and_no_word_of_it ... ok
+test assist::store::tests::a_parked_turn_is_proposed_and_every_other_answer_is_answered ... ok
+test assist::store::tests::a_dismissal_keeps_the_sentence_it_answered_with ... ok
+test assist::store::tests::a_reopened_turn_draws_the_live_title_or_a_tombstone ... ok
+test assist::store::tests::a_small_picture_is_not_blown_up ... ok
+test assist::store::tests::every_way_a_tap_ends_has_its_stored_word_but_a_card_that_was_not_waiting ... ok
+test assist::store::tests::only_an_image_saves_its_label ... ok
+test assist::store::tests::pixels_that_do_not_add_up_have_no_thumbnail ... ok
+test assist::store::tests::the_command_input_names_the_scope_only_for_a_new_thread ... ok
+test assist::tests::a_hub_forgets_its_oldest_idle_chat_past_the_cap ... ok
+test assist::tests::a_mixed_chain_has_one_undo_entry_per_write_and_one_with_no_way_back_is_empty ... ok
+test assist::tests::a_pending_card_crosses_as_its_composed_lines_and_never_as_the_models_text ... ok
+test assist::tests::a_running_chat_is_not_the_one_forgotten ... ok
+test assist::tests::an_unknown_app_is_the_requests_fault ... ok
+test assist::tests::every_confirm_outcome_has_its_own_settle_outcome ... ok
+test assist::tests::every_refusal_has_its_own_wire_reason ... ok
+test catalog::tests::the_shell_is_addressable_and_is_not_one_of_the_eight_apps ... ok
+test config::tests::a_core_creates_its_file_unless_the_caller_says_otherwise ... ok
+test convert::tests::a_wide_integer_crosses_the_wire_as_an_integer_and_not_as_decimal_text ... ok
+test convert::tests::an_absent_value_kind_is_refused_and_not_read_as_null ... ok
+test convert::tests::every_value_kind_round_trips ... ok
+test device::open_url::tests::grammar_rejects_unknown_or_extra_path_parts ... ok
+test device::open_url::tests::grammar_resolves_entity_to_its_app_route ... ok
+test device::open_url::tests::routes_are_named_by_each_registered_detail_room ... ok
+test device::store::tests::a_dir_store_round_trips_keys_with_dots_and_odd_bytes ... ok
+test assist::store::tests::a_thumbnail_is_a_small_jpeg_no_larger_than_its_edge ... ok
+test error::tests::a_bounded_read_refusing_to_be_cancelled_is_an_invalid_request_not_an_internal_error ... ok
+test error::tests::a_closed_handle_is_a_typed_error_and_not_a_hang ... ok
+test error::tests::a_full_disk_is_its_own_code_and_the_core_words_it ... ok
+test error::tests::a_not_yet_available_capability_names_where_it_lands ... ok
+test error::tests::a_poisoned_handle_carries_the_diagnostic_id_onto_the_wire ... ok
+test error::tests::a_vault_that_must_be_replaced_carries_the_rebootstrap_code ... ok
+test error::tests::the_owner_facing_sentence_carries_no_database_text_and_the_detail_still_does ... ok
+test events::tests::a_close_hands_out_the_events_it_already_accepted_first ... ok
+test events::tests::a_closed_queue_accepts_nothing_new ... ok
+test events::tests::a_full_queue_stalls_the_producer_and_drops_nothing ... ok
+test events::tests::a_stall_clears_only_once_the_queue_is_genuinely_below_its_cap ... ok
+test events::tests::a_stall_replaces_a_waiting_health_event_rather_than_a_change_event ... ok
+test events::tests::a_stall_with_no_health_slot_is_reported_on_the_next_drain ... ok
+test events::tests::a_timeout_with_nothing_waiting_is_not_an_error ... ok
+test events::tests::a_whole_table_change_dominates_keys_in_either_arrival_order ... ok
+test events::tests::an_event_offered_is_an_event_returned ... ok
+test events::tests::bytes_landing_are_a_change_on_the_photographs_that_own_them ... ok
+test events::tests::changes_to_different_tables_do_not_coalesce ... ok
+test events::tests::close_releases_a_thread_blocked_in_next ... ok
+test app_query::chat::search_tests::the_drawer_searches_threads_and_says_what_it_corrected ... ok
+test events::tests::the_same_key_twice_is_one_key ... ok
+test events::tests::two_changes_to_one_table_coalesce_into_one_redraw ... ok
+test events::tests::the_health_event_carries_the_seats_distance_behind ... ok
+test device::widget::tests::health_glance_writes_versioned_snapshot_and_clears_on_trash ... ok
+test handle::tests::a_bounded_read_refuses_to_be_cancelled_and_says_so ... ok
+test assist::attach::tests::a_large_image_is_scaled_to_the_models_edge_keeping_its_shape ... ok
+test handle::tests::a_command_runs_as_the_handles_owner_without_being_told ... ok
+test handle::tests::a_check_does_not_start_under_a_pass_and_a_pass_stops_a_check ... ok
+test handle::tests::a_closed_handle_answers_every_call_with_a_typed_error ... ok
+test handle::tests::a_command_that_writes_pushes_a_change_event_naming_the_table ... ok
+test handle::tests::a_command_with_no_invoke_key_is_refused_before_it_runs ... ok
+test handle::tests::a_core_without_keys_says_unlock_to_back_up ... ok
+test handle::tests::a_core_that_opens_its_own_bytes_can_hold_a_photograph ... ok
+test handle::tests::a_found_request_over_the_envelope_makes_the_file_a_vault ... ok
+test handle::tests::a_duplicate_build_is_refused_without_replacing_the_first_archive ... ok
+test handle::tests::a_page_request_runs_through_the_access_plane_and_the_probe ... ok
+test handle::tests::a_peer_id_request_announces_backup_changes_even_when_refused ... ok
+test handle::tests::a_handshake_is_answered_with_what_this_build_is ... ok
+test handle::tests::a_poisoned_handle_answers_with_its_diagnostic_id_even_after_close ... ok
+test handle::tests::an_expected_digest_is_carried_into_open_and_a_mismatch_is_typed ... ok
+test handle::tests::an_unbounded_request_is_cancellable_and_a_bounded_one_is_not ... ok
+test handle::tests::a_request_with_no_kind_is_unsupported_and_not_a_panic ... ok
+test handle::tests::a_timeout_with_no_event_is_not_an_error ... ok
+test handle::tests::cancel_between_stage_begin_and_registration_aborts_the_late_session ... ok
+test handle::tests::cancel_racing_stage_end_cannot_leave_an_export_receipt ... ok
+test handle::tests::an_invalid_commit_and_cancel_both_drop_the_pending_original ... ok
+test handle::tests::cancelling_a_pending_begin_refuses_a_late_build_and_releases_the_next_job ... ok
+test handle::tests::concurrent_build_claims_have_one_winner ... ok
+test handle::tests::cancelling_after_finish_removes_the_unsaved_plaintext_zip ... ok
+test handle::tests::close_unblocks_a_thread_parked_in_next_event ... ok
+test handle::tests::dropping_a_core_removes_an_uncommitted_export_original_receipt ... ok
+test handle::tests::content_urls_answer_the_store_the_library_or_nowhere ... ok
+test handle::tests::cancellation_keeps_its_original_vault_and_shelf_requests_stay_on_the_shelf ... ok
+test handle::tests::open_returns_with_a_vault_and_no_second_surface ... ok
+test handle::tests::registration_and_startup_sweep_race_cannot_remove_the_winning_job_dir ... ok
+test handle::tests::every_request_carries_a_monotonic_never_reused_id ... ok
+test handle::tests::startup_sweep_preserves_a_live_job_registered_before_its_directory ... ok
+test handle::tests::release_of_an_active_export_is_refused_without_deregistering_the_job ... ok
+test handle::tests::the_first_panic_is_the_one_filed ... ok
+test handle::tests::forwarded_completion_and_a_reused_id_keep_registration_and_cancellation_together ... ok
+test handle::tests::the_backup_doors_answer_an_unpaired_phone ... ok
+test handle::tests::the_stage_door_takes_owned_bytes_and_derivatives ... ok
+test identity::tests::a_dev_build_is_allowed_loudly ... ok
+test identity::tests::a_matching_digest_passes_quietly ... ok
+test identity::tests::a_mismatched_digest_is_refused_and_both_digests_are_named ... ok
+test identity::tests::an_empty_expectation_is_refused_rather_than_treated_as_a_match ... ok
+test identity::tests::this_build_carries_a_stamp ... ok
+test originals::tests::a_census_without_a_content_store_is_absent_and_not_zero ... ok
+test originals::tests::a_keep_list_that_will_not_parse_refuses_every_ask ... ok
+test originals::tests::a_keep_with_no_album_and_a_request_with_no_op_are_refused ... ok
+test originals::tests::a_kept_album_is_written_beside_the_vault_and_taken_off_again ... ok
+test phone::asked_tests::the_members_tap_is_held_for_exactly_its_pass ... ok
+test phone::check::tests::gateway_old_and_moved_do_not_abort_other_gateways ... ok
+test handle::tests::the_launch_pass_purges_what_is_overdue_and_spares_the_rest ... ok
+test handle::tests::the_launch_sweep_takes_stray_files_and_spares_what_a_staging_owns ... ok
+test phone::item_tests::a_live_photo_is_one_item_under_both_its_refs ... ok
+test phone::link::tests::a_dead_gateway_does_not_hold_the_healthy_ones_behind_it ... ok
+test phone::link::tests::a_moved_is_believed_only_with_a_signed_claim_above_the_epoch_held ... ok
+test phone::link::tests::a_wrong_certificate_is_untrusted_and_bytes_off_their_digest_are_damaged ... ok
+test phone::phrase::tests::a_cell_that_is_not_yet_a_word_offers_the_words_it_begins ... ok
+test phone::phrase::tests::a_minted_phrase_is_24_list_words_that_check_valid_and_seed ... ok
+test phone::phrase::tests::a_refused_seed_quotes_no_word ... ok
+test phone::phrase::tests::a_request_with_no_op_is_refused ... ok
+test phone::phrase::tests::case_and_spacing_are_forgiven_in_a_cell ... ok
+test handle::tests::open_starts_the_pass_without_a_request ... ok
+test phone::phrase::tests::the_verdict_says_count_then_word_then_checksum ... ok
+test phone::refresh_tests::merge_refreshed_addrs_preserves_hostnames_within_cap ... ok
+test phone::refresh_tests::only_dialable_ip_addresses_are_candidates ... ok
+test phone::phrase::tests::the_seed_is_bip39s_for_the_published_vector ... ok
+test phone::restore::aside_tests::a_held_copy_leaves_the_name_for_the_whole_adoption_and_comes_back_if_it_fails ... ok
+test phone::restore::error_tests::an_unreadable_or_newer_backup_is_said_in_a_sentence_that_helps ... ok
+test phone::first_item_tests::the_first_item_is_the_first_note_in_milliseconds_and_never_a_starter ... ok
+test phone::restore::held_tests::move_head_to_older_treats_head_already_equal_to_older_as_success ... ok
+test screens::room_export_budget_tests::actual_core_stage_file_refuses_over_budget_without_partial_and_cleanup_releases_budget ... ok
+test screens::room_export_budget_tests::concurrent_private_exports_cannot_both_spend_the_same_remaining_budget ... ok
+test screens::room_export_budget_tests::held_text_import_checks_size_before_allocating_blob_bytes ... ok
+test screens::room_export_budget_tests::private_exports_share_the_plane_budget_and_release_it_on_cleanup ... ok
+test phone::restore::held_tests::a_restore_prefers_a_healthy_backup_over_a_damaged_local_copy ... ok
+test shell::tests::the_committed_manifest_parses_and_is_the_shell ... ok
+test stage::tests::a_begin_that_contradicts_itself_is_refused ... ok
+test stage::tests::a_chunk_out_of_order_is_refused_by_number ... ok
+test stage::tests::a_fifth_open_session_is_refused ... ok
+test screens::room_export_budget_tests::two_core_handles_cannot_overcommit_one_vaults_private_export_budget ... ok
+test stage::tests::a_library_item_nobody_asked_for_is_only_hashed ... ok
+test phone::restore::cancellation_tests::cancellation_before_claim_preserves_writer_and_after_claim_finishes_adoption ... ok
+test stage::tests::a_stream_that_is_not_the_item_stages_nothing ... ok
+test stage::tests::a_streamed_original_is_named_by_the_vaults_own_digest ... ok
+test stage::tests::an_aborted_session_frees_its_place_and_an_unknown_one_is_no_error ... ok
+test stage::tests::an_export_stage_returns_only_a_verified_temp_receipt ... ok
+test stage::tests::an_idle_session_is_reaped_when_the_table_is_full ... ok
+test stage::tests::an_undeclared_size_takes_what_arrives ... ok
+test stage::tests::cancelling_an_export_original_midstream_removes_its_partial_file ... ok
+test stage::tests::closing_early_is_refused_rather_than_truncating ... ok
+test stage::tests::four_failed_stages_do_not_block_the_fifth ... ok
+test stage::tests::more_bytes_than_declared_is_refused_at_the_chunk ... ok
+test phone::fetch::tests::a_file_lands_only_whole_and_a_refused_one_leaves_nothing ... ok
+test stage::tests::a_full_staging_area_keeps_the_refs_and_stages_what_fits ... ok
+test stage::tests::only_the_owed_chunks_are_staged_but_every_ref_is_kept ... ok
+test stage::tests::a_planned_item_seals_every_chunk_into_staging_under_known_names ... ok
+
+test result: ok. 175 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.55s
+
+     Running tests/assist_adapter_reload.rs (target/debug/deps/assist_adapter_reload-86715c5766d3e3bd)
+
+running 1 test
+test an_adapter_that_lands_during_a_turn_changes_nothing_under_it_and_loads_when_the_chat_opens_again ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/assist_adapter_switch.rs (target/debug/deps/assist_adapter_switch-da35297621fa9d6e)
+
+running 1 test
+test a_vault_turn_runs_with_the_adapter_on_and_a_reply_over_an_attachment_with_it_off ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/backup_check.rs (target/debug/deps/backup_check-3bac6c6c3a1d6b3f)
+
+running 6 tests
+test a_device_never_backed_up_has_nothing_to_open ... ok
+test a_device_that_cannot_be_checked_says_why_and_is_no_pass ... ok
+test a_damaged_chunk_fails_the_line_and_is_owed_again ... ok
+test a_backup_that_opens_is_counted_and_the_vault_is_left_alone ... ok
+test a_chunk_the_gateway_lost_is_a_missing_file_and_is_sent_again ... ok
+test a_pass_reads_back_a_sample_and_finds_a_chunk_a_gateway_damaged ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.46s
+
+     Running tests/backup_status.rs (target/debug/deps/backup_status-98520807d7b5792d)
+
+running 5 tests
+test a_paired_gateway_with_no_snapshot_is_not_backed_up ... ok
+test a_refusal_is_read_as_the_reason_the_gateway_gave ... ok
+test a_full_gateway_is_named_while_the_other_is_fed ... ok
+test read_back_damage_drives_repairing_until_repaired ... ok
+test a_gateway_whose_head_went_backwards_reads_as_rolled_back_until_a_new_head_is_confirmed ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.13s
+
+     Running tests/device.rs (target/debug/deps/device-000afd947b54f909)
+
+running 11 tests
+test a_draft_is_one_record_per_vault_and_kind_and_never_locker ... ok
+test a_draft_goes_on_save_on_a_confirmed_discard_and_on_a_vault_switch ... ok
+test a_link_names_a_kind_and_an_id_and_nothing_else ... ok
+test an_unlisted_key_and_a_json_value_without_v_are_refused ... ok
+test a_refused_filing_keeps_the_item_for_the_next_open ... ok
+test draining_twice_files_nothing_twice ... ok
+test a_photo_the_vault_already_holds_is_not_filed_again_after_a_crash_before_the_ledger ... ok
+test every_key_is_listed_once ... ok
+test each_inbox_item_is_filed_through_the_mapping_with_its_arrival ... ok
+test every_key_the_rust_side_names_is_in_the_registry ... ok
+test every_store_the_shells_name_is_in_the_registry ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/follow.rs (target/debug/deps/follow-f79d5d47d5e7dd79)
+
+running 6 tests
+test a_failed_merge_clears_asking_and_reports_a_plain_sentence ... ok
+test a_failed_merge_sends_a_queued_ask ... ok
+test one_calendar_answer_merges_every_snapshot_and_reports_partial_reads ... ok
+test camera_roll_pages_merge_then_continue_from_the_committed_cursor ... ok
+test one_reminders_answer_keeps_each_list_origin_and_parent_membership ... ok
+test the_first_follow_pass_after_a_restart_does_not_replay_the_previous_invoke_key ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/library_assets.rs (target/debug/deps/library_assets-dcaa80331ebf5686)
+
+running 5 tests
+test bytes_the_ledger_holds_and_no_asset_wraps_are_absent ... ok
+test a_trashed_asset_is_not_an_answer ... ok
+test a_ref_answers_the_live_asset_its_bytes_were_filed_as ... ok
+test a_ref_staged_twice_answers_the_newer_version ... ok
+test more_than_a_hundred_refs_is_refused ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/log_hygiene.rs (target/debug/deps/log_hygiene-58c699a57d04ab5d)
+
+running 1 test
+test a_driven_run_writes_no_vault_content_to_the_log ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+     Running tests/notify.rs (target/debug/deps/notify-5a026f1bd690f457)
+
+running 13 tests
+test a_snooze_pressed_long_ago_has_expired_and_a_press_on_a_missing_item_is_declined ... ok
+test a_snoozed_birthday_is_held_again_at_its_snooze ... ok
+test a_locker_expiry_says_only_that_something_expires_and_names_nothing ... ok
+test a_purged_event_cannot_keep_a_pending_or_delivered_alert ... ok
+test done_is_on_a_task_alert_only_and_snooze_is_on_every_kind ... ok
+test details_off_says_only_that_one_is_due ... ok
+test a_trashed_event_has_its_pending_and_delivered_entries_cancelled ... ok
+test an_event_alert_is_held_with_its_buttons_and_its_link ... ok
+test replaying_the_outbox_is_idempotent ... ok
+test the_backups_stale_notice_rides_its_own_channel_and_the_permission_is_asked_once ... ok
+test the_desired_function_reads_the_same_set_as_the_scheduler ... ok
+test the_platform_cap_is_filled_with_the_soonest_and_refilled_as_they_pass ... ok
+test the_widget_snapshot_names_todays_items_with_their_links_and_a_trash_clears_it_at_once ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+
+     Running tests/phone_backup.rs (target/debug/deps/phone_backup-31a9a3ed62ec6c1a)
+
+running 24 tests
+test a_gateway_older_than_this_build_is_told_to_be_updated ... ok
+test a_gateway_that_moved_is_found_again_by_its_identity_and_only_by_it ... ok
+test a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged ... ok
+test a_metered_wifi_only_pass_skips_read_back_with_zero_gets ... ok
+test a_library_item_is_asked_for_streamed_through_the_stage_door_and_backed_up ... ok
+test a_phone_with_no_room_says_so ... ok
+test a_second_pass_with_no_write_walks_nothing ... ok
+test a_zero_step_metered_pass_does_not_clear_an_earlier_refusal ... ok
+test exclude_videos_confirms_originals_without_stalling_and_toggling_back_uploads_the_video ... ok
+test forgetting_a_gateway_revokes_this_phones_token_there ... ok
+test gateway_notes_persist_across_core_reopen ... ok
+test held_whole_names_the_gateways_that_hold_an_original_and_says_none_before_the_pass ... ok
+test multiple_gateways_with_identical_missing_sets_keep_bundles_and_respect_cap ... ok
+test newly_paired_second_gateway_repairs_cloud_only_original_from_first_gateway ... ok
+test os_bundle_files_are_uploaded_by_the_os_and_only_wake_a_pass ... ok
+test a_cut_connection_mid_bundle_resends_at_most_the_cut_chunk ... ok
+test os_bundles_never_allow_cellular_for_video_frames ... ok
+test revoked_token_stops_with_pair_again_and_persists_across_restart ... ok
+test restarting_after_os_bundle_handoff_does_not_leak_staging_bytes ... ok
+test staging_full_during_os_bundles_returns_parts_built_so_far_and_sets_no_room ... ok
+test the_members_rule_decides_each_class_and_video_originals_never_cross_a_metered_link ... ok
+test two_os_bundle_passes_over_the_same_missing_set_do_not_self_delete ... ok
+test a_library_film_larger_than_staging_backs_up_a_window_at_a_time ... ok
+test a_pass_backs_up_a_vault_to_two_gateways_and_they_hold_only_ciphertext ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.54s
+
+     Running tests/restore_damaged.rs (target/debug/deps/restore_damaged-4b605716721a5a5c)
+
+running 2 tests
+test a_restore_that_dies_before_its_claim_leaves_the_damaged_file_as_it_was ... ok
+test a_damaged_vault_is_restored_over_through_a_handle_that_holds_no_vault ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.88s
+
+     Running tests/restore_directory.rs (target/debug/deps/restore_directory-9bd6636b573f77d7)
+
+running 3 tests
+test a_restore_that_cannot_prove_the_newest_claims_nothing_until_the_member_says_yes ... ok
+test a_listed_gateway_that_does_not_answer_leaves_the_newest_unproven ... ok
+test the_greatest_head_across_the_directory_is_the_backup_restored ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+     Running tests/restore_edges.rs (target/debug/deps/restore_edges-e15abc21251e5e99)
+
+running 29 tests
+test a_damaged_thumbnail_costs_a_restore_that_thumbnail_alone ... ok
+test a_copy_that_ran_commands_after_the_head_still_takes_its_vault_over ... ok
+test a_claim_that_landed_is_never_forgotten_when_adopting_fails ... ok
+test a_chain_of_restores_freezes_every_phone_but_the_last ... ok
+test a_gateway_that_dies_mid_fetch_is_restored_from_next_time ... ok
+test a_phone_that_lost_its_ledger_takes_its_vault_over ... ok
+test a_gateway_that_dies_after_the_claim_leaves_the_restored_vault ... ok
+test a_records_only_vault_and_a_cut_short_pass_restore_what_was_acknowledged ... ok
+test a_phone_with_no_record_of_the_gateway_and_an_older_copy_takes_nothing_over ... ok
+test a_restore_scan_reuses_one_connection ... ok
+test a_restore_killed_after_its_claim_is_finished_by_the_next_one ... ok
+test a_restored_phones_walk_is_told_which_derivatives_the_vault_already_holds ... ok
+test a_restore_killed_before_its_claim_is_finished_by_the_next_one ... ok
+test an_old_phone_learns_it_moved_at_its_first_contact ... ok
+test a_superseded_phone_cannot_forget_its_way_back ... ok
+test a_superseded_phone_that_pairs_again_is_refused ... ok
+test after_a_restore_only_what_is_new_is_sent ... ok
+test damage_on_the_gateway_is_refused_before_any_claim ... ok
+test excluded_videos_and_absent_originals_still_clear_restoring ... ok
+test an_old_phone_whose_first_contact_is_a_pairing_is_refused ... ok
+test an_older_backup_is_offered_when_the_newest_will_not_open ... ok
+test offline_gateway_is_dialled_at_most_once_during_restore_fetch ... ok
+test restore_opens_before_thumbnails_and_retries_interrupted_thumbnails ... ok
+test restoring_onto_a_phone_whose_copy_is_newer_than_the_backup_leaves_that_copy_alone ... ok
+test restoring_onto_a_phone_that_holds_an_older_copy_replaces_it_and_freezes_nothing ... ok
+test split_brain_stale_vault_with_later_timestamp_cannot_claim_over_higher_writes_head ... ok
+test the_old_phone_after_a_move_changes_nothing_at_the_gateway ... ok
+test words_that_are_not_the_members_change_nothing ... ok
+test two_phones_restoring_at_once_end_with_one_writer ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.82s
+
+     Running tests/screens_clock.rs (target/debug/deps/screens_clock-ed3e2b10c467c42e)
+
+running 2 tests
+test a_direct_screen_reads_the_injected_clock_and_a_closed_core_is_unready ... ok
+test a_shelf_has_no_clock_until_mounted_and_follows_the_current_vault ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/send.rs (target/debug/deps/send-54e40bff272816c1)
+
+running 1 test
+test a_vault_and_a_handle_can_be_moved_and_shared_across_threads ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shell_backup.rs (target/debug/deps/shell_backup-fb34de175e1e51eb)
+
+running 3 tests
+test an_unknown_shell_query_is_refused_by_name ... ok
+test the_query_reads_the_ledger_the_door_reads_and_names_what_moves_it ... ok
+test a_door_that_moves_the_ledger_announces_it_and_one_that_only_reads_does_not ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+   Doc-tests centraid_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

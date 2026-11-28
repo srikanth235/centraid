@@ -1,228 +1,136 @@
-app,action,verb,kind,chat_surface,reachable_from_screen_today,reachable_from_chat_today
-calendar,link,link,event,card,no,no
-calendar,unlink,unlink,event,card,no,no
-calendar,propose,create,event,direct,yes: crates/screens/src/calendar/editor.rs,yes
-calendar,rsvp,respond,event,card,yes: crates/screens/src/calendar/event.rs,no
-calendar,edit-event,edit,event,direct,yes: crates/screens/src/calendar/editor.rs,yes
-calendar,edit-occurrence,reschedule,event,card,yes: crates/screens/src/calendar/editor.rs,no
-calendar,cancel-event,cancel,event,direct,yes: crates/screens/src/calendar/event.rs,yes
-calendar,trash-event,delete,event,direct,yes: crates/screens/src/calendar/event.rs; crates/screens/src/calendar/trash.rs,no
-calendar,restore-event,restore,event,direct,yes: crates/screens/src/calendar/event.rs; crates/screens/src/calendar/trash.rs,no
-calendar,purge-event,purge,event,card,yes: crates/screens/src/calendar/trash.rs,no
-calendar,empty-trash,purge,event,card,yes: crates/screens/src/calendar/trash.rs,no
-calendar,delete-calendar,delete,calendar,card,no,no
-calendar,restore-calendar,restore,calendar,card,yes: crates/screens/src/calendar/trash.rs,no
-calendar,attach,attach,event,card,no,no
-calendar,detach,detach,event,card,no,no
-calendar,follow-calendar,import,event,card,yes: crates/screens/src/calendar/follow.rs,no
-calendar,stop-following,detach,event,card,no,no
-calendar,create-calendar,create:kind,list,card,no,no
-calendar,rename-calendar,edit,calendar,direct,yes: crates/screens/src/kit/schedule/style.rs,no
-calendar,style-calendar,edit:color,calendar,direct,yes: crates/screens/src/kit/schedule/style.rs,no
-calendar,add-place,create,event,card,yes: crates/screens/src/calendar/editor.rs,no
-calendar,export-ics,log,event,card,no,no
-docs,upload,import,document,card,yes: crates/screens/src/docs/drive/ingest.rs,no
-docs,create-text,create,document,direct,yes: crates/screens/src/docs/drive/ingest.rs,yes
-docs,rename,edit,document,direct,yes: crates/screens/src/docs/rename.rs,yes
-docs,move,add_to,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
-docs,trash,delete,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
-docs,restore,restore,document,direct,yes: crates/screens/src/docs/document.rs; crates/screens/src/docs/trash.rs,yes
-docs,purge,purge,document,card,yes: crates/screens/src/docs/document.rs; crates/screens/src/docs/trash.rs,no
-docs,empty-trash,purge,document,card,yes: crates/screens/src/docs/trash.rs,no
-docs,star,star,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
-docs,unstar,unstar,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
-docs,tag,tag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
-docs,untag,untag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
-docs,recolor-label,edit,document,card,no,no
-docs,edit,edit,document,card,yes: crates/screens/src/docs/editor.rs,no
-docs,replace,edit:content,document,card,no,no
-docs,restore-version,restore,document,card,no,no
-docs,create-folder,create,folder,direct,yes: crates/screens/src/docs/drive/mod.rs,yes
-docs,rename-folder,edit,folder,direct,no,yes
-docs,delete-folder,delete,folder,direct,no,yes
-docs,add-about,link,document,card,yes: crates/screens/src/docs/document.rs,no
-docs,remove-about,unlink,document,card,yes: crates/screens/src/docs/document.rs,no
-docs,attach,attach,document,card,no,no
-docs,detach,detach,document,card,no,no
-docs,export-zip,log,document,card,no,no
-health,link,link,workout,card,no,no
-health,unlink,unlink,workout,card,no,no
-health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no
-health,follow-workouts,import,workout,card,yes: crates/screens/src/health/follow.rs,no
-health,delete-workout,delete,workout,direct,yes: crates/screens/src/health/trash.rs; crates/screens/src/health/workout.rs,yes
-health,stop-following,detach,daily_figure,card,yes: crates/screens/src/health/home.rs,no
-health,log-workout,create,workout,direct,no,yes
-health,edit-workout,edit,workout,direct,no,yes
-health,restore-workout,restore,workout,direct,yes: crates/screens/src/health/trash.rs; crates/screens/src/health/workout.rs,yes
-health,purge-workout,purge,workout,card,yes: crates/screens/src/health/trash.rs,no
-health,empty-trash,purge,workout,card,yes: crates/screens/src/health/trash.rs,no
-health,edit-figure,edit,daily_figure,direct,no,yes
-health,log-figure,create,daily_figure,direct,no,yes
-health,clear-figure,delete,daily_figure,direct,no,yes
-health,attach,attach,workout,card,no,no
-health,detach,detach,workout,card,no,no
-health,export-csv,log,workout,card,no,no
-locker,add-item,create,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
-locker,edit-item,edit,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
-locker,trash-item,delete,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
-locker,restore-item,restore,locker_item,direct,yes: crates/screens/src/locker/trash.rs; crates/screens/src/locker/item.rs,yes
-locker,purge-item,purge,locker_item,card,yes: crates/screens/src/locker/trash.rs; crates/screens/src/locker/item.rs,no
-locker,empty-trash,purge,locker_item,card,yes: crates/screens/src/locker/trash.rs,no
-locker,star-item,star,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
-locker,unstar-item,unstar,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
-locker,archive-item,archive,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
-locker,unarchive-item,unarchive,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
-locker,add-tag,tag,locker_item,direct,yes: crates/screens/src/locker/editor.rs,no
-locker,remove-tag,untag,locker_item,direct,yes: crates/screens/src/locker/editor.rs,no
-locker,duplicate-item,duplicate,locker_item,card,no,no
-locker,set-field,edit,locker_field,card,yes: crates/screens/src/locker/item.rs,no
-locker,remove-field,delete,locker_field,card,yes: crates/screens/src/locker/item.rs,no
-locker,set-addresses,edit,locker_item,card,no,no
-locker,set-passkey,edit,locker_passkey,card,yes: crates/screens/src/locker/item.rs,no
-locker,clear-passkey,delete,locker_passkey,card,yes: crates/screens/src/locker/item.rs,no
-locker,set-memo,edit,locker_item,card,yes: crates/screens/src/locker/item.rs,no
-locker,export,reveal,locker_item,card,no,no
-locker,reveal,reveal,locker_item,direct,no,no
-locker,add-link,link,locker_item,card,yes: crates/screens/src/locker/item.rs,no
-locker,remove-link,unlink,locker_item,card,yes: crates/screens/src/locker/item.rs,no
-money,add-account,create,account,direct,yes: crates/screens/src/money/accounts.rs,no
-money,edit-account,edit,account,direct,yes: crates/screens/src/money/accounts.rs,no
-money,close-account,archive,account,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
-money,reopen-account,unarchive,account,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
-money,set-opening-balance,edit,account,card,no,no
-money,import-transactions,import,transaction,card,yes: crates/screens/src/money/import.rs,no
-money,record-checkpoint,log,account,card,yes: crates/screens/src/money/import.rs,no
-money,save-import-profile,edit,account,card,yes: crates/screens/src/money/import.rs,no
-money,categorize,categorize,transaction,card,yes: crates/screens/src/money/transaction.rs,no
-money,trash-transaction,delete,transaction,direct,yes: crates/screens/src/money/transaction.rs; crates/screens/src/money/trash.rs,no
-money,restore-transaction,restore,transaction,direct,yes: crates/screens/src/money/transaction.rs; crates/screens/src/money/trash.rs,no
-money,purge-transaction,purge,transaction,card,yes: crates/screens/src/money/trash.rs,no
-money,empty-trash,purge,transaction,card,yes: crates/screens/src/money/trash.rs,no
-money,set-display-name,edit,transaction,direct,yes: crates/screens/src/money/transaction.rs,no
-money,link-transfer,link,transaction,card,yes: crates/screens/src/money/transaction.rs,no
-money,unlink-transfer,unlink,transaction,direct,yes: crates/screens/src/money/transaction.rs,no
-money,set-target,edit,budget,card,yes: crates/screens/src/money/target.rs,no
-money,set-carry,edit:carry,budget,card,no,no
-money,add-rule,create,rule,card,yes: crates/screens/src/money/rules.rs; crates/screens/src/money/transaction.rs,no
-money,edit-rule,edit,rule,direct,yes: crates/screens/src/money/rules.rs,no
-money,delete-rule,delete,rule,card,yes: crates/screens/src/money/rules.rs,no
-money,apply-rule-to-history,apply,rule,card,yes: crates/screens/src/money/rules.rs,no
-money,add-category,create,category,direct,yes: crates/screens/src/money/categories.rs,no
-money,merge-category,merge,category,card,yes: crates/screens/src/money/categories.rs,no
-money,archive-category,archive,category,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
-money,unarchive-category,unarchive,category,direct,yes: crates/screens/src/money/categories.rs,no
-money,add-with,link,transaction,card,yes: crates/screens/src/money/transaction.rs,no
-money,remove-with,unlink,transaction,card,yes: crates/screens/src/money/transaction.rs,no
-money,attach,attach,transaction,card,no,no
-money,detach,detach,transaction,card,no,no
-money,export-csv,log,transaction,card,no,no
-notes,create-note,create,note,direct,yes: crates/screens/src/notes/editor.rs,yes
-notes,edit-note,edit,note,direct,yes: crates/screens/src/notes/editor.rs,yes
-notes,move-note,add_to,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
-notes,create-notebook,create,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
-notes,rename-notebook,edit,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
-notes,delete-notebook,delete,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
-notes,delete-note,delete,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
-notes,restore-note,restore,note,direct,yes: crates/screens/src/notes/trash.rs,yes
-notes,purge-note,purge,note,card,yes: crates/screens/src/notes/trash.rs,no
-notes,empty-trash,purge,note,card,yes: crates/screens/src/notes/trash.rs,no
-notes,restore-note-version,restore,note,card,no,no
-notes,flag-note,star,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,yes
-notes,unflag-note,unstar,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,no
-notes,link,link,note,card,no,no
-notes,unlink,unlink,note,card,no,no
-notes,send-to-tasks,create,task,card,yes: crates/screens/src/reminders/ops.rs,yes
-notes,attach,attach,note,card,no,no
-notes,detach,detach,note,card,no,no
-notes,add-tag,tag,note,direct,yes: crates/screens/src/notes/editor.rs,no
-notes,remove-tag,untag,note,direct,yes: crates/screens/src/notes/editor.rs,no
-notes,import-notes,log,note,card,no,no
-notes,export-notes,log,note,card,no,no
-people,link,link:rel,person,card,no,no
-people,unlink,unlink,person,card,no,no
-people,add-person,create,person,direct,yes: crates/screens/src/people/editor.rs,yes
-people,edit-person,edit,person,direct,yes: crates/screens/src/people/editor.rs,yes
-people,set-cadence,edit:cadence,person,direct,yes: crates/screens/src/people/editor.rs,yes
-people,trash-person,delete,person,direct,yes: crates/screens/src/people/person/mod.rs,yes
-people,restore-person,restore,person,direct,yes: crates/screens/src/people/trash.rs,yes
-people,purge-person,purge,person,card,yes: crates/screens/src/people/trash.rs,no
-people,empty-trash,purge,person,card,yes: crates/screens/src/people/trash.rs,no
-people,log-interaction,log,person,direct,yes: crates/screens/src/people/person/mod.rs,yes
-people,star-person,star,person,direct,yes: crates/screens/src/people/home/mod.rs; crates/screens/src/people/person/mod.rs,yes
-people,unstar-person,unstar,person,direct,yes: crates/screens/src/people/home/mod.rs; crates/screens/src/people/person/mod.rs,yes
-people,move-person,add_to,person,card,no,no
-people,add-note,create,note,card,yes: crates/screens/src/people/person/mod.rs,no
-people,add-task,create,task,card,no,no
-people,complete-task,complete,task,card,yes: crates/screens/src/kit/schedule/ops.rs,yes
-people,reopen-task,reopen,task,card,yes: crates/screens/src/kit/schedule/ops.rs,yes
-people,add-important-date,create,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
-people,set-reminder,edit,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
-people,add-relationship,link,person,card,no,no
-people,remove-relationship,unlink,person,card,no,no
-people,add-gift,create,gift,card,no,no
-people,create-list,create,people_list,card,no,no
-people,rename-list,edit,people_list,card,no,no
-people,delete-list,delete,people_list,card,no,no
-people,restore-list,restore,people_list,card,yes: crates/screens/src/people/lists.rs,no
-people,add-journal-entry,create,journal_entry,card,no,no
-people,save-contact-channel,edit,contact_point,card,yes: crates/screens/src/people/person/mod.rs,no
-people,delete-contact-channel,delete,contact_point,card,yes: crates/screens/src/people/person/mod.rs,no
-people,merge-people,merge,person,card,yes: crates/screens/src/people/person/mod.rs,no
-people,follow-contacts,import,person,card,yes: crates/screens/src/people/contacts.rs,no
-people,stop-following,detach,person,card,no,no
-people,import-vcf,log,person,card,no,no
-people,export-vcf,log,person,card,no,no
-people,attach,attach,person,card,no,no
-people,detach,detach,person,card,no,no
-photos,upload,import,photo,card,yes: crates/screens/src/photos/editor.rs,no
-photos,edit-photo,edit,photo,card,no,no
-photos,retitle-photo,edit,photo,direct,yes: crates/screens/src/photos/lightbox.rs,yes
-photos,flag-photo,star,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
-photos,unflag-photo,unstar,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
-photos,archive-photo,archive,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
-photos,unarchive-photo,unarchive,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
-photos,delete-photo,delete,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
-photos,restore-photo,restore,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
-photos,purge-photo,purge,photo,card,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs; crates/screens/src/photos/shelf.rs,no
-photos,empty-trash,purge,photo,card,yes: crates/screens/src/photos/shelf.rs,no
-photos,create-album,create,album,direct,yes: crates/screens/src/photos/album_choice.rs; crates/screens/src/photos/home/collections.rs,yes
-photos,rename-album,edit,album,direct,yes: crates/screens/src/photos/shelf.rs,yes
-photos,set-album-cover,edit,album,card,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/shelf.rs,no
-photos,delete-album,delete,album,direct,yes: crates/screens/src/photos/home/collections.rs; crates/screens/src/photos/shelf.rs,yes
-photos,restore-album,restore,album,direct,yes: crates/screens/src/photos/home/collections.rs; crates/screens/src/photos/shelf.rs,no
-photos,add-to-album,add_to,photo,direct,yes: crates/screens/src/photos/album_choice.rs,yes
-photos,remove-from-album,remove_from,photo,direct,yes: crates/screens/src/photos/selection.rs,yes
-photos,set-place,edit,place,card,yes: crates/screens/src/photos/lightbox.rs,no
-photos,name-place,edit,place,card,yes: crates/screens/src/photos/places.rs,no
-photos,tag-photo,tag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no
-photos,untag-photo,untag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no
-photos,add-person,link,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
-photos,remove-person,unlink,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
-photos,attach,attach,photo,card,no,no
-photos,detach,detach,photo,card,no,no
-photos,export-zip,log,photo,card,no,no
-reminders,link,link,task,card,no,no
-reminders,unlink,unlink,task,card,no,no
-reminders,add-task,create,task,direct,yes: crates/screens/src/reminders/ops.rs,yes
-reminders,edit-task,edit,task,direct,yes: crates/screens/src/reminders/detail.rs,yes
-reminders,complete-task,complete,task,direct,yes: crates/screens/src/kit/schedule/ops.rs,yes
-reminders,reopen-task,reopen,task,direct,yes: crates/screens/src/kit/schedule/ops.rs,yes
-reminders,cancel-task,cancel,task,direct,yes: crates/screens/src/reminders/ops.rs,yes
-reminders,organize-task,add_to,task,direct,yes: crates/screens/src/reminders/ops.rs,yes
-reminders,delete-task,delete,task,direct,yes: crates/screens/src/reminders/detail.rs,yes
-reminders,purge-task,purge,task,card,yes: crates/screens/src/reminders/trash.rs,no
-reminders,empty-trash,purge,task,card,yes: crates/screens/src/reminders/trash.rs,no
-reminders,restore-task,restore,task,direct,yes: crates/screens/src/reminders/trash.rs,yes
-reminders,create-project,create,list,direct,yes: crates/screens/src/kit/schedule/ops.rs,yes
-reminders,rename-list,edit,list,direct,no,no
-reminders,create-section,create,section,card,yes: crates/screens/src/kit/schedule/ops.rs,no
-reminders,add-task-tag,tag,task,direct,yes: crates/screens/src/reminders/detail.rs,no
-reminders,remove-task-tag,untag,task,direct,yes: crates/screens/src/reminders/detail.rs,no
-reminders,star-task,star,task,direct,yes: crates/screens/src/reminders/ops.rs,no
-reminders,unstar-task,unstar,task,direct,yes: crates/screens/src/reminders/ops.rs,no
-reminders,style-container,edit:color,list,direct,no,no
-reminders,attach,attach,task,card,no,no
-reminders,detach,detach,task,card,no,no
-reminders,export-ics,log,task,card,no,no
-reminders,follow-reminders,import,task,card,no,no
-reminders,stop-following,detach,task,card,no,no
+action,kind,verb,qualifier,command,target,here,inverse,confirm,chat
+account.add,account,add,,account.add,one,,pair:entity.trash,none,direct:create
+account.edit,account,edit,,account.edit,one,,restore,none,direct:edit
+account.edit/currency,account,edit,currency,account.edit,one,,pair:account.edit/currency,outlined,handoff:destructive
+account.set_opening,account,set_opening,,account.set_opening,one,,restore,none,direct:edit:opening
+budget.set,budget,set,,budget.set,one,,pair:budget.set,none,direct:edit
+budget.set_carry,budget,set_carry,,budget.set_carry,one,,pair:budget.set_carry,none,direct:edit:carry
+category.add,category,add,,category.add,one,,pair:entity.purge,none,direct:create
+checkpoint.record,checkpoint,record,,checkpoint.record,one,account,pair:checkpoint.record,none,direct:log
+rule.add,rule,add,,rule.add,one,account,pair:rule.delete,none,direct:create
+rule.edit,rule,edit,,rule.edit,one,,pair:rule.edit,none,direct:edit
+rule.delete,rule,delete,,rule.delete,one,,pair:rule.add,none,direct:delete
+rule.apply,rule,apply,,rule.apply,one,,restore,none,handoff:open
+txn.add,txn,add,,txn.add,one,account day person,pair:entity.trash,none,direct:create
+txn.add/csv,txn,add,csv,txn.add,one,account,pair:entity.trash,none,handoff:pick_file
+txn.edit,txn,edit,,txn.edit,one,,restore,none,direct:edit
+txn.categorize,txn,categorize,,txn.categorize,set,,restore,none,direct:categorize
+txn.split,txn,split,,txn.split,one,,restore,none,direct:edit:split
+txn.link_transfer,txn,link_transfer,,txn.link_transfer,one,,pair:txn.unlink_transfer,none,handoff:open
+txn.unlink_transfer,txn,unlink_transfer,,txn.unlink_transfer,one,,pair:txn.link_transfer,none,direct:unlink:transfer
+txn.confirm_match,txn,confirm_match,,txn.confirm_match,one,,restore,none,handoff:open
+txn.dismiss_match,txn,dismiss_match,,txn.dismiss_match,one,,restore,none,handoff:open
+txn.export_csv,txn,export_csv,,txn.export_csv,one,,none,owner,handoff:owner_check
+container.create,container,create,,container.create,one,home,pair:entity.trash,none,direct:create
+container.move,container,move,,container.move,one,,restore,none,direct:edit:position
+container.style,container,style,,container.style,one,,restore,none,direct:edit:color
+album.set_cover,album,set_cover,,album.set_cover,one,,restore,none,direct:edit:cover
+entity.trash,entity,trash,,entity.trash,set,,pair:entity.restore,none,direct:delete
+entity.restore,entity,restore,,entity.restore,set,,pair:entity.trash,none,direct:restore
+entity.move,entity,move,,entity.move,set,,restore,none,direct:edit:move
+entity.retitle,entity,retitle,,entity.retitle,one,,restore,none,direct:edit:title
+entity.purge,entity,purge,,entity.purge,one,,none,outlined,handoff:destructive
+entity.empty_trash,entity,empty_trash,,entity.empty_trash,one,,none,outlined,handoff:destructive
+flag.set/starred,flag,set,starred,flag.set,set,,pair:flag.clear/starred,none,direct:star
+flag.set/pinned,flag,set,pinned,flag.set,set,,pair:flag.clear/pinned,none,direct:edit:pinned
+flag.set/archived,flag,set,archived,flag.set,set,,pair:flag.clear/archived,none,direct:archive
+flag.clear/starred,flag,clear,starred,flag.clear,set,,pair:flag.set/starred,none,direct:unstar
+flag.clear/pinned,flag,clear,pinned,flag.clear,set,,pair:flag.set/pinned,none,direct:edit:unpinned
+flag.clear/archived,flag,clear,archived,flag.clear,set,,pair:flag.set/archived,none,direct:unarchive
+tag.add,tag,add,,tag.add,set,,pair:tag.remove,none,direct:tag
+tag.remove,tag,remove,,tag.remove,set,,pair:tag.add,none,direct:untag
+tag.color,tag,color,,tag.color,one,,restore,none,direct:edit:label_color
+edge.add,edge,add,,edge.add,one,,pair:edge.remove,none,handoff:open
+edge.add/contains,edge,add,contains,edge.add,one,,pair:edge.remove/contains,none,direct:add_to
+edge.remove,edge,remove,,edge.remove,one,,pair:edge.add,none,handoff:open
+edge.remove/contains,edge,remove,contains,edge.remove,one,,pair:edge.add/contains,none,direct:remove_from
+edge.move,edge,move,,edge.move,one,,pair:edge.move,none,handoff:open
+link.add,link,add,,link.add,one,,pair:link.remove,none,direct:link
+link.remove,link,remove,,link.remove,one,,pair:link.add,none,direct:unlink
+concept.merge,concept,merge,,concept.merge,one,,none,outlined,handoff:destructive
+history.keep_version,history,keep_version,,history.keep_version,one,,restore,none,handoff:open
+history.restore_version,history,restore_version,,history.restore_version,one,,restore,none,handoff:open
+vault.rename,vault,rename,,vault.rename,one,,pair:vault.rename,none,handoff:open
+vault.export_all,vault,export_all,,vault.export_all,one,,none,owner,handoff:owner_check
+event.propose,event,propose,,event.propose,one,home day person,pair:entity.trash,none,direct:create
+event.propose/ics,event,propose,ics,event.propose,one,home,pair:entity.trash,none,handoff:pick_file
+event.add_guest,event,add_guest,,event.add_guest,one,,restore,none,direct:edit:guest
+event.edit,event,edit,,event.edit,one,,restore,none,direct:edit
+event.edit_occurrence,event,edit_occurrence,,event.edit_occurrence,one,,pair:event.edit_occurrence,none,direct:reschedule
+event.split,event,split,,event.split,one,,restore,none,direct:reschedule:split
+event.cancel,event,cancel,,event.cancel,one,,restore,none,direct:cancel
+event.respond,event,respond,,event.respond,one,,restore,none,direct:respond
+event.export_ics,event,export_ics,,event.export_ics,one,,none,owner,handoff:owner_check
+alert.snooze,alert,snooze,,alert.snooze,one,,restore,none,direct:reschedule:snooze
+reminder.add,reminder,add,,reminder.add,one,,pair:reminder.remove,none,direct:edit:reminder
+reminder.remove,reminder,remove,,reminder.remove,one,,pair:reminder.add,none,direct:edit:no_reminder
+task.add,task,add,,task.add,one,home day person,pair:entity.trash,none,direct:create
+task.edit,task,edit,,task.edit,one,,restore,none,direct:edit
+task.edit/reschedule,task,edit,reschedule,task.edit,one,,restore,none,direct:reschedule
+task.complete,task,complete,,task.complete,one,,pair:task.reopen,none,direct:complete
+task.reopen,task,reopen,,task.reopen,one,,pair:task.complete,none,direct:reopen
+task.cancel,task,cancel,,task.cancel,one,,restore,none,direct:cancel
+task.organize,task,organize,,task.organize,one,,restore,none,direct:add_to
+task.export_ics,task,export_ics,,task.export_ics,one,,none,owner,handoff:owner_check
+note.create,note,create,,note.create,one,home member person day,pair:entity.trash,none,direct:create
+note.edit,note,edit,,note.edit,one,,restore,none,direct:edit
+note.asset_add,note,asset_add,,note.asset_add,one,,pair:note.asset_remove,none,handoff:open
+note.asset_remove,note,asset_remove,,note.asset_remove,one,,pair:note.asset_add,none,handoff:open
+note.asset_reorder,note,asset_reorder,,note.asset_reorder,one,,restore,none,handoff:open
+note.import,note,import,,note.import,one,,pair:entity.trash,none,handoff:pick_file
+note.export,note,export,,note.export,one,,none,owner,handoff:owner_check
+note.restore_version,note,restore_version,,note.restore_version,one,,restore,none,direct:restore:version
+document.add,document,add,,document.add,one,home member person,pair:entity.trash,none,handoff:pick_file
+document.create_text,document,create_text,,document.create_text,one,home member person,pair:entity.trash,none,direct:create
+document.edit,document,edit,,document.edit,one,,restore,none,direct:edit
+document.replace,document,replace,,document.replace,one,,restore,none,handoff:pick_file
+document.restore_version,document,restore_version,,document.restore_version,one,,restore,none,direct:restore:version
+document.export_zip,document,export_zip,,document.export_zip,one,,none,owner,handoff:owner_check
+photo.add,photo,add,,photo.add,one,home member person,pair:entity.trash,none,handoff:pick_file
+photo.edit,photo,edit,,photo.edit,one,,restore,none,direct:edit
+photo.set_place,photo,set_place,,photo.set_place,one,,restore,none,direct:edit:place
+photo.export_zip,photo,export_zip,,photo.export_zip,one,,none,owner,handoff:owner_check
+place.add,place,add,,place.add,one,,pair:entity.trash,none,handoff:open
+place.edit,place,edit,,place.edit,one,,restore,none,handoff:open
+place.locate,place,locate,,place.locate,one,,restore,none,handoff:open
+place.merge,place,merge,,place.merge,one,,none,outlined,handoff:destructive
+person.add,person,add,,person.add,one,home,pair:entity.trash,none,direct:create
+person.edit,person,edit,,person.edit,one,,restore,none,direct:edit
+person.edit/cadence,person,edit,cadence,person.edit,one,,restore,none,direct:edit:cadence
+person.add_date,person,add_date,,person.add_date,one,,restore,none,handoff:open
+person.edit_date,person,edit_date,,person.edit_date,one,,restore,none,handoff:open
+person.remove_date,person,remove_date,,person.remove_date,one,,restore,none,handoff:open
+person.add_note,person,add_note,,person.add_note,one,person,pair:entity.trash,none,direct:create:person
+person.add_relationship,person,add_relationship,,person.add_relationship,one,,pair:edge.remove,none,handoff:open
+person.save_contact_point,person,save_contact_point,,person.save_contact_point,one,,restore,none,handoff:open
+person.remove_contact_point,person,remove_contact_point,,person.remove_contact_point,one,,restore,none,handoff:open
+person.prefer_contact_point,person,prefer_contact_point,,person.prefer_contact_point,one,,restore,none,handoff:open
+person.reorder_contact_points,person,reorder_contact_points,,person.reorder_contact_points,one,,restore,none,handoff:open
+person.set_avatar,person,set_avatar,,person.set_avatar,one,,restore,none,handoff:open
+person.move,person,move,,person.move,one,,restore,none,direct:add_to
+person.merge,person,merge,,person.merge,one,,none,outlined,handoff:destructive
+person.import_vcf,person,import_vcf,,person.import_vcf,one,,pair:entity.trash,none,handoff:pick_file
+person.import_csv,person,import_csv,,person.import_csv,one,,pair:entity.trash,none,handoff:pick_file
+person.export_vcf,person,export_vcf,,person.export_vcf,one,,none,owner,handoff:owner_check
+person.export_csv,person,export_csv,,person.export_csv,one,,none,owner,handoff:owner_check
+touch.log,touch,log,,touch.log,one,person day,pair:entity.trash,none,direct:log
+touch.edit,touch,edit,,touch.edit,one,,restore,none,handoff:open
+workout.log,workout,log,,workout.log,one,person day,pair:entity.trash,none,direct:create
+workout.edit,workout,edit,,workout.edit,one,,restore,none,direct:edit
+reading.add,reading,add,,reading.add,one,day,pair:entity.trash,none,handoff:open
+reading.edit,reading,edit,,reading.edit,one,,restore,none,handoff:open
+measurement.log,measurement,log,,measurement.log,one,day,pair:measurement.clear,none,direct:create
+measurement.clear,measurement,clear,,measurement.clear,one,,pair:measurement.log,none,direct:delete
+health.export_csv,health,export_csv,,health.export_csv,one,,none,owner,handoff:owner_check
+locker.add_item,locker,add_item,,locker.add_item,one,,pair:entity.trash,none,direct:create
+locker.edit_item,locker,edit_item,,locker.edit_item,one,,restore,owner,direct:edit
+locker.duplicate_item,locker,duplicate_item,,locker.duplicate_item,one,,pair:entity.trash,none,handoff:open
+locker.set_field,locker,set_field,,locker.set_field,one,,restore,owner,direct:edit:field
+locker.remove_field,locker,remove_field,,locker.remove_field,one,,restore,none,direct:delete:field
+locker.set_passkey,locker,set_passkey,,locker.set_passkey,one,,restore,owner,handoff:open
+locker.remove_passkey,locker,remove_passkey,,locker.remove_passkey,one,,restore,none,handoff:open
+locker.totp_code,locker,totp_code,,locker.totp_code,one,,none,owner,handoff:reveal:says=reveal
+locker.export,locker,export,,locker.export,one,,none,owner,handoff:owner_check
+follow.stop,follow,stop,,follow.stop,one,,none,outlined,handoff:open
+follow.take_stated,follow,take_stated,,follow.take_stated,one,,restore,none,handoff:open
+thread.clear,thread,clear,,thread.clear,one,,none,outlined,handoff:destructive

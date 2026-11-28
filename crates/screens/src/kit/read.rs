@@ -6,8 +6,6 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 
-use crate::follow::{Report, Store};
-use crate::kit::follow::{Phone, Source};
 use crate::screen::Ctx;
 use crate::strings::{Locale, shared};
 
@@ -121,27 +119,6 @@ impl Note {
             sentence: shared::read_more_failed(locale),
             retry: true,
         }
-    }
-
-    /// A follow pass the vault doubted or the phone reported incomplete, in the follow's own
-    /// words. No Retry: reconnecting or the follow itself is the remedy, not a re-read.
-    #[must_use]
-    pub fn partial(report: &Report, locale: Locale, store: Store) -> Option<Self> {
-        report.sentence(locale, store).map(|sentence| Self {
-            kind: NoteKind::Partial,
-            sentence,
-            retry: false,
-        })
-    }
-
-    /// A check beside the data that was not made ([`Phone`]). No action.
-    #[must_use]
-    pub fn unchecked(phone: &Phone, locale: Locale, source: Source<'_>) -> Option<Self> {
-        phone.sentence(locale, source).map(|sentence| Self {
-            kind: NoteKind::NotChecked,
-            sentence,
-            retry: false,
-        })
     }
 
     fn wire(&self, locale: Locale) -> wire::PageNote {
@@ -328,14 +305,6 @@ mod tests {
         page.wire(EN, |_| wire::Denied::default(), wire::EmptyState::default)
     }
 
-    fn not_checked() -> Option<Note> {
-        Some(Note {
-            kind: NoteKind::NotChecked,
-            sentence: "Couldn’t check what your phone says.".to_owned(),
-            retry: false,
-        })
-    }
-
     #[test]
     fn a_first_read_is_loading_until_it_lands() {
         let wired = state(&Page::loading());
@@ -415,30 +384,6 @@ mod tests {
     }
 
     #[test]
-    fn partial_beats_not_checked_and_a_note_needs_data() {
-        let report = Report {
-            incomplete: true,
-            ..Report::default()
-        };
-        let partial = Note::partial(&report, EN, Store::Files);
-        assert!(partial.is_some());
-        for (first, second) in [
-            (not_checked(), partial.clone()),
-            (partial.clone(), not_checked()),
-        ] {
-            let both = page(full(&[1])).noted(first).noted(second);
-            assert_eq!(both.note().map(|n| n.kind), Some(NoteKind::Partial));
-        }
-        assert!(
-            Page::<Vec<u8>>::Empty
-                .noted(partial.clone())
-                .note()
-                .is_none()
-        );
-        assert!(Page::<Vec<u8>>::Failed.noted(partial).note().is_none());
-    }
-
-    #[test]
     fn a_note_on_the_wire_always_names_its_kind() {
         // An unset kind is never drawn by either shell, so no note may leave the core without one.
         for kind in [NoteKind::Partial, NoteKind::NotChecked] {
@@ -460,38 +405,5 @@ mod tests {
         assert!(gone.permanent && gone.remedy.is_empty());
         assert!(!failure(EN).permanent);
         assert!(!incomplete(EN).permanent);
-    }
-
-    #[test]
-    fn not_checked_carries_no_action() {
-        let wired = not_checked().expect("a note").wire(EN);
-        assert_eq!(wired.kind, wire::page_note::Kind::NotChecked as i32);
-        assert!(wired.action_label.is_empty());
-        assert!(Note::unchecked(&Phone::default(), EN, Source::Phone).is_none());
-    }
-
-    #[test]
-    fn a_partial_follow_uses_the_follows_words_and_no_retry() {
-        let incomplete = Report {
-            incomplete: true,
-            ..Report::default()
-        };
-        let note = Note::partial(&incomplete, EN, Store::Contacts).expect("incomplete is partial");
-        assert!(!note.retry);
-        assert_eq!(
-            Some(note.sentence.clone()),
-            incomplete.sentence(EN, Store::Contacts)
-        );
-        assert!(note.wire(EN).action_label.is_empty());
-        let doubted = Report {
-            doubted: 3,
-            incomplete: true,
-            ..Report::default()
-        };
-        assert_eq!(
-            Note::partial(&doubted, EN, Store::Contacts).map(|n| n.sentence),
-            doubted.sentence(EN, Store::Contacts)
-        );
-        assert!(Note::partial(&Report::default(), EN, Store::Contacts).is_none());
     }
 }

@@ -11,8 +11,8 @@
 catalog! {
     plain transfer_title = ("Downloads", "Downloads");
     plain transfer_subtitle = (
-        "Set per phone, not per vault; thumbnails download on any network.",
-        "Set per phone, not per vault; thumbnails download on any network."
+        "Set per phone, not per vault; photo previews download on any network.",
+        "Set per phone, not per vault; photo previews download on any network."
     );
     // THE DEFAULT. Its failure mode is a late photograph, not a bill.
     plain rule_wifi_only = (

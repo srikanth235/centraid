@@ -36,6 +36,7 @@ jobs:
       - run: git show-ref --verify --quiet refs/heads/main || git branch main origin/main
       - uses: ./.github/actions/setup
         with:
+          bun: "true"
           rust: "true"
           cargo-cache: gate
       # The same tools and pins as gate.yml's `gate` job: one action states them.
@@ -78,7 +79,7 @@ jobs:
     with:
       binary-only: true
 
-  # The candidate pointer `release.yml` and `bun run release:prepare` check.
+  # The candidate pointer `release.yml` and `cargo xtask release prepare` check.
   promote-candidate:
     needs: [gate, mobile-jvm, prebuilt-core]
     if: github.event_name == 'schedule'

@@ -1,0 +1,66 @@
+iOS hosted runner attempt evidence (read-only workflow logs)
+
+Earlier attempt: [run 46028285993](https://github.com/srikanth235/centraid/actions/runs/46028285993), commit `ab834644510584ebdf378cc02a71b4392989f663`, iOS job `140605336152`, Xcode 26.3 / Swift 6.2.4.
+
+- “Build the actual simulator and device cores with llama” passed for both Rust targets.
+- “Compile Swift 6 app and run XCTest” failed in `mobile/iosApp/Sources/Core.swift` inside `Core.startPump` because the closure used stored properties without explicit capture/local binding: `effectSink.yield(effect)` at line 219, `changeSink.yield(change)` at 221, `effectSink.finish()` at 231, and `changeSink.finish()` at 232.
+- XCTest did not run, the screenshot assertions were not reached, and “Build unsigned iPhone app for a generic device” was skipped. This attempt supplies no iOS screenshot or unsigned-app-build proof.
+- The source now uses local stream constants to make the closure captures explicit. The next hosted run compiled past those errors before finding the separate RoomStore errors below.
+- The earlier hosted run [46024313714](https://github.com/srikanth235/centraid/actions/runs/46024313714) had a `String: Error` picker/scanner bridge compile failure; the bridge was changed to a local Swift error type. That correction did not result in an end-to-end passing attempt.
+
+Earlier retry: [run 46031385998](https://github.com/srikanth235/centraid/actions/runs/46031385998), commit `53311bea8b9318095de4a00ab23ddee1f47dc858`, iOS job `140615783661`, Xcode 26.3 / Swift 6.2.4.
+
+- Both simulator and unsigned-device Rust core builds passed.
+- Swift compilation failed in `mobile/iosApp/Sources/RoomStore.swift`: generated protobuf property spellings (`inputJson`, `clearOwned_p`), async directory enumeration, `StageHandle.contentHash` being a hex string, and an incorrect `followGrant` argument label.
+- XCTest and screenshot capture did not run; the unsigned iPhone app build was skipped. This attempt supplies no screenshot evidence.
+- The next hosted run compiled past these errors before finding the separate concurrency errors below.
+
+Latest retry: [run 46035692381](https://github.com/srikanth235/centraid/actions/runs/46035692381), commit `4bcf798f0c7c6b122e3d2bfbc73c0b6c7bc82086`, iOS job `140630397229`, Xcode 26.3 / Swift 6.2.4.
+
+- Both simulator and unsigned-device Rust core builds passed.
+- Swift compilation failed on Swift 6 concurrency checks: `RoomStore.swift:1042` sent `[EKReminder]` across the continuation; `ScreenPlatform.swift:463,466,485,486` captured non-Sendable callbacks in UIKit dismissal completions.
+- XCTest and screenshot capture did not run; the unsigned iPhone app build was skipped. This attempt supplies no screenshot evidence.
+- Reminder records are now projected to JSON `Data` in the EventKit callback, so raw `EKReminder` values do not cross the actor boundary; PHPicker/VisionKit completion holders and their UI dismissal delegate methods are main-actor isolated. These changes await the next hosted run.
+
+Latest retry: [run 46038733383](https://github.com/srikanth235/centraid/actions/runs/46038733383), commit `a455906eb0c8332f7f050acc5f5782f8210f0ddb`, iOS job `140640829049`, Xcode 26.3 / Swift 6.2.4.
+
+- Both Rust core slices passed.
+- Swift module emission failed because `VNDocumentCameraViewControllerDelegate` is nonisolated while its witness methods enter main-actor code. The compiler recommended isolating the conformance itself; no XCTest or screenshot capture ran, and the unsigned-device app build was skipped.
+- The VisionKit delegate conformance is now explicitly main-actor isolated. This follow-up awaits the next hosted run.
+
+Latest retry: [run 46040847364](https://github.com/srikanth235/centraid/actions/runs/46040847364), commit `a6d34f0dba4b2152f1b898eeadd5e1895ac71d2a`, iOS job `140648030536`, Xcode 26.3 / Swift 6.2.4.
+
+- Both Rust core slices passed, and Swift compiled past the VisionKit isolation issue.
+- Swift compilation then failed in `AccessibilityAuditTests.swift` because two closure bodies used `homeShowing(app)` without explicit `self` at lines 124 and 390. XCTest execution and screenshot capture did not start; the unsigned-device build was skipped.
+- Both closures now use `self.homeShowing(app)`. This follow-up awaits the next hosted run.
+
+Latest retry: [run 46043020839](https://github.com/srikanth235/centraid/actions/runs/46043020839), commit `c340ceb8239fdf25d40dba5d6d157704b1909545`, iOS job `140655366304`, Xcode 26.3 / Swift 6.2.4.
+
+- Both Rust core slices and the app module compile passed.
+- XCTest build failed on `RoomStoreTests.swift`: a missing EventKit import, optional contact-record unwrapping, optional-pattern matching on a nonoptional outcome, missing enum context for the typed shell-effect fixture array, and assigning `Data` to the string `StageHandle.contentHash`. These errors prevented XCTest execution and screenshot capture; the unsigned-device build was skipped.
+- The test fixtures now use the generated types directly and retain their existing assertions. Root review corrected expectations against the fixtures and native contracts: pick-file/photo/scan are effect IDs 8/9/10 (array indices 7/8/9); a 19-byte staged file with a 1024-byte chunk size sends exactly begin/chunk/end; clearing optional contact fields preserves `sort_name` as `Ada`; and the cancellation fake sets `ShellFailed.cancelled` as a real performer must. The unavailable calendar pass injects a deterministic unavailable reader result rather than depending on EventKit permission state. This follow-up awaits the next hosted run.
+
+No physical device, native owner authentication, or share-extension host-app/share-sheet flow is proven by these attempts. M1, M3, and M4 remain unticked pending owner review.
+
+Latest retry: [run 46045372411](https://github.com/srikanth235/centraid/actions/runs/46045372411), commit `5c1b94498abd5e7bbcee890fd5a767b8af9377ad`, iOS job `140663294315`, Xcode 26.3 / Swift 6.2.4.
+
+- Both simulator and device Rust core builds passed. Swift app/test compilation passed, and the unit test suite passed: 173 tests, 0 failures.
+- UI tests ran but failed: 8 tests, 1 skipped, 18 failures. Navigation from Home to Calendar, Reminders, Notes, Docs, Money and Health remained on Home, whose VoiceOver output included “This version of Centraid can't do that.” The add-room sweep could not find `key/add`; the Backup hit target was not hittable in multiple audits; focus-order tests also remained on Home. The People screenshot proof failed because the test looked for `header/add` rather than the native `key/add`.
+- `verify-ios.sh` failed because no screenshot PNG attachments were exported. “Build unsigned iPhone app for a generic device” was skipped after the UI test failure. This attempt proves neither the ten required screenshots nor the unsigned device app link.
+- The People/Money screenshot proof now targets `key/add` in the working tree. Root is tracing the Home navigation refusal; the next hosted run must establish the actual app/link and screenshot results.
+
+Run 46059161071 / source 50510fd0b: both Rust cores, Swift app/tests, 174 unit tests and unsigned generic iPhone build passed. Full UI tour reached app rooms and recorded 10 named light/dark attachments. UI: 8 tests / 1 skip / 87 failures; accessibility labels/type metadata/contrast/clipping/selected-state assertions and one audit-service timeout. Full archive 15232355859 is 832551836 bytes; connector max 512 MiB and Azure redirect blocked by command proxy, so local visual review pending. Next workflow adds ios-review while retaining full results; targeted native UI repairs pending SDK verification.
+
+Latest hosted retry: [run 46071464163](https://github.com/srikanth235/centraid/actions/runs/46071464163), source `096e04cb2354aef9b4ab42002e240bb1e02306ec`, iOS job `140749131892`.
+
+- Both llama-enabled Rust targets passed. Swift app/tests compiled, all 174 unit tests passed, and the unsigned generic iPhone build succeeded.
+- The UI suite ran 8 tests, 1 expected skip, 55 failures. The add-room text-size sweep and the three focus-order tests passed. The light/dark accessibility audits reported contrast, Dynamic Type and text-clipping issues plus one sufficient-element-description issue. The largest-text audit failed because the Backup tab was not hittable. The separate Reduce Motion pass did not run after the UI suite failed.
+- The runner created ten required light/dark screenshot PNGs. The 14,785,933-byte `ios-review` artifact (`15236093703`) was downloaded and verified locally: `/tmp/centraid-ios-review-46071464163.zip`, SHA-256 `0f12fbad4ea8ce1e4450e2286f6fc1596ce7828328e2c5e3f9a4ed358fa3a869`. The archive includes 68 rendered page PNGs plus the ten required captures; PNG signatures, dimensions and hashes were checked. Captures show an hourly Calendar grid, a blank new Notes editor, two solid app-tint Photos placeholders rather than thumbnails, and a positive income amount in red in Money. Later code resolves Store image content only and does not change this source-096 capture; the Photos resolver evidence is in [android-photo-content](android-photo-content.txt). The ten captures and provenance are copied to `reports/v0-app-plane-2026-11-27/snapshots/ios/`.
+- No physical-device or share-extension flow was exercised. This remains a failed workflow, not an all-green iOS result.
+
+Current hosted attempt: [run 46084049333](https://github.com/srikanth235/centraid/actions/runs/46084049333), source `be6c4d0edd65ad4bc80b0cd916284b74ec023521`, iOS job `140789379909`.
+
+- Both simulator and device Rust targets passed; Swift compilation passed. XCTest unit tests: 175 passed, 0 failures, including `PhotoGridTests.testPhotoContentPathsResolveOpaqueRefsAndRejectLateRoomReplies`.
+- Normal UI: 8 tests, 1 expected skip, 53 failures; all three focus-order tests passed. This is two fewer UI failures than source `096e04cb`; the UI suite remains failed. The 53 assertion lines are retained in [ios-audit-be6](ios-audit-be6.txt).
+- Reduce Motion: 1 test, 26 failures. Verbatim assertions are in [ios-motion-be6](ios-motion-be6.txt). The unsigned generic-device build and artifact uploads passed. The overall workflow failed because the UI and Motion checks failed.
+- Artifact `15241456479` (20,491,866 bytes) was downloaded and hash-verified: `b11cd4eeb930286271a7c1c7b116f7114e05d22d73471b91a8b1f966aeebe96a`. It contains 94 rendered pages, ten required captures and two XXXL repair originals. All 12 PNGs were verified, reviewed and copied under `snapshots/ios/` with provenance. Captures are not physical-device or completed OS-effect proof. No physical device or share-extension flow was exercised.

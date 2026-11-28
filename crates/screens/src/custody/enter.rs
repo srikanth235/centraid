@@ -639,7 +639,17 @@ impl Enter {
             "{:04}-{:02}-{:02}T{:02}:{:02}",
             at.year, at.month, at.day, at.hour, at.minute
         );
-        crate::kit::earlier::dated(self.locale, self.cycle, &local)
+        let day = local
+            .get(..10)
+            .map(|day| crate::kit::civil::day_month(self.locale, day));
+        [
+            day.unwrap_or_default(),
+            crate::kit::civil::clock_for(self.locale, &local, self.cycle),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
     }
 
     /// The ask a restore makes when it cannot prove it holds the newest backup: the date and the

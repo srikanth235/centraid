@@ -1,50 +1,3 @@
-//! WORLD SEEDING: a JSON world description written into a fresh vault through
-//! the real typed commands, deterministically. The Eval and Data steps seed
-//! with this and never write SQL.
-//!
-//! ```json
-//! {
-//!   "me": "Sam Park", "epoch": "2026-01-05T09:00", "seed": "w1", "currency": "EUR",
-//!   "people":    [{"key":"neha","name":"Neha Rao","role":"…","nickname":"…","met":"…",
-//!                  "cadence":30,"starred":true,"last_contacted":"2026-09-01T10:00",
-//!                  "last_contacted_kind":"call"}],
-//!   "lists":     [{"key":"home","name":"Home","area":"…"}],
-//!   "events":    [{"key":"dentist","name":"Dentist","start":"2026-10-02T09:00",
-//!                  "end":"2026-10-02T10:00","description":"…","attendees":["neha"],
-//!                  "cancelled":true}],
-//!   "tasks":     [{"key":"cabin","name":"Book the cabin","due":"2026-06-19T09:00",
-//!                  "status":"open","effort":30,"priority":2,"description":"…",
-//!                  "parent":"key","list":"home","completed":"2026-06-01T10:00"}],
-//!   "notebooks": [{"key":"recipes","name":"Recipes"}],
-//!   "notes":     [{"key":"dal","name":"Dal","body":"…","notebook":"recipes","pinned":true}],
-//!   "folders":   [{"key":"taxes","name":"Taxes"}],
-//!   "documents": [{"key":"w2","name":"W2 2025","text":"…","folder":"taxes","starred":true}],
-//!   "albums":    [{"key":"summer","name":"Summer"}],
-//!   "photos":    [{"key":"beach","name":"Beach","taken":"2026-07-01T10:00",
-//!                  "albums":["summer"],"people":["neha"],"starred":true}],
-//!   "locker":    [{"key":"bank","name":"Bank","type":"login","username":"…",
-//!                  "url":"…","notes":"…","password":"…","starred":true}],
-//!   "accounts":  [{"key":"checking","name":"Everyday","kind":"checking","currency":"USD"}],
-//!   "transactions": [{"key":"coffee","account":"checking","date":"2026-09-30","amount":-4.5,
-//!                  "name":"Blue Bottle","description":"BLUE BOTTLE #12","category":"food.dining",
-//!                  "void":true}],
-//!   "transfers": [{"a":"out","b":"in"}],
-//!   "categories": [{"key":"pets","name":"Pets fund"}],
-//!   "rules":     [{"key":"coffee_rule","match":"contains","text":"BLUE BOTTLE","category":"food.dining"}],
-//!   "budgets":   [{"month":"2026-09","category":"food.dining","amount":300,"carry":true}],
-//!   "links":     [{"from":"cabin","to":"neha"}]
-//! }
-//! ```
-//!
-//! `currency` is the vault's default (base) currency, set at founding; USD
-//! when absent. A transaction's `amount` is signed in currency units (money out is negative), its
-//! `category` is a Money category notation and `void` is a member's void (#1099); they go in through
-//! `follow.statement`, a line at a time. Every row may carry `created` (the clock at its create command),
-//! `modified` (a later same-value edit that stamps `updated_at`) and `trashed`
-//! (`true` or a time). Keys are unique across the world; `me` is the owner.
-//! Times are `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, floating (no zone).
-//! A top-level key that is none of the above is an error (`groups`, `expenses` and `debts` were Tally's: #1115).
-
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -58,11 +11,7 @@ struct Seeder {
     handle: Handle,
     keys: BTreeMap<String, (Kind, String)>,
     cursor: i64,
-    locker: Option<(String, Vec<u8>)>,
-    /// `key.field` of every world value the vault cannot hold.
     dropped: Vec<String>,
-    /// The areas lists sit in, by title: containers made the first time a list names one.
-    areas: BTreeMap<String, String>,
 }
 
 fn at(text: &str) -> Result<i64, String> {
@@ -84,8 +33,11 @@ fn rows<'a>(world: &'a Value, key: &str) -> &'a [Value] {
         .map_or(&[], Vec::as_slice)
 }
 
-fn vault_time_of(stamp: Stamp) -> String {
-    stamp.vault()
+fn floating_time(stamp: Stamp) -> String {
+    match stamp.time {
+        Some(time) => format!("{}T{}", stamp.date, crate::dates::clock(time)),
+        None => stamp.date.to_string(),
+    }
 }
 
 fn vault_time(text: &str) -> Result<String, String> {
@@ -94,8 +46,13 @@ fn vault_time(text: &str) -> Result<String, String> {
         .ok_or_else(|| format!("\"{text}\" is not YYYY-MM-DD[THH:MM]"))
 }
 
+fn due_time(text: &str) -> Result<String, String> {
+    Stamp::parse(text)
+        .map(floating_time)
+        .ok_or_else(|| format!("\"{text}\" is not YYYY-MM-DD[THH:MM]"))
+}
+
 impl Seeder {
-    /// Set the clock to a row's `created`, or step it a minute.
     fn clock_for(&mut self, row: &Value, field: &str) -> Result<(), String> {
         match str_of(row, field) {
             Some(text) => self.handle.clock.set(at(text)?),
@@ -105,20 +62,6 @@ impl Seeder {
             }
         }
         Ok(())
-    }
-
-    /// The id of the area named `title`, made now if no list has named it yet.
-    fn area(&mut self, title: &str) -> Result<String, String> {
-        if let Some(id) = self.areas.get(title) {
-            return Ok(id.clone());
-        }
-        let id = self.mint();
-        self.run(
-            "container.create",
-            json!({"id": id, "kind": "area", "title": title}),
-        )?;
-        self.areas.insert(title.to_owned(), id.clone());
-        Ok(id)
     }
 
     fn mint(&self) -> String {
@@ -135,23 +78,25 @@ impl Seeder {
         Ok(())
     }
 
-    fn id(&self, key: &str, kind: Kind) -> Result<String, String> {
-        match self.keys.get(key) {
-            Some((found, id)) if *found == kind => Ok(id.clone()),
-            Some((found, _)) => Err(format!(
+    fn id(&self, key: &str, expected: Kind) -> Result<String, String> {
+        let (kind, id) = self
+            .keys
+            .get(key)
+            .ok_or_else(|| format!("no {} has the key \"{key}\"", expected.name()))?;
+        if *kind != expected {
+            return Err(format!(
                 "\"{key}\" is a {}, not a {}",
-                found.name(),
-                kind.name()
-            )),
-            None => Err(format!("no {} has the key \"{key}\"", kind.name())),
+                kind.name(),
+                expected.name()
+            ));
         }
+        Ok(id.clone())
     }
 
     fn run(&self, command: &str, input: Value) -> Result<Value, String> {
         self.handle.must(command, input)
     }
 
-    /// At `field`'s time (or the next minute), run a command.
     fn at_then(
         &mut self,
         row: &Value,
@@ -171,8 +116,6 @@ impl Seeder {
     }
 }
 
-/// The top-level keys a world may carry: the scalars and the sections [`seed_report`] reads. `today` is the
-/// day the sessions on the world run; the Python tools read it and the seeder does not.
 const SECTIONS: &[&str] = &[
     "me",
     "epoch",
@@ -201,9 +144,6 @@ const SECTIONS: &[&str] = &[
     "links",
 ];
 
-/// A section the seeder does not read is an error, never a silent drop: a world that still names a kind
-/// the runtime no longer has (`groups`, `expenses`, `debts` after Tally, #1099) would otherwise seed
-/// without it and pass for a household that never held it (#1115).
 fn reject_unknown_sections(world: &Value) -> Result<(), String> {
     let Some(object) = world.as_object() else {
         return Err("a world is a JSON object".to_owned());
@@ -224,20 +164,16 @@ fn reject_unknown_sections(world: &Value) -> Result<(), String> {
     }
 }
 
-/// Seed `world` into a fresh vault at `path`. Returns every key's kind and id.
 pub fn seed(world: &Value, path: &Path) -> Result<Value, String> {
     seed_report(world, path).map(|(keys, _)| keys)
 }
 
-/// [`seed`], plus the `key.field` values the vault could not hold (a locker
-/// field its type does not keep).
 pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), String> {
     reject_unknown_sections(world)?;
     let me = str_of(world, "me").unwrap_or("Me");
     let epoch = at(str_of(world, "epoch").unwrap_or("2026-01-01T09:00"))?;
     let clock = SetClock::at(epoch);
     let seed = format!("nativetools:seed:{}", str_of(world, "seed").unwrap_or("0"));
-    // THE VAULT'S DEFAULT CURRENCY, set once at founding.
     let currency = str_of(world, "currency").unwrap_or("USD").to_uppercase();
     if currency.len() != 3 || !currency.chars().all(|c| c.is_ascii_alphabetic()) {
         return Err(format!(
@@ -250,9 +186,7 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         handle,
         keys: BTreeMap::new(),
         cursor: epoch,
-        locker: None,
         dropped: Vec::new(),
-        areas: BTreeMap::new(),
     };
     seeder
         .keys
@@ -281,14 +215,11 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
     for row in rows(world, "lists") {
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
-        let mut input = json!({
-            "id": id, "kind": "project",
+        let input = json!({
+            "id": id,
+            "kind": "task_list",
             "title": str_of(row, "name").ok_or("a list needs a name")?,
         });
-        // a list's area is the container of that name, made the first time a list names it
-        if let Some(area) = str_of(row, "area") {
-            input["parent"] = json!(seeder.area(area)?);
-        }
         seeder.run("container.create", input)?;
         seeder.key(row, Kind::List, id)?;
     }
@@ -319,11 +250,9 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         let mut input = json!({
             "id": id,
             "title": str_of(row, "name").ok_or("an event needs a name")?,
-            // the seed PROPOSES its events, as the assistant does
             "status": "tentative",
         });
         match (start.time, end) {
-            // a date is an all-day event, whose end is its last day
             (None, end) => {
                 let last = match end {
                     Some(end) => end
@@ -339,32 +268,33 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
                 input["ends"] = json!(last.to_string());
             }
             (Some(_), end) => {
-                let end = match end {
-                    Some(end) => vault_time_of(end),
+                let end_text = match end {
+                    Some(end) => floating_time(end),
                     None => {
                         let end = start
                             .at()
                             .checked_add(jiff::Span::new().hours(1))
                             .map_err(|e| e.to_string())?;
-                        format!("{}T{}:00", end.date(), crate::dates::clock(end.time()))
+                        format!("{}T{}", end.date(), crate::dates::clock(end.time()))
                     }
                 };
                 input["timing"] = json!("floating");
-                input["starts"] = json!(start.vault());
-                input["ends"] = json!(end);
+                input["starts"] = json!(floating_time(start));
+                input["ends"] = json!(end_text);
             }
         }
-        let mut attendees = Vec::new();
+        let mut guests = Vec::new();
         for person in row
             .get("attendees")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
         {
-            attendees.push(seeder.id(person.as_str().unwrap_or_default(), Kind::Person)?);
+            let person_id = seeder.id(person.as_str().unwrap_or_default(), Kind::Person)?;
+            guests.push(json!({"person_id": person_id}));
         }
-        if !attendees.is_empty() {
-            input["attendees"] = json!(attendees);
+        if !guests.is_empty() {
+            input["guests"] = json!(guests);
         }
         if let Some(description) = str_of(row, "description") {
             input["description"] = json!(description);
@@ -378,10 +308,7 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         let mut input =
             json!({"id": id, "title": str_of(row, "name").ok_or("a task needs a name")?});
         if let Some(due) = str_of(row, "due") {
-            input["due"] = json!(vault_time(due)?);
-        }
-        if let Some(effort) = row.get("effort").and_then(Value::as_i64) {
-            input["effort_min"] = json!(effort);
+            input["due"] = json!(due_time(due)?);
         }
         if let Some(priority) = row.get("priority").and_then(Value::as_i64) {
             input["priority"] = json!(priority);
@@ -392,8 +319,10 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         if let Some(parent) = str_of(row, "parent") {
             input["parent_id"] = json!(seeder.id(parent, Kind::Task)?);
         }
-        if let Some(list) = str_of(row, "list") {
-            input["project_id"] = json!(seeder.id(list, Kind::List)?);
+        if let Some(list) = str_of(row, "list")
+            && input.get("parent_id").is_none()
+        {
+            input["parent_id"] = json!(seeder.id(list, Kind::List)?);
         }
         seeder.run("task.add", input)?;
         seeder.key(row, Kind::Task, id)?;
@@ -462,7 +391,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
                 json!({"from": album, "rel": "contains", "to": id}),
             )?;
         }
-        // who is in a photograph is tagged by hand: a `depicts` edge to the person
         for person in row
             .get("people")
             .and_then(Value::as_array)
@@ -479,55 +407,36 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
     for row in rows(world, "locker") {
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
-        let mut input = json!({
-            "item_id": id,
-            "type": str_of(row, "type").unwrap_or("login"),
-            "title": str_of(row, "name").ok_or("a locker item needs a name")?,
-        });
         let item_type = str_of(row, "type").unwrap_or("login");
-        let mut secrets: Vec<(&str, &str)> = crate::meta::REVEAL_FIELDS
-            .iter()
-            .filter_map(|(name, column)| str_of(row, name).map(|value| (*column, value)))
-            .collect();
-        // Each field goes where the type keeps it (a note's notes are its
-        // sealed content); a field the type cannot keep is reported, since
-        // the vault would null it without a word.
+        let mut fields: Vec<Value> = Vec::new();
+        for (name, column) in crate::meta::REVEAL_FIELDS {
+            if let Some(value) = str_of(row, name) {
+                fields.push(json!({"field_key": column, "value": value}));
+            }
+        }
         for field in ["username", "url", "notes"] {
             let Some(value) = str_of(row, field) else {
                 continue;
             };
             match crate::meta::locker_column(item_type, field) {
-                Some("content") => secrets.push(("content", value)),
-                Some(column) => input[column] = json!(value),
+                Some(column) => fields.push(json!({"field_key": column, "value": value})),
                 None => seeder.dropped.push(format!(
                     "{}.{field} (a {item_type} item keeps no {field})",
                     str_of(row, "key").unwrap_or_default()
                 )),
             }
         }
-        if !secrets.is_empty() {
-            if seeder.locker.is_none() {
-                seeder.locker = Some(seeder.handle.locker_key()?);
-            }
-            let (key_id, key) = seeder.locker.clone().unwrap_or_default();
-            input["key_id"] = json!(key_id);
-            for (column, value) in secrets {
-                let field_id = centraid_vault::commands::locker::built_in_field_id(&id, column);
-                let sealed = centraid_vault::custody::locker_key::encrypt_under_locker_key(
-                    &key, &key_id, &field_id, value,
-                )
-                .map_err(|error| error.to_string())?;
-                input[column] = json!(sealed);
-                if column == "password" {
-                    input["password_rotated"] = json!(true);
-                }
-            }
+        let mut input = json!({
+            "item_id": id,
+            "type": item_type,
+            "title": str_of(row, "name").ok_or("a locker item needs a name")?,
+        });
+        if !fields.is_empty() {
+            input["fields"] = json!(fields);
         }
         seeder.run("locker.add_item", input)?;
         seeder.key(row, Kind::LockerItem, id)?;
     }
-    // MONEY (#1099): accounts, then each transaction as one followed statement line, so a row has
-    // the instant of its own.
     let mut accounts: BTreeMap<String, (String, String, String)> = BTreeMap::new();
     for row in rows(world, "accounts") {
         seeder.clock_for(row, "created")?;
@@ -538,7 +447,8 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         seeder.run(
             "account.add",
             json!({
-                "id": id, "title": name,
+                "id": id,
+                "title": name,
                 "type": str_of(row, "kind").unwrap_or("checking"),
                 "currency": account_currency,
             }),
@@ -571,8 +481,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             .or_else(|| str_of(row, "name"))
             .ok_or("a transaction needs a description or a name")?;
         let external = format!("csv:{index:064x}");
-        // the name the member sees is the transaction's own title; the bank's words stay in the
-        // line the statement stated
         let title = str_of(row, "name").unwrap_or(description);
         let signed = crate::world::minor_of(amount.abs(), &account_currency)
             * if amount < 0.0 { -1 } else { 1 };
@@ -599,23 +507,44 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             )?;
         }
         if row.get("void").and_then(Value::as_bool) == Some(true) {
-            seeder.run("txn.void", json!({"id": id}))?;
+            seeder.run("entity.trash", json!({"id": id}))?;
         }
         seeder.key(row, Kind::Transaction, id)?;
     }
-    // HEALTH (#1135): the daily figures as one recorded batch, then each workout as one followed
-    // line of the health store, so a row has the instant of its own.
-    let days: Vec<Value> = rows(world, "health_days").to_vec();
-    if !days.is_empty() {
-        seeder.run("measurement.record", json!({ "days": days }))?;
+    let workout_rows = rows(world, "workouts");
+    let health_days = rows(world, "health_days");
+    if workout_rows.is_empty() && !health_days.is_empty() {
+        seeder.run(
+            "follow.health",
+            json!({
+                "origin": {"ref": "store:seed", "label": "Health"},
+                "records": [],
+            }),
+        )?;
     }
-    for row in rows(world, "workouts") {
+    for row in workout_rows {
         seeder.clock_for(row, "created")?;
         let key = str_of(row, "key").ok_or("a workout needs a key")?;
         let external = format!("store:{key}");
-        let mut fields = serde_json::Map::new();
-        for name in ["kind", "starts", "ends", "workout"] {
+        let mut fields = Map::new();
+        for name in ["kind", "starts", "ends"] {
             if let Some(value) = row.get(name) {
+                fields.insert(name.to_owned(), value.clone());
+            }
+        }
+        let metric_source = row.get("workout").and_then(Value::as_object);
+        for name in [
+            "recorded_by",
+            "moving_s",
+            "distance_m",
+            "energy_kcal",
+            "heart_bpm",
+            "climb_m",
+        ] {
+            if let Some(value) = row
+                .get(name)
+                .or_else(|| metric_source.and_then(|obj| obj.get(name)))
+            {
                 fields.insert(name.to_owned(), value.clone());
             }
         }
@@ -628,6 +557,46 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         )?;
         let id = seeder.handle.followed(&external)?;
         seeder.key(row, Kind::Workout, id)?;
+    }
+    if !health_days.is_empty() {
+        let mut totals = Vec::new();
+        let mut readings = Vec::new();
+        for entry in health_days {
+            let metric = str_of(entry, "metric").unwrap_or_default();
+            if matches!(
+                metric,
+                "weight_kg" | "blood_pressure" | "glucose_mmol" | "body_temp_c"
+            ) {
+                readings.push(entry);
+            } else {
+                totals.push(entry.clone());
+            }
+        }
+        if !totals.is_empty() {
+            seeder.run(
+                "measurement.record",
+                json!({
+                    "origin": {"system": "health", "ref": "store:seed"},
+                    "days": totals,
+                }),
+            )?;
+        }
+        for entry in readings {
+            if let (Some(day), Some(metric), Some(value)) = (
+                str_of(entry, "day"),
+                str_of(entry, "metric"),
+                entry.get("value").and_then(Value::as_f64),
+            ) {
+                seeder.run(
+                    "reading.add",
+                    json!({
+                        "metric": metric,
+                        "at": format!("{day}T12:00:00.000Z"),
+                        "value": value,
+                    }),
+                )?;
+            }
+        }
     }
     for transfer in rows(world, "transfers") {
         let (Some(a), Some(b)) = (str_of(transfer, "a"), str_of(transfer, "b")) else {
@@ -664,7 +633,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         )?;
         seeder.key(row, Kind::Rule, id)?;
     }
-    // A budget is a month's plan for a category in currency units (the vault's default currency).
     for row in rows(world, "budgets") {
         seeder.clock_for(row, "created")?;
         let month = str_of(row, "month").ok_or("a budget needs a month")?;
@@ -677,7 +645,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             "month": month,
             "category_id": format!("category:{category}"),
             "amount_minor": crate::world::minor_of(amount, &currency),
-            "currency": currency,
         });
         if let Some(carry) = row.get("carry").and_then(Value::as_bool) {
             input["carry"] = json!(carry);
@@ -693,24 +660,29 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             .get(from)
             .cloned()
             .ok_or_else(|| format!("no key \"{from}\""))?;
-        let (_, to_id) = seeder
+        let (to_kind, to_id) = seeder
             .keys
             .get(to)
             .cloned()
             .ok_or_else(|| format!("no key \"{to}\""))?;
-        // a document is about a person and nothing else in the model: any other link is
-        // reported and left out rather than refused
-        let to_kind = seeder.keys.get(to).map(|(kind, _)| *kind);
-        if matches!(from_kind, Kind::Document) && to_kind != Some(Kind::Person) {
+        if matches!(from_kind, Kind::Document) && to_kind != Kind::Person {
             seeder
                 .dropped
                 .push(format!("{from}.links (a document is only about a person)"));
             continue;
         }
-        if !matches!(
-            from_kind,
-            Kind::Note | Kind::Task | Kind::Event | Kind::Document
-        ) {
+        if from_kind == Kind::Event {
+            seeder.cursor += 60_000;
+            seeder.handle.clock.set(seeder.cursor);
+            let (a, b) = if from_id < to_id {
+                (from_id, to_id)
+            } else {
+                (to_id, from_id)
+            };
+            seeder.run("link.add", json!({"a": a, "b": b}))?;
+            continue;
+        }
+        if !matches!(from_kind, Kind::Note | Kind::Task | Kind::Document) {
             return Err(format!(
                 "a {} is not about anything: only a note, a task, an event or a document is ({link})",
                 from_kind.name()
@@ -729,8 +701,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         .iter()
         .map(|(key, (kind, id))| (key.clone(), json!({"kind": kind.name(), "id": id})))
         .collect();
-    // Checkpoint explicitly before closing so the seeded vault is a single
-    // file (plus its `.blobs` and `.seat` siblings) with no lingering `-wal`.
     seeder.handle.checkpoint()?;
     let dropped = std::mem::take(&mut seeder.dropped);
     seeder
@@ -741,8 +711,13 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
     Ok((Value::Object(keys), dropped))
 }
 
-/// Stars, completions, cancellations, contacts, edits, trash —
-/// the states a row reaches after it is created, each at its own time.
+fn touch_kind(word: &str) -> &str {
+    match word {
+        "visit" | "coffee" => "met-up",
+        other => other,
+    }
+}
+
 fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
     let sections: [(&str, Kind); 11] = [
         ("people", Kind::Person),
@@ -772,10 +747,8 @@ fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
                 && let Some(when) = str_of(row, "last_contacted")
             {
                 seeder.handle.clock.set(at(when)?);
-                seeder.run(
-                    "person.log_interaction",
-                    json!({"id": id, "kind": str_of(row, "last_contacted_kind").unwrap_or("call")}),
-                )?;
+                let kind_word = touch_kind(str_of(row, "last_contacted_kind").unwrap_or("call"));
+                seeder.run("touch.log", json!({"people": [id], "kind": kind_word}))?;
             }
             if kind == Kind::Task {
                 match (str_of(row, "status"), str_of(row, "completed")) {

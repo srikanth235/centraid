@@ -24,7 +24,6 @@ catalog! {
     plain settings_units_imperial = ("Imperial", "Imperial");
     plain settings_units_note = ("Distances, weights and temperatures. Phone's setting follows your region.", "Distances, weights and temperatures. Phone's setting follows your region.");
     plain settings_download_settings = ("Download settings", "Download settings");
-    plain settings_reconnect = ("Reconnect phone data", "Reconnect phone data");
     plain settings_export = ("Export everything", "Export everything");
     plain settings_export_title = ("Export everything", "Export everything");
     plain settings_export_lede = (

@@ -49,8 +49,8 @@ struct HealthWidget: Widget {
             HealthView(entry: entry)
                 .containerBackground(for: .widget) { WidgetPalette.page }
         }
-        .configurationDisplayName(GlanceWords.WIDGET_HEALTH_NAME)
-        .description(GlanceWords.WIDGET_HEALTH_DESCRIPTION)
+        .configurationDisplayName("Health")
+        .description("Today's steps, sleep and activity.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -61,16 +61,15 @@ struct HealthView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(entry.snapshot?.words.title ?? GlanceWords.WIDGET_HEALTH_NAME)
+            Text(entry.snapshot?.words.title ?? "Health")
                 .font(WidgetType.heading)
                 .foregroundStyle(WidgetPalette.meta)
                 .lineLimit(1)
             if let snapshot = entry.snapshot {
                 content(snapshot)
             } else {
-                // No snapshot yet (the app has not run): say so, never an empty healthy day.
                 Spacer(minLength: 0)
-                sentence(GlanceWords.WIDGET_HEALTH_UNAVAILABLE)
+                sentence("Open Centraid to see Health")
             }
             Spacer(minLength: 0)
         }

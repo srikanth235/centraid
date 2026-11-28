@@ -4,7 +4,8 @@
 
 use std::path::Path;
 
-use centraid_apps_kit::manifest::{CHAT_VERBS_JSON, ChatSurface, Manifest, parse_manifest};
+use centraid_domain::action::Inverse;
+use centraid_domain::chat::VERBS_JSON;
 use serde_json::{Value, json};
 
 use crate::dates::{EXAMPLES, Unit};
@@ -79,81 +80,43 @@ pub fn phrases() -> Value {
     )
 }
 
-/// The nine app manifests, embedded: the catalog the chat tables are generated from.
-const MANIFESTS: [(&str, &str); 9] = [
-    (
-        "calendar",
-        include_str!("../../apps/calendar/manifest.json"),
-    ),
-    ("docs", include_str!("../../apps/docs/manifest.json")),
-    ("health", include_str!("../../apps/health/manifest.json")),
-    ("locker", include_str!("../../apps/locker/manifest.json")),
-    ("money", include_str!("../../apps/money/manifest.json")),
-    ("notes", include_str!("../../apps/notes/manifest.json")),
-    ("people", include_str!("../../apps/people/manifest.json")),
-    ("photos", include_str!("../../apps/photos/manifest.json")),
-    (
-        "reminders",
-        include_str!("../../apps/reminders/manifest.json"),
-    ),
-];
-
-/// Every bundled manifest, parsed, in `MANIFESTS` order.
-///
-/// # Panics
-///
-/// If a committed manifest does not parse, which each app's own test keeps unreachable.
-#[must_use]
-pub fn manifests() -> Vec<(&'static str, Manifest)> {
-    MANIFESTS
-        .iter()
-        .map(|(app, text)| {
-            let manifest = parse_manifest(text)
-                .unwrap_or_else(|error| panic!("{app}/manifest.json must parse: {error}"));
-            (*app, manifest)
-        })
-        .collect()
-}
-
-/// The catalog as the training harness reads it: every action with the verb, kind, inverse,
-/// sealed fields, chat surface and phrasings its manifest declares, and every query with the kind
-/// and figures. The same fields the chat tables are generated from, so the generator and the
-/// runtime can not disagree about what an app can do.
+/// The catalogue as the training harness reads it: every action with the kind, verb, qualifier,
+/// inverse, confirm class and chat surface the domain declares for it. The same rows the chat
+/// tables are generated from, so the generator and the runtime can not disagree about what the
+/// vault can be asked to do.
 #[must_use]
 pub fn catalog() -> Value {
-    let mut actions = Vec::new();
-    let mut queries = Vec::new();
-    for (app, manifest) in manifests() {
-        for action in &manifest.actions {
-            actions.push(json!({
-                "app": app,
-                "action": action.name,
+    let actions: Vec<Value> = centraid_domain::ACTIONS
+        .iter()
+        .map(|action| {
+            let chat = match (action.handoff(), action.says()) {
+                (None, _) => "direct".to_owned(),
+                (Some(reason), _) => format!("handoff:{reason:?}").to_lowercase(),
+            };
+            let said = action.says();
+            json!({
+                "action": action.name(),
+                "kind": action.kind,
                 "verb": action.verb,
                 "qualifier": action.qualifier,
-                "also": action.also,
-                "kind": action.kind,
-                "inverse": action.inverse,
-                "sealed": action.sealed,
-                "bulk": action.bulk,
-                // DERIVED, never declared: the kit reads it off the facts above
-                "chat": match action.surface() {
-                    ChatSurface::Direct => "direct",
-                    ChatSurface::Card => "card",
-                },
                 "command": action.command,
-                "phrasings": action.phrasings,
-            }));
-        }
-        for query in &manifest.queries {
-            queries.push(json!({
-                "app": app,
-                "query": query.name,
-                "kind": query.kind,
-                "figures": query.figures,
-            }));
-        }
-    }
-    json!({"actions": actions, "queries": queries})
+                "target": format!("{:?}", action.target).to_lowercase(),
+                "inverse": match action.inverse {
+                    Inverse::Pair(name) => json!(name),
+                    Inverse::Restore => json!("restore"),
+                    Inverse::None => Value::Null,
+                },
+                "confirm": format!("{:?}", action.confirm).to_lowercase(),
+                "chat": chat,
+                "says": said.map(|say| json!({
+                    "verb": say.verb,
+                    "kinds": say.kinds,
+                    "qualifier": say.qualifier,
+                })),
+            })
+        })
+        .collect();
+    json!({"actions": actions})
 }
 
 /// The metadata table as JSON.
@@ -204,7 +167,7 @@ pub fn metadata() -> Value {
                 })
             })
             .collect::<Vec<_>>(),
-        "unbacked_verbs": serde_json::from_str::<Value>(CHAT_VERBS_JSON).map_or(Value::Null, |verbs| verbs["unbacked"].clone()),
+        "unbacked_verbs": serde_json::from_str::<Value>(VERBS_JSON).map_or(Value::Null, |verbs| verbs["unbacked"].clone()),
         "declared_kinds": DECLARED_KINDS,
         "declared_verbs": DECLARED_VERBS,
         "catalog": catalog(),

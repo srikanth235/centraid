@@ -16,6 +16,7 @@
 //! would silently re-derive every address in the product.
 
 use bip39::{Language, Mnemonic};
+use zeroize::Zeroize as _;
 
 /// A recovery phrase is 24 words. Twelve would be 128 bits of entropy, which is
 /// enough against a brute force and not enough against the product's own
@@ -169,6 +170,12 @@ impl core::fmt::Debug for RecoveryPhrase {
 /// 64 bytes.
 #[derive(Clone)]
 pub struct Seed([u8; SEED_BYTES]);
+
+impl Drop for Seed {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
 
 impl Seed {
     /// Adopt seed bytes that came from the platform keychain rather than from a

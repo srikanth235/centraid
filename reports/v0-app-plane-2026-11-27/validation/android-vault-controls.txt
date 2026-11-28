@@ -1,0 +1,14 @@
+Targeted Android vault-control regression tests
+
+Command: gradle -p mobile -Pcentraid.android=true :androidApp:testDebugUnitTest --tests dev.centraid.android.room.RoomClientGlobalEffectTest --tests dev.centraid.android.room.RoomClientBackgroundTest --no-daemon
+Result: BUILD SUCCESSFUL. JUnit totals extracted from testDebugUnitTest XML.
+
+RoomClientGlobalEffectTest: tests=2, failures=0, errors=0, skipped=0
+  globalOwnerCancelRunsBesideBlockedStoreReadAndSuppressesLatePromptAnswer
+  globalOwnerCancelAndOwnedClipboardClearAreOneWayAndIdempotent
+RoomClientBackgroundTest: tests=3, failures=0, errors=0, skipped=0
+  foregroundRebuildsLockedWallAndRejectsLatePreBackgroundSecureSnapshot
+  backgroundMasksSecureCachedRoomBeforeCoreAndPerformsReturnedOwnerCancelOnce
+  queuedPreBackgroundOwnerPromptIsDroppedAfterEpochAdvancesButRelockCancelRuns
+
+These JVM/Robolectric regressions do not establish physical owner authentication or clipboard behavior.

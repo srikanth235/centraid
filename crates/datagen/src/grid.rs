@@ -108,7 +108,7 @@ pub fn measurable(kind: &str) -> &'static [&'static str] {
     match kind {
         "person" => &["cadence"],
         "event" => &["duration"],
-        "task" => &["effort", "priority"],
+        "task" => &["priority"],
         "transaction" => &["amount"],
         "workout" => &["moving", "distance", "energy", "heart_rate", "climb"],
         "daily figure" => &["value"],
@@ -258,12 +258,12 @@ impl Grid {
                 Cell::new("edit", k, "edit"),
                 if k == "rule" {
                     Live::NotLive("the runtime answers `edit does not apply to rule`".into())
+                } else if k == "budget" {
+                    Live::NotLive("the seed document keys no budget, so an eval cannot name the row".into())
                 } else if has("edit") && live("edit") {
                     Live::Live
                 } else if matches!(k, "workout" | "daily figure") {
                     Live::NotLive("read-only in chat today; live-pending the regroup's Health writes (owner-approved, not landed)".into())
-                } else if k == "budget" {
-                    Live::NotLive("read-only in chat".into())
                 } else {
                     Live::NotLive("the runtime has no `edit` for this kind".into())
                 },

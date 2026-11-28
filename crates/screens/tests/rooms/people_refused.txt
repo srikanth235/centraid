@@ -1,0 +1,36 @@
+room app_place key="people"
+  header title="People" subtitle="1 person"
+    key add sym="Plus" "Add person" #key/add
+    filter clear=#filter/clear
+      menu #filter
+        section "Show"
+          item "Starred" #filter/starred
+        section "Sort"
+          item "Name" checked #sort/name
+          item "Recently updated" #sort/recent
+  band home=#band/home search=#band/search more=#band/more
+    tab "People" sym="Users" selected #tab/people
+    tab "Lists" sym="List" #tab/lists
+    menu #band/more/menu
+      section
+        item "Contacts is off" secondary="Contacts access is off. Turn it on in Settings." #more/follow-contacts
+        item "Follow Contacts" #more/follow-contacts-again
+        item "Import vCard or CSV" #more/import
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    empty glyph="Users" "Contacts access is off." body="Turn it on in Settings to import your contacts."
+      action "Open Settings" #first/people/settings
+    section #section/people "People"
+      row #row/cbbd12a1-7305-7785-8c87-e0b266764281 "Ada" meta="My card" swipe="Move to trash" #row/cbbd12a1-7305-7785-8c87-e0b266764281/trash
+        menu #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu
+          section
+            item "Open" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/open
+            item "Move or tag" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/organize
+            item "Edit" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/edit
+            item "Star" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/star
+            item "Share" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/share
+            item "Merge" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/merge
+            item "Select" #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/select
+            item "Move to trash" destructive #row/cbbd12a1-7305-7785-8c87-e0b266764281/menu/trash
+  search placeholder="Search people" #search

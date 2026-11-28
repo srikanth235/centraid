@@ -1,4 +1,6 @@
-# Mobile audit fixes: review snapshot
+# Historical: mobile audit fixes snapshot
+
+This report records an incomplete review of the 2026-11-13 branch. Its findings and file references describe that snapshot and are not current implementation guidance.
 
 This is an incomplete audit of the main app and nine mini apps following #1185. The PR is a draft. Native Android/iOS observations, shared regressions and builds are distinct evidence; a passing build does not mean every workflow passed.
 

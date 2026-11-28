@@ -257,11 +257,11 @@ pub unsafe fn slice_of<'bytes>(data: *const u8, len: usize) -> Option<&'bytes [u
     if len == 0 {
         return Some(&[]);
     }
-    if data.is_null() {
+    if data.is_null() || len > isize::MAX as usize {
         return None;
     }
-    // SAFETY: `len > 0` and `data` is non-null, and the caller's contract above
-    // promises `len` initialised bytes valid for the borrow.
+    // SAFETY: `0 < len <= isize::MAX` and `data` is non-null, and the caller's
+    // contract promises `len` initialised bytes valid for the borrow.
     Some(unsafe { std::slice::from_raw_parts(data, len) })
 }
 
@@ -287,10 +287,8 @@ pub unsafe fn handle_of<'handle>(handle: *mut Handle) -> Option<&'handle Handle>
 
 /// Hand a buffer to the caller, transferring ownership.
 ///
-/// The capacity is shrunk to the length first, so `centraid_free`'s
-/// reconstruction with `capacity == len` is exact. Without that the `Vec` it
-/// rebuilds would claim a capacity the allocator did not give it, which is
-/// undefined behaviour that happens to work until it does not.
+/// Uses `Box<[u8]>` (or a 1-byte `Box<u8>` sentinel for `len == 0`) so the
+/// allocation layout is exact regardless of allocator over-allocation.
 ///
 /// # Safety
 ///
@@ -299,16 +297,14 @@ pub unsafe fn handle_of<'handle>(handle: *mut Handle) -> Option<&'handle Handle>
 /// it with `centraid_free`, and with nothing else.
 // SAFETY: `unsafe` because the caller must uphold the `# Safety` contract
 // above; the one unsafe operation in the body carries its own note.
-pub unsafe fn hand_over(mut bytes: Vec<u8>, out_buf: *mut *mut u8, out_len: *mut usize) {
-    bytes.shrink_to_fit();
+pub unsafe fn hand_over(bytes: Vec<u8>, out_buf: *mut *mut u8, out_len: *mut usize) {
     let len = bytes.len();
-    // An empty answer would otherwise hand back a dangling non-null pointer
-    // that `free` must not touch. One byte of slack is cheaper than a clause.
-    if bytes.capacity() == 0 {
-        bytes.reserve_exact(1);
-    }
-    let mut owned = std::mem::ManuallyDrop::new(bytes);
-    let pointer = owned.as_mut_ptr();
+    let pointer = if len == 0 {
+        Box::into_raw(Box::new(0_u8))
+    } else {
+        let boxed: Box<[u8]> = bytes.into_boxed_slice();
+        Box::into_raw(boxed).cast::<u8>()
+    };
     // SAFETY: both pointers are the caller's promise above, checked non-null by
     // every entry point before it reaches here.
     unsafe {
@@ -328,10 +324,15 @@ pub unsafe fn hand_over(mut bytes: Vec<u8>, out_buf: *mut *mut u8, out_len: *mut
 // SAFETY: `unsafe` because the caller must uphold the `# Safety` contract
 // above; the one unsafe operation in the body carries its own note.
 pub unsafe fn reclaim(buf: *mut u8, len: usize) {
-    // SAFETY: `hand_over` shrank the capacity to the length (or reserved
-    // exactly one byte for an empty buffer), so rebuilding with
-    // `capacity == len.max(1)` matches the allocation exactly.
-    let _ = unsafe { Vec::from_raw_parts(buf, len, len.max(1)) };
+    // SAFETY: `hand_over` produced either `Box::into_raw(Box::new(0_u8))` for
+    // `len == 0` or `Box::into_raw(Box<[u8]>)` of exact length `len`.
+    unsafe {
+        if len == 0 {
+            drop(Box::from_raw(buf));
+        } else {
+            drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(buf, len)));
+        }
+    }
 }
 
 #[cfg(test)]

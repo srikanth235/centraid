@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Progress (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div data-theme="dark" style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Progress</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">A label and exact counts, with Cancel while it runs.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">BACKUP</div>
+  <div>
+    <!-- variant:backup -->
+    <div style="margin: 0 16px; background: var(--surface-card); border-radius: 16px; padding: 16px;"><div style="display: flex; align-items: center; gap: 10px;"><span style="width: 36px; height: 36px; border-radius: 18px; background: var(--tint-lichen); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--shell)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 10-3 6.2M20 6v6h-6"></path></svg></span><div><div data-slot="t0" style="font-size: 17px; font-weight: 600;">Records backed up 2 hours ago.</div><div data-slot="t1" style="font-size: 13px; color: var(--text-meta);">4.6 of 5.0 GB is backed up.</div></div></div><div style="height: 6px; border-radius: 3px; background: var(--surface-line); margin-top: 14px; overflow: hidden;"><div style="width: 92%; height: 6px; background: var(--shell-fill); border-radius: 3px;"></div></div><div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px;"><span data-slot="t2" style="color: var(--shell); font-weight: 600;">Backing up — 412 MB to go</span><span data-slot="t3" style="color: var(--text-meta);">37 waiting for Wi-Fi</span></div></div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

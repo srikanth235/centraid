@@ -1,0 +1,14 @@
+room pushed_page key="people/list/01900000-0000-7000-8000-000000000040"
+  header title="Studio"
+    back "Lists" #back
+    key menu sym="MoreHoriz" "More" #key/more
+      menu #menu/more
+        section
+          item "Add person" #menu/add_member
+          item "Move to trash" destructive #menu/trash_list
+  ready
+    section #section/members "Studio"
+      row #row/01900000-0000-7000-8000-000000000010 "Priya Nair" meta="Architect · Studio North · Every 14 days" swipe="Remove from list" #row/01900000-0000-7000-8000-000000000010/swipe
+        menu #row/01900000-0000-7000-8000-000000000010/menu
+          section
+            item "Remove from list" destructive #row/01900000-0000-7000-8000-000000000010/remove

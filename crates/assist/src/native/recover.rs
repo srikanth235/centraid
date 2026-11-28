@@ -50,11 +50,6 @@ const TRASH_WORDS: [&str; 12] = [
     "trash", "trashed", "deleted", "delete", "removed", "bin", "recycle", "gone", "archive",
     "archived", "restore", "recover",
 ];
-const FIRST_PERSON: [&str; 6] = ["i", "my", "me", "mine", "our", "we"];
-const PRONOUNS: [&str; 10] = [
-    "he", "she", "they", "him", "her", "his", "hers", "their", "them", "theirs",
-];
-
 /// Whether two words are one by their first four letters (a plural, a tense, a near spelling).
 fn same_stem(a: &str, b: &str) -> bool {
     a == b
@@ -188,10 +183,7 @@ impl Session {
             let in_focus = crate::native::block::focus_sets(self)
                 .iter()
                 .any(|set| set.keys.contains(target) || set.container.contains(target));
-            let said = named.is_some_and(|name| self.stated(&name))
-                || in_focus
-                || (*target == self.world.me_key() && self.message_has(&FIRST_PERSON))
-                || (target.0 == crate::native::meta::Kind::Person && self.message_has(&PRONOUNS));
+            let said = named.is_some_and(|name| self.stated(&name)) || in_focus;
             if said {
                 continue;
             }
@@ -293,7 +285,6 @@ impl Session {
 
 use serde_json::{Map, Value, json};
 
-use crate::native::meta::Kind;
 use crate::native::session::{arg_str, tool_params};
 
 /// A call in the model's own terms: `edit rows: #3, args: description: x`. Parameters
@@ -577,26 +568,6 @@ impl Session {
             }
         }
         changed.then(|| format!("{} Send {}.", error.trim_end(), render_call(tool, &call)))
-    }
-
-    /// THE CALL FOR A LINK THE KINDS LACK, with real handles (` Send …`, a leading space): the
-    /// photos of a person or an album are the photos `linked_to` that row. `None` when it is a
-    /// guess (the selector links to two rows).
-    pub(crate) fn link_call(&mut self, kind: Kind, selector: &Selector) -> Option<String> {
-        let [target] = selector.linked_to.as_slice() else {
-            return None;
-        };
-        let mut call = Map::new();
-        let (tool, shown) = match (kind, target.0) {
-            (Kind::Person, Kind::Album) | (Kind::Album, Kind::Person) => {
-                let n = self.number(target);
-                call.insert("kind".to_owned(), json!("photo"));
-                call.insert("linked_to".to_owned(), json!(format!("#{n}")));
-                ("find", &call)
-            }
-            _ => return None,
-        };
-        Some(format!(" Send {}.", render_call(tool, shown)))
     }
 
     /// `a selector needs kind (or within=@n)` from a narrowing follow-up: when one list of the

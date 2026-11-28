@@ -1,31 +1,14 @@
 {
-  "_comment": "THE QUERY-PLAN ALLOWLIST (#1135). A read that plans as a full scan of a table over `scanFloorRows` rows, or as a sort of every row it read on a paged read, fails `crates/core/tests/query_plans.rs` unless it is listed here with its home and the one-line reason it is fine. Down-only: `scanFloorRows` may only fall (a lower floor checks more tables) and each `allowed` count may only fall, so the allowlist cannot grow in the change that needs it; an entry no read needs any more fails the test too. The fix for a hot read is the index it wants, in the baseline, never a row here.",
+  "_comment": "THE QUERY-PLAN ALLOWLIST (#1135, #1214). A registered read (`crates/domain`) that plans as a full scan or a temp B-tree outside the shape it declares fails `crates/domain/tests/read_registry.rs` unless it is listed here with its home (the read's name) and the one-line reason it is fine. Down-only: each `allowed` count may only fall, so the allowlist cannot grow in the change that needs it; an entry no read needs any more fails the test too. The fix for a hot read is the index it wants, in the baseline, never a row here.",
   "_provenance": {
-    "measuredBy": "cargo test -p centraid-core --test query_plans -- --nocapture",
-    "shape": "EXPLAIN QUERY PLAN on (a) every page statement the vault composes while the core answers every app query, with each shelf, view, sort and filter that changes the statement, and (b) every hand-written SELECT or WITH in crates/{vault,apps/kit,search,ontology}/src that prepares alone, over the year-3 rows vault (centraid_apps_kit::search_corpus::YEAR3_ROWS, about 45,000 entities), closed and reopened so SQLite holds statistics",
-    "seededFrom": "the first run of the sweep (#1135): every finding it made is either an index added to the baseline or an entry here with its reason"
+    "measuredBy": "cargo test -p centraid-domain --test reads",
+    "shape": "EXPLAIN QUERY PLAN of every registered read over the founded schema, bound as the door binds it (the first-page sentinel for a keyset, the page size plus one for its limit)",
+    "seededFrom": "the new app plane (#1214): every read the old plane's allowlist excused was deleted with it, and no registered read needs a row"
   },
   "scanFloorRows": 1000,
   "pages": {
-    "allowed": 4,
-    "entries": [
-      {
-        "home": "docs.folders",
-        "reason": "kind = 'folder': the member's folders (hundreds at most), sorted by id for a 500-row page"
-      },
-      {
-        "home": "docs.shelf.starred",
-        "reason": "the star edges, one per star the member gave (any kind), sorted newest first; bounded by the stars given, not by the vault"
-      },
-      {
-        "home": "health.kinds.names",
-        "reason": "kind = 'workout_kind': a few dozen kinds, sorted by id"
-      },
-      {
-        "home": "money.transactions.trashed",
-        "reason": "the trash: a row leaves it at purge_at, so what is sorted is the trash and not the ledger"
-      }
-    ]
+    "allowed": 0,
+    "entries": []
   },
   "statements": {
     "allowed": 4,

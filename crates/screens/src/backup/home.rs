@@ -494,7 +494,7 @@ impl Backup {
                 self.run(Job::Prompt)
             }
             // ALLOW NOTIFICATIONS goes to the one notification service, which starts the system prompt
-            // through the path the agenda's own reminders use.
+            // through the path Reminders uses.
             Some(B::NotifyAllow(_)) => {
                 ctx.alerts().ask(ctx);
                 Vec::new()

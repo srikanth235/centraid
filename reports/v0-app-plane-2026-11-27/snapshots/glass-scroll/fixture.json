@@ -1,0 +1,8 @@
+{
+  "file": "money_glass_scroll.pb",
+  "origin": "real Core registered commands + Room runtime",
+  "owner_review_fixture": false,
+  "scenario": "40 registered Money transactions provide content beneath the overlaid footer for a layout-pressure check",
+  "screen_key": "money",
+  "source_test": "review_room_artifacts::emit_review_room_artifacts_when_opted_in"
+}

@@ -42,6 +42,7 @@ pub mod history;
 pub mod index;
 pub mod links;
 pub mod log;
+pub mod lookups;
 pub mod migrations;
 pub mod model;
 pub mod ontology_doc;
@@ -53,6 +54,8 @@ pub mod portable;
 pub mod roster;
 pub mod stage;
 pub mod task_counts;
+#[cfg(test)]
+pub(crate) mod test_ids;
 pub mod testdoor;
 pub mod tidy;
 pub mod time;

@@ -1,0 +1,24 @@
+Hosted iOS verification — complete; UI and Reduce Motion checks failed
+
+Run [46084049333](https://github.com/srikanth235/centraid/actions/runs/46084049333), source `be6c4d0edd65ad4bc80b0cd916284b74ec023521`, job `140789379909`. Both Rust targets and Swift passed. XCTest unit tests: 175 passed, 0 failures, including `PhotoGridTests.testPhotoContentPathsResolveOpaqueRefsAndRejectLateRoomReplies`. The normal UI suite completed with 8 tests, 1 expected skip, 53 failures; all three focus-order tests passed. The separate Reduce Motion test completed with 26 failures. The unsigned generic-device build and artifact uploads passed. The overall job failed on the UI and Reduce Motion checks.
+
+Run: https://github.com/srikanth235/centraid/actions/runs/46071464163
+Source: `096e04cb2354aef9b4ab42002e240bb1e02306ec`
+iOS job: `140749131892`
+
+Both llama-enabled Rust targets (simulator and device) passed. Swift app and test compilation passed. XCTest unit tests: 174 passed, 0 failures. The unsigned generic iPhone build passed. This verifies compilation only; no physical iPhone was installed or exercised.
+
+UI tests for source `096e04cb`: 8 tests, 1 expected skip, 55 failures. The three focus-order checks passed. The dark/light accessibility audits reported contrast, Dynamic Type and text-clipping issues. The largest-text audit could not hit the Backup tab. See the [096 assertion lines](ios-audit-096.txt).
+
+UI tests for source `be6c4d0`: 8 tests, 1 expected skip, 53 failures. All 53 assertion lines are retained in [ios-audit-be6.txt](ios-audit-be6.txt). The separately run Reduce Motion test had 26 failures. All three focus-order tests passed. The unsigned generic-device build and artifact upload both passed; neither is a physical-device run. The overall job failed because the UI and Reduce Motion checks failed.
+
+The `be6c4d0` review artifact (`15241456479`, 20,491,866 bytes; SHA-256 `b11cd4eeb930286271a7c1c7b116f7114e05d22d73471b91a8b1f966aeebe96a`) was downloaded and hash-verified. It contains ten required PNG captures plus 94 rendered pages, including the two XXXL repair originals. All twelve selected images were checked and copied with provenance into [iOS snapshots](../snapshots/ios/). Visual review found both expected room header accents; positive Money income green with expenses black; the Calendar day/hour grid with overdue reminders; a blank Notes editor with keyboard; and Photos placeholders. The XXXL Calendar segments reflow without the prior overlap, and Reminders Due stacks above its date picker. Reminders Title still has clipped-text findings. The 096 screenshot observations remain historical, described below.
+
+Artifact details and links: run `46084049333`, artifact `15241456479`, 20,491,866 bytes; SHA-256 `b11cd4eeb930286271a7c1c7b116f7114e05d22d73471b91a8b1f966aeebe96a`. Assertion receipts: [normal UI](ios-audit-be6.txt), [Reduce Motion](ios-motion-be6.txt). No failure is waived.
+
+Small review artifact: run `46071464163`, artifact `15236093703`, 14,785,933 bytes.
+Downloaded archive: `/tmp/centraid-ios-review-46071464163.zip`
+SHA-256: `0f12fbad4ea8ce1e4450e2286f6fc1596ce7828328e2c5e3f9a4ed358fa3a869`
+Extracted evidence: `/tmp/centraid-ios-review-46071464163/` (runner-local evidence; archive includes 68 rendered page PNGs plus the ten required screenshot PNGs).
+
+Physical owner authentication, OS permission prompts and followed-store reads, picker/share/save behavior, clipboard expiry, and background transitions remain unverified. M1, M3 and M4 remain unticked pending owner review. See [attempt history](ios-runner-attempts.txt) and the [iOS handoff](../ios-handoff.md).

@@ -6,12 +6,12 @@ description: >-
 
 # Design
 
-Every visual or UX change starts in `design/mockups/`. Values live in the mockups and `design/tokens.toml`; behaviour and words live here. Both shells follow the same behaviour, words and selector ids, never the same pixels.
+Every visual or UX change starts in `design/mockups/`. Boards draw with roles from `design/tokens.toml` (`var(--role)`, never a value); behaviour and words live here. Both shells follow the same behaviour, words and selector ids, never the same pixels.
 
 | If you are doing | Read |
 | --- | --- |
 | Changing a board, a token or an icon; running `cargo xtask design` | [mockups.md](mockups.md) |
 | Deciding how a screen behaves: rooms, header, band, status line, search, controls, colour, accessibility | [behaviour.md](behaviour.md) |
 | Writing or changing a string, or the copy check | [wording.md](wording.md) |
-| Building the screen in Rust and both shells | [change/screen.md](../change/screen.md) |
+| Building the screen in Rust and both shells | [change/app-plane.md](../change/app-plane.md) |
 | Deciding what the product should do | [product](../product/SKILL.md) |

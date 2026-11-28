@@ -6,12 +6,11 @@
 //! could not):
 //!
 //! - `history.restore_version`: the record goes back to what version `seq` held, field by field
-//!   and row by row.
+//!   and row by row, its home included when that home is still a live holder that may hold it
+//!   (else the record stays where it is and `entity.parent_id` is named in `kept_current`).
 //! - `history.keep_version`: the words a refused stale save held, kept as the newest earlier version beside
-//!   the record as it is (the record is not changed). Each kept field is `table.column`; an event's
-//!   times and alerts are stated as a member types them (a wall clock and its zone, minutes before)
-//!   and kept as the vault holds them, `attendee` is the list of the guests by person id, and `occurrence` is what one day of a series
-//!   changes, stated as `event.edit_occurrence` states it.
+//!   the record as it is (the record is not changed). Each kept field is `table.column`; a sealed cell
+//!   and a column that names bytes are refused.
 //! - `history.undo`: the record goes back to its newest earlier version, "undo the last change".
 //!   It is the generic inverse of every edit; it is not idempotent (twice undoes then redoes).
 //!   Given `seq` it undoes THAT change and nothing else: the version is the newest, or the record is
@@ -32,23 +31,121 @@ fn alive(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 fn newest(ctx: &CommandCtx<'_, '_>) -> Result<Option<i64>> {
+    newest_for(ctx, ctx.required_str("id")?)
+}
+
+fn newest_for(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<i64>> {
     Ok(ctx.connection().query_row(
         "SELECT MAX(seq) FROM revision WHERE entity_id = ?1",
-        [ctx.required_str("id")?],
+        [id],
         |row| row.get(0),
     )?)
 }
 
 fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    if let Some(sentence) = alive(ctx)? {
+    pre_restore_pair(
+        ctx,
+        ctx.required_str("id")?,
+        ctx.input["seq"].as_i64().unwrap_or_default(),
+    )
+}
+
+fn pre_restore_pair(ctx: &CommandCtx<'_, '_>, id: &str, seq: i64) -> Result<Option<String>> {
+    if let Some(sentence) = lookup_live(ctx.connection(), id)?.err() {
         return Ok(Some(sentence));
     }
     let held: i64 = ctx.connection().query_row(
         "SELECT COUNT(*) FROM revision WHERE entity_id = ?1 AND seq = ?2",
-        rusqlite::params![ctx.required_str("id")?, ctx.input["seq"].as_i64()],
+        rusqlite::params![id, seq],
         |row| row.get(0),
     )?;
-    Ok((held == 0).then(|| "That version is not in this record's history.".to_owned()))
+    if held == 0 {
+        return Ok(Some(
+            "That version is not in this record's history.".to_owned(),
+        ));
+    }
+    let connection = ctx.connection();
+    let (Some(wanted), Some(now)) = (
+        history::version_state(connection, id, seq)?,
+        history::current_state(connection, id)?,
+    ) else {
+        return Ok(None);
+    };
+    let fixed = STATEMENT_FIXED.iter().any(|column| {
+        wanted["txn"].get(column) != now["txn"].get(column) && now["txn"].get(column).is_some()
+    });
+    Ok((fixed && is_statement_line(connection, id)?).then(|| STATEMENT_LINE_SAYS.to_owned()))
+}
+
+#[derive(serde::Deserialize)]
+struct RestoreManyItem {
+    id: String,
+    seq: i64,
+    expected_rev: i64,
+}
+
+#[derive(serde::Deserialize)]
+struct RestoreManyInput {
+    items: Vec<RestoreManyItem>,
+}
+
+fn pre_restore_many(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let input: RestoreManyInput = ctx.parse_input()?;
+    let mut seen = std::collections::BTreeSet::new();
+    for item in input.items {
+        if !seen.insert(item.id.clone()) {
+            return Ok(Some("A record was included more than once.".to_owned()));
+        }
+        if let Some(sentence) = pre_restore_pair(ctx, &item.id, item.seq)? {
+            return Ok(Some(sentence));
+        }
+        if newest_for(ctx, &item.id)? != Some(item.expected_rev) {
+            return Ok(Some(CHANGED_SINCE.to_owned()));
+        }
+    }
+    Ok(None)
+}
+
+fn restore_many(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: RestoreManyInput = ctx.parse_input()?;
+    let mut restored = Vec::new();
+    for item in input.items {
+        let result = history::restore_version(ctx, &item.id, item.seq, Scope::All)?.unwrap_or(
+            history::Restored {
+                restored: false,
+                kept_current: Vec::new(),
+            },
+        );
+        restored.push(serde_json::json!({
+            "id": item.id,
+            "seq": item.seq,
+            "restored": result.restored,
+            "kept_current": result.kept_current,
+        }));
+    }
+    Ok(serde_json::json!({ "items": restored }))
+}
+
+/// The columns of a line the bank stated that are never edited.
+const STATEMENT_FIXED: [&str; 5] = [
+    "account_id",
+    "posted_on",
+    "amount_minor",
+    "original_amount_minor",
+    "original_currency",
+];
+
+/// What a restore or an undo says when it would put the bank's figures back to what a hand line
+/// said before a statement confirmed it.
+const STATEMENT_LINE_SAYS: &str =
+    "The bank stated this line, so its day, amount and account stay the bank's.";
+
+fn is_statement_line(connection: &rusqlite::Connection, id: &str) -> Result<bool> {
+    Ok(connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM txn WHERE id = ?1 AND entered = 'statement')",
+        [id],
+        |row| row.get(0),
+    )?)
 }
 
 /// What an undo that names its version says when the record has changed again since.
@@ -66,6 +163,17 @@ fn pre_undo(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(seq) = ctx.input.get("seq").and_then(serde_json::Value::as_i64) else {
         return Ok(None);
     };
+    let id = ctx.required_str("id")?;
+    if let Some(changes) = history::changes_by(ctx.connection(), id, seq)?
+        && changes.iter().any(|change| {
+            STATEMENT_FIXED
+                .iter()
+                .any(|column| change.field == format!("txn.{column}"))
+        })
+        && is_statement_line(ctx.connection(), id)?
+    {
+        return Ok(Some(STATEMENT_LINE_SAYS.to_owned()));
+    }
     if seq == newest || changed_back_since(ctx, seq)? {
         return Ok(None);
     }
@@ -157,37 +265,12 @@ fn fields(ctx: &CommandCtx<'_, '_>) -> serde_json::Map<String, serde_json::Value
         .unwrap_or_default()
 }
 
-/// The overlay's field for a text document's words: not a column, the words themselves, which the
-/// handler writes into the content store and keeps by their hash.
-const DOCUMENT_TEXT: &str = "document.text";
-
 /// The record is there (in the trash or not: a record trashed elsewhere keeps the words that
 /// were being written to it) and each field is one its history keeps. A sealed cell of a Locker
 /// item is never one: the vault holds no key, so a secret the member typed is not kept this way (the
 /// overlay refuses it), and a Locker item's plain fields are kept like any other record's.
 fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let id = ctx.required_str("id")?;
-    let Some(found) = crate::commands::entity::find(ctx.connection(), id)? else {
-        return Ok(Some(format!("there is nothing with the id `{id}`")));
-    };
-    let mut overlay = fields(ctx);
-    if let Err(sentence) = crate::commands::event::shape_overlay(ctx.connection(), id, &mut overlay)
-    {
-        return Ok(Some(sentence));
-    }
-    if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
-        let text_document = found.kind == crate::model::Kind::Document
-            && words.is_string()
-            && ctx.blobs().is_some()
-            && crate::commands::document::media_type_of(ctx, id)?
-                .is_some_and(|media_type| media_type.starts_with("text/"));
-        if !text_document {
-            return Ok(Some(format!(
-                "`{DOCUMENT_TEXT}` is the words of a text document"
-            )));
-        }
-    }
-    history::overlay_refusal(ctx.connection(), id, &overlay)
+    history::overlay_refusal(ctx.connection(), ctx.required_str("id")?, &fields(ctx))
 }
 
 #[derive(serde::Deserialize)]
@@ -198,14 +281,14 @@ struct KeepVersionInput {
 
 fn keep_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: KeepVersionInput = ctx.parse_input()?;
-    let mut overlay = input.fields;
-    crate::commands::event::shape_overlay(ctx.connection(), &input.id, &mut overlay)
-        .map_err(|sentence| crate::error::VaultError::Invariant { context: sentence })?;
-    if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
-        let hash = crate::commands::document::write_words(ctx, words.as_str().unwrap_or_default())?;
-        overlay.insert("document.blob".to_owned(), hash.into());
-    }
-    let kept = history::keep_overlay(ctx.connection(), &input.id, &overlay, &ctx.now, ctx.command)?;
+    let overlay = input.fields;
+    let kept = history::keep_overlay(
+        ctx.connection(),
+        &input.id,
+        &overlay,
+        &ctx.now,
+        &ctx.settling_as(),
+    )?;
     Ok(match kept {
         history::Kept::Version(seq) => {
             serde_json::json!({ "id": input.id, "kept": true, "seq": seq })
@@ -222,6 +305,11 @@ const KEEP: &[CommandCondition] = &[CommandCondition {
 const RESTORE: &[CommandCondition] = &[CommandCondition {
     predicate: "the record is live and the version is in its history",
     check: pre_restore,
+}];
+
+const RESTORE_MANY: &[CommandCondition] = &[CommandCondition {
+    predicate: "every record is live and each version is in its history",
+    check: pre_restore_many,
 }];
 
 const UNDO: &[CommandCondition] = &[CommandCondition {
@@ -247,6 +335,32 @@ pub fn definitions() -> Vec<CommandDefinition> {
             Idempotency::Idempotent,
             RESTORE,
             restore_version,
+        ),
+        CommandDefinition::plain(
+            "history.restore_many",
+            "history",
+            r#"{
+              "type": "object",
+              "required": ["items"],
+              "additionalProperties": false,
+              "properties": {
+                "items": {
+                  "type": "array", "minItems": 1, "maxItems": 500,
+                  "items": {
+                    "type": "object", "required": ["id", "seq", "expected_rev"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "seq": { "type": "integer", "minimum": 1 },
+                      "expected_rev": { "type": "integer", "minimum": 1 }
+                    }
+                  }
+                }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            RESTORE_MANY,
+            restore_many,
         ),
         CommandDefinition::plain(
             "history.keep_version",

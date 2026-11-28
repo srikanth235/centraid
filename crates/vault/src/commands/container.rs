@@ -1,19 +1,17 @@
 //! `container.create`, `container.style` and `container.move`: notebooks, folders, albums, lists,
-//! projects, sections, areas and calendars.
+//! task lists and calendars.
 //!
-//! One table hosts all eight and the item's own noun is its kind. Nesting is a
-//! rule of the baseline (`container_parent_shape`): a folder in a folder, a
-//! notebook in a notebook, a section in a project, a project in an area; the
-//! precondition says it in a sentence first.
+//! One table hosts all six and the item's own noun is its kind. A container's home is the one
+//! every row has, `entity.parent_id` (a folder in a folder, a notebook in a notebook): which kind
+//! goes inside which is `home_shape`. The preconditions say each refusal in a sentence first
+//! ([`home_refusal`]); the database refuses the same rows.
 //!
-//! A list (a project, or a list) and a calendar wear a colour of the eight-colour list palette and
+//! A list (a task list, or a list) and a calendar wear a colour of the eight-colour list palette and
 //! an icon of a short curated set, both by key; `container.style` sets or clears them and
-//! `container.create` takes them at birth. A followed calendar's colour is the phone's own spelling
-//! and is read, never refused, wherever it was stored.
+//! `container.create` takes them at birth. A followed calendar's colour is a key of the palette
+//! too (the party wheel) and is read, never refused, wherever it was stored.
 
-use rusqlite::OptionalExtension;
-
-use crate::commands::entity::{lookup_live, require};
+use crate::commands::entity::{home_refusal, lookup_live, move_home};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
@@ -31,17 +29,11 @@ pub const LIST_COLORS: [&str; 8] = [
     "orchid",
 ];
 
-/// The party-wheel hues a followed phone calendar wears (`var(--c-<hue>)`), the shell's naming of
-/// the phone's colour. A calendar the member makes wears a [`LIST_COLORS`] key.
+/// The party-wheel hues a followed phone calendar wears, as keys of the `palette` table (J1): the
+/// phone's own colour, mapped to the nearest hue. A calendar the member makes wears a
+/// [`LIST_COLORS`] key.
 pub const PHONE_CALENDAR_COLORS: [&str; 8] = [
-    "var(--c-rose)",
-    "var(--c-amber)",
-    "var(--c-ochre)",
-    "var(--c-forest)",
-    "var(--c-teal)",
-    "var(--c-slate)",
-    "var(--c-indigo)",
-    "var(--c-violet)",
+    "rose", "amber", "ochre", "forest", "teal", "slate", "indigo", "violet",
 ];
 
 /// The icons a list or a calendar may wear: keys of `design/icons.toml`, curated to the ones that
@@ -83,7 +75,7 @@ pub const LIST_ICONS: [&str; 32] = [
 
 /// Whether a container of `kind` wears a colour and an icon of the palette.
 const fn is_styled(kind: Kind) -> bool {
-    matches!(kind, Kind::List | Kind::Project | Kind::Calendar)
+    matches!(kind, Kind::List | Kind::TaskList | Kind::Calendar)
 }
 
 /// The sentence refusing a colour or an icon a list or a calendar cannot wear.
@@ -113,19 +105,10 @@ fn kind_of(word: &str) -> Result<Kind> {
         .filter(|kind| kind.is_container())
         .ok_or_else(|| VaultError::InvalidInput {
             name: "kind".to_owned(),
-            detail: format!("`{word}` is not a notebook, folder, album, list, project, section, area or calendar"),
+            detail: format!(
+                "`{word}` is not a notebook, folder, album, list, task list or calendar"
+            ),
         })
-}
-
-/// Whether a container of `kind` may sit inside one of `parent`.
-const fn nests(kind: Kind, parent: Kind) -> bool {
-    matches!(
-        (kind, parent),
-        (Kind::Folder, Kind::Folder)
-            | (Kind::Notebook, Kind::Notebook)
-            | (Kind::Section, Kind::Project)
-            | (Kind::Project, Kind::Area)
-    )
 }
 
 fn parent_refusal(
@@ -133,37 +116,7 @@ fn parent_refusal(
     kind: Kind,
     id: Option<&str>,
 ) -> Result<Option<String>> {
-    let Some(parent_id) = ctx.input.get("parent").and_then(serde_json::Value::as_str) else {
-        // A section is only ever a project's.
-        return Ok((kind == Kind::Section).then(|| "a section belongs to a project".to_owned()));
-    };
-    let parent = match lookup_live(ctx.connection(), parent_id)? {
-        Ok(parent) => parent,
-        Err(sentence) => return Ok(Some(sentence)),
-    };
-    if !nests(kind, parent.kind) {
-        return Ok(Some(format!(
-            "a {} does not go inside a {}",
-            kind.noun(),
-            parent.kind.noun()
-        )));
-    }
-    if let Some(id) = id {
-        // Climb from the new parent: finding the container itself means it
-        // would end up inside itself.
-        let inside: bool = ctx.connection().query_row(
-            "WITH RECURSIVE up(id) AS (
-               SELECT ?1 UNION SELECT c.parent_id FROM container c JOIN up ON c.id = up.id
-                WHERE c.parent_id IS NOT NULL)
-             SELECT EXISTS (SELECT 1 FROM up WHERE id = ?2)",
-            [parent_id, id],
-            |row| row.get(0),
-        )?;
-        if inside {
-            return Ok(Some(format!("“{}” cannot go inside itself", parent.title)));
-        }
-    }
-    Ok(None)
+    home_refusal(ctx.connection(), kind, id, ctx.optional_str("parent"))
 }
 
 fn pre_create(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -192,23 +145,24 @@ fn create(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: CreateContainerInput = ctx.parse_input()?;
     let kind = kind_of(&input.kind)?;
     let title = input.title.trim();
+    let parent = input.parent.as_deref();
     let id = match input.id.as_deref() {
         Some(id) => {
-            ctx.insert_entity_as(id, kind, title)?;
+            ctx.insert_entity_in(id, kind, title, parent)?;
             id.to_owned()
         }
-        None => ctx.insert_entity(kind, title)?,
+        None => ctx.insert_entity_under(kind, title, parent)?,
     };
     ctx.connection().execute(
-        "INSERT INTO container (id, kind, parent_id, color, icon, position)
-         VALUES (?1, ?2, ?3, ?4, ?6, COALESCE(?5,
-           (SELECT COALESCE(MAX(position), 0) + 1 FROM container
-             WHERE kind = ?2 AND parent_id IS ?3)))",
+        "INSERT INTO container (id, kind, color, icon, position)
+         VALUES (?1, ?2, ?3, ?6, COALESCE(?5,
+           (SELECT COALESCE(MAX(c.position), 0) + 1 FROM container c JOIN entity e ON e.id = c.id
+             WHERE c.kind = ?2 AND e.parent_id IS ?4)))",
         rusqlite::params![
             id,
             kind.as_str(),
-            input.parent,
             input.color,
+            parent,
             input.position,
             input.icon,
         ],
@@ -284,75 +238,18 @@ struct MoveContainerInput {
 
 fn move_container(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: MoveContainerInput = ctx.parse_input()?;
-    require(ctx.connection(), &input.id)?;
-    let kind: Option<String> = ctx
-        .connection()
-        .query_row(
-            "SELECT kind FROM container WHERE id = ?1",
-            [input.id.as_str()],
-            |row| row.get(0),
-        )
-        .optional()?;
+    // The home is the one path every row moves by; a container also has its place among its
+    // siblings.
+    move_home(ctx, &input.id, input.parent.as_deref())?;
     ctx.connection().execute(
-        "UPDATE container SET parent_id = ?2,
-                position = COALESCE(?3,
-                  (SELECT COALESCE(MAX(position), 0) + 1 FROM container
-                    WHERE kind = ?4 AND parent_id IS ?2))
+        "UPDATE container SET position = COALESCE(?2,
+                  (SELECT COALESCE(MAX(c.position), 0) + 1 FROM container c
+                     JOIN entity e ON e.id = c.id
+                    WHERE c.kind = container.kind AND e.parent_id IS ?3 AND c.id <> ?1))
           WHERE id = ?1",
-        rusqlite::params![input.id, input.parent, input.position, kind],
+        rusqlite::params![input.id, input.position, input.parent],
     )?;
-    // When `kind = 'section'`, the baseline's `container_section_takes_its_tasks` trigger moves
-    // every task in the section to the new project, and the `task` auto-touch TEMP trigger
-    // stamps `updated_at` and re-indexes each moved task automatically.
     Ok(serde_json::json!({ "id": input.id }))
-}
-
-/// The calendar a followed phone calendar is, founded the first time the calendar is read and kept
-/// every time after ([#1146](https://github.com/srikanth235/centraid/issues/1146)): a calendar of
-/// the vault titled as the phone calls it, with the phone's colour. The phone's colour and name
-/// follow it, except that a name the member changed stands, and a calendar the member trashed is
-/// left where they put it. Events an older pass filed under the vault's own calendar move to it.
-pub(crate) fn follow_calendar(
-    ctx: &CommandCtx<'_, '_>,
-    home: &crate::commands::follow::Home<'_>,
-) -> Result<String> {
-    let connection = ctx.connection();
-    let title = home.label.trim();
-    if let Some(fills) = home.fills {
-        let Some(found) = crate::commands::entity::find(connection, fills)? else {
-            return Ok(fills.to_owned());
-        };
-        if found.deleted_at.is_some() {
-            return Ok(fills.to_owned());
-        }
-        if let Some(color) = home.color {
-            connection.execute(
-                "UPDATE container SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
-                [fills, color],
-            )?;
-        }
-        if home.was == Some(found.title.as_str()) && found.title != title {
-            connection.execute("UPDATE entity SET title = ?2 WHERE id = ?1", [fills, title])?;
-        }
-        return Ok(fills.to_owned());
-    }
-    let id = ctx.insert_entity(Kind::Calendar, title)?;
-    connection.execute(
-        "INSERT INTO container (id, kind, color, position)
-         VALUES (?1, 'calendar', ?2,
-           (SELECT COALESCE(MAX(position), 0) + 1 FROM container
-             WHERE kind = 'calendar' AND parent_id IS NULL))",
-        rusqlite::params![id, home.color],
-    )?;
-    connection.execute(
-        "UPDATE event SET calendar_id = ?2
-          WHERE id IN (
-            SELECT e.id FROM source s JOIN event e ON e.id = s.entity_id
-             WHERE s.origin_id = ?1 AND e.calendar_id = ?3
-          )",
-        [home.origin, id.as_str(), crate::model::DEFAULT_CALENDAR_ID],
-    )?;
-    Ok(id)
 }
 
 #[must_use]
@@ -368,7 +265,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "kind": { "type": "string",
-                          "enum": ["notebook", "folder", "album", "list", "project", "section", "area", "calendar"] },
+                          "enum": ["notebook", "folder", "album", "list", "task_list", "calendar"] },
                 "title": { "type": "string", "maxLength": 1000 },
                 "parent": { "type": ["string", "null"] },
                 "color": { "type": ["string", "null"] },

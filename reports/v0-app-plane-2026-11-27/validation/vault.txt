@@ -1,0 +1,1681 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running unittests src/lib.rs (target/debug/deps/centraid_vault-a2f62322a89699de)
+
+running 245 tests
+test access::tests::a_read_only_device_is_denied_act_but_not_read ... ok
+test access::tests::a_clamp_with_no_covering_scope_denies_and_names_the_subject ... ok
+test access::tests::an_unclamped_owner_is_allowed_owner_direct_with_no_filter ... ok
+test access::tests::clamp_intersection_ands_filters_and_is_order_independent ... ok
+test access::tests::masks_intersect_and_no_mask_is_every_column ... ok
+test access::tests::the_verb_algebra_never_lets_a_reveal_grant_widen_a_read ... ok
+test access::tests::two_scopes_pinning_one_column_to_disjoint_sets_are_refused ... ok
+test alerts::order_tests::alerts_read_longest_lead_first_each_once ... ok
+test backup::directory::tests::a_directory_this_build_would_not_write_is_refused ... ok
+test backup::directory::tests::a_directory_is_sorted_named_by_its_content_and_reads_back ... ok
+test backup::files::tests::an_original_and_its_poster_are_two_files_newest_first ... ok
+test backup::naming::tests::a_blobs_bytes_imply_its_names_and_nothing_records_them ... ok
+test backup::files::tests::photo_taken_at_orders_capture_time_and_propagates_to_derivatives ... ok
+test backup::files::tests::a_trashed_original_is_a_file_and_a_collected_one_is_not ... ok
+test backup::naming::tests::the_claims_read_seeks_the_sequence ... ok
+test backup::naming::tests::claims_are_walked_in_pages_and_a_number_is_never_reused ... ok
+test backup::restore::tests::a_backup_from_a_newer_build_asks_for_an_update ... ok
+test backup::restore::tests::a_backup_at_an_older_rung_restores_under_a_longer_ladder ... ok
+test backup::retention::tests::future_dated_snapshots_are_clamped_to_now_and_signed_order_wins ... ok
+test backup::restore::tests::a_backup_of_another_model_is_refused_before_anything_is_written ... ok
+test backup::retention::tests::higher_epoch_orders_ahead_of_higher_generation_and_later_clock ... ok
+test backup::staging::tests::contains_tracks_whole_files_only ... ok
+test bytes::tests::a_blob_is_named_by_its_bytes_and_a_second_put_is_one_blob ... ok
+test bytes::tests::a_blob_whose_bytes_rotted_is_reported_as_corrupt_not_returned ... ok
+test bytes::tests::a_missing_blob_and_an_invalid_id_are_different_answers ... ok
+test bytes::tests::a_temp_file_is_never_mistaken_for_a_blob_and_a_put_leaves_none ... ok
+test bytes::tests::the_staging_folder_is_beside_the_store_never_inside_it ... ok
+test canonical::tests::a_non_finite_number_is_refused_rather_than_written_as_null ... ok
+test canonical::tests::keys_sort_by_utf16_code_unit_and_not_by_utf8_bytes ... ok
+test canonical::tests::the_canonical_form_is_stable_and_whitespace_free ... ok
+test chat::tests::a_card_entity_names_a_kind_or_none ... ok
+test chat::tests::a_long_question_is_cut_on_a_character_boundary ... ok
+test chat::tests::a_title_is_the_first_question_trimmed ... ok
+test clock::tests::a_clock_id_is_a_uuid_v7_whose_time_comes_from_the_clock ... ok
+test clock::tests::a_fixed_clock_advances_only_when_told_to ... ok
+test clock::tests::a_timestamp_that_is_not_the_shape_does_not_parse ... ok
+test clock::tests::seeded_ids_are_a_function_of_the_seed_and_the_count ... ok
+test clock::tests::the_conversion_round_trips_over_a_century_of_leap_years ... ok
+test clock::tests::the_text_form_is_the_schemas_own_spelling ... ok
+test clock::tests::two_id_sources_on_one_clock_do_not_share_a_sequence ... ok
+test commands::csv::tests::a_field_is_quoted_only_when_it_must_be ... ok
+test commands::csv::tests::a_number_the_exporter_wrote_is_not_prefixed ... ok
+test commands::csv::tests::a_words_cell_that_would_run_as_a_formula_is_written_as_text ... ok
+test commands::csv::tests::an_ordinary_cell_is_untouched_and_a_formula_cell_can_also_be_quoted ... ok
+test commands::document_portable::tests::a_file_and_a_folder_of_one_name_never_share_a_path ... ok
+test commands::document_portable::tests::a_folder_name_is_made_safe_too_and_a_slash_in_a_title_is_not_a_folder ... ok
+test commands::document_portable::tests::an_original_that_cannot_be_included_is_named_with_its_reason ... ok
+test commands::document_portable::tests::every_name_in_the_archive_is_safe_and_the_extension_survives ... ok
+test commands::document_portable::tests::names_that_collide_in_one_folder_get_a_distinct_suffix_whatever_their_case ... ok
+test commands::health_portable::tests::names_and_numbers_read_back_as_stored ... ok
+test commands::ical::tests::a_file_is_a_closed_vcalendar_with_crlf_endings ... ok
+test commands::ical::tests::a_long_line_folds_at_75_octets_without_cutting_a_character ... ok
+test commands::ical::tests::dates_are_spelled_compactly ... ok
+test commands::ical::tests::text_is_escaped_the_way_calendar_apps_read_it_back ... ok
+test commands::locker::schema::tests::a_card_expiry_is_the_last_day_of_its_month ... ok
+test commands::locker::schema::tests::a_key_means_one_kind_wherever_it_is_used ... ok
+test commands::locker::schema::tests::every_type_has_stable_unique_keys_of_a_known_kind ... ok
+test commands::locker::schema::tests::the_template_types_seal_only_the_value_that_is_the_credential ... ok
+test backup::restore::tests::a_file_that_is_not_its_rungs_schema_is_refused ... ok
+test commands::locker::tests::every_input_schema_is_closed ... ok
+test commands::locker::tests::only_real_ciphertext_and_the_placeholder_pass_the_cell_guard ... ok
+test commands::locker::tests::the_doors_type_enum_is_the_type_list ... ok
+test commands::measurement::tests::figures_read_in_the_members_units ... ok
+test commands::note::tests::a_wikilink_is_two_brackets_on_one_line_with_something_between ... ok
+test commands::note_portable::tests::a_document_name_keeps_its_extension_when_it_is_cut ... ok
+test commands::note_portable::tests::a_heading_is_not_a_tag_and_a_front_matter_list_is_read ... ok
+test commands::note_portable::tests::a_stem_has_no_separator_control_character_or_reserved_name ... ok
+test commands::note_portable::tests::a_title_a_file_name_cannot_hold_is_written_in_the_file_and_read_back_whole ... ok
+test commands::note_portable::tests::an_obsidian_file_is_a_note_with_its_links_and_tags ... ok
+test commands::note_portable::tests::other_files_are_not_read ... ok
+test commands::note_portable::tests::the_archive_is_a_valid_stored_zip ... ok
+test commands::person_portable::tests::a_2_1_card_in_quoted_printable_is_decoded ... ok
+test commands::person_portable::tests::a_card_with_more_points_than_a_person_has_keeps_the_first_fifty ... ok
+test commands::person_portable::tests::a_member_s_other_date_keeps_its_words_and_a_second_birthday_is_dropped ... ok
+test commands::person_portable::tests::a_spreadsheet_is_read_and_written_in_the_same_cards ... ok
+test commands::person_portable::tests::days_with_and_without_a_year ... ok
+test commands::person_portable::tests::long_lines_fold_and_unfold ... ok
+test commands::person_portable::tests::two_cards_are_read_and_a_nameless_one_is_not ... ok
+test commands::person_portable::tests::what_is_written_is_read_back ... ok
+test commands::rule::tests::a_description_is_trimmed_collapsed_and_ascii_uppercased ... ok
+test commands::rule::tests::a_rule_matches_text_amount_and_account ... ok
+test commands::rule::tests::a_wildcard_is_whole_string_with_star_and_question_mark ... ok
+test commands::rule::tests::specificity_weighs_the_kind_and_each_bound ... ok
+test commands::sealed::tests::a_sealed_key_covers_every_string_nested_under_it ... ok
+test commands::sealed::tests::a_secret_inside_an_array_element_is_scrubbed ... ok
+test commands::sealed::tests::a_validation_message_quoting_a_secret_is_scrubbed ... ok
+test commands::txn_portable::tests::amounts_are_plain_decimals_in_the_currencys_own_places ... ok
+test commands::vault_export::archive_tests::a_changed_os_original_is_left_out_before_any_zip_entry_is_written ... ok
+test commands::locker::schema::tests::the_type_list_is_the_lookup ... ok
+test commands::vault_export::archive_tests::a_note_asset_is_streamed_in_chunks_and_never_read_whole ... ok
+test commands::vault_export::archive_tests::an_unfinished_or_cancelled_job_removes_its_whole_plaintext_folder ... ok
+test commands::vault_export::archive_tests::an_original_with_a_changed_size_is_never_added_to_the_zip ... ok
+test commands::vault_export::archive_tests::os_original_claim_is_snapshot_bound_and_only_one_stage_can_own_it ... ok
+test backup::restore::tests::a_damaged_root_on_the_first_gateway_falls_back_to_the_second ... ok
+test commands::workout::whole_number_tests::whole_measures_read_integers_and_integer_valued_floats_alike ... ok
+test custody::locker_key::tests::a_plaintext_that_merely_starts_with_the_prefix_is_not_ciphertext ... ok
+test custody::locker_key::tests::a_ciphertext_opens_only_under_its_own_row_and_its_own_key_id ... ok
+test backup::snapshot::tests::no_snapshot_is_taken_inside_a_commit ... ok
+test custody::locker_key::tests::a_write_under_a_generation_that_is_not_live_is_refused_as_stale_not_stored ... ok
+test custody::sealed_file::tests::a_file_opens_to_what_was_sealed_at_every_length_around_a_chunk ... ok
+test custody::sealed_file::tests::a_file_with_a_tail_cut_off_two_chunks_swapped_or_garbage_after_it_does_not_open ... ok
+test custody::sealed_file::tests::a_wrong_field_key_id_or_key_does_not_open ... ok
+test custody::sealed_file::tests::the_same_file_sealed_twice_is_two_files ... ok
+test custody::sealed_file::tests::what_is_not_a_sealed_file_is_refused_by_its_header_and_its_shape ... ok
+test decode::tests::a_named_latin_charset_is_read_as_such_and_others_fall_back ... ok
+test decode::tests::utf8_is_kept_and_anything_else_is_windows_1252 ... ok
+test custody::locker_key::tests::the_founded_locker_key_names_one_generation_and_nothing_retires_it ... ok
+test custody::locker_key::tests::a_second_generation_is_unrepresentable ... ok
+test file::tests::a_file_that_is_not_ours_is_refused_before_its_version_is_read ... ok
+test file::tests::a_founded_vault_carries_both_pragmas_and_the_head_version ... ok
+test file::tests::a_file_a_newer_build_wrote_is_refused_as_a_downgrade ... ok
+test file::tests::a_founded_vault_carries_the_whole_pragma_set ... ok
+test file::tests::a_damaged_page_is_refused_at_open_as_damaged ... ok
+test custody::locker_key::tests::the_vault_file_does_not_reveal_a_cell_without_k ... ok
+test file::tests::a_leftover_founding_is_removed_by_open_and_by_the_next_founding ... ok
+test file::tests::a_last_close_folds_the_wal_into_the_file ... ok
+test file::tests::a_migrated_vault_reopens_with_foreign_keys_its_clock_and_its_ids_and_leaves_no_copy ... ok
+test file::tests::a_read_connection_refuses_a_write ... ok
+test format::tests::a_statement_is_read_without_comments_and_with_one_space_between_words ... ok
+test format::tests::the_schema_digest_is_the_founded_files ... ok
+test format::tests::the_two_application_ids_are_distinct_tags ... ok
+test file::tests::creating_over_an_existing_file_is_refused ... ok
+test log::guard::tests::the_index_the_action_keys_and_sqlites_own_are_not_reported ... ok
+test log::identifiers::tests::a_table_with_no_primary_key_is_an_invariant_and_not_an_empty_answer ... ok
+test log::identifiers::tests::an_identifier_is_quoted_with_sqlites_own_escape ... ok
+test migrations::tests::a_gap_in_the_ladder_is_refused_before_the_rung_after_it_runs ... ok
+test file::tests::a_second_open_carries_the_same_pragma_set_and_changes_no_header ... ok
+test migrations::tests::a_rung_appended_above_the_baseline_climbs_once_and_in_order ... ok
+test migrations::tests::the_baseline_is_a_real_schema_and_not_a_stub ... ok
+test migrations::tests::the_ladder_is_contiguous_from_one ... ok
+test model::tests::a_label_folds_to_one_key ... ok
+test model::tests::every_kind_round_trips_and_has_one_host ... ok
+test model::tests::kind_specs_align_with_discriminants_and_history_hosts ... ok
+test file::tests::the_first_write_after_a_reopen_does_not_collide_with_the_first_session ... ok
+test page::keyset_tests::a_byte_count_is_said_the_way_the_corpus_says_it ... ok
+test index::tests::the_searchable_kinds_are_the_kinds_text_of_answers_for ... ok
+test migrations::tests::a_rung_that_fails_midway_rolls_back_whole_and_leaves_the_version ... ok
+test page::keyset_tests::a_json_key_is_projected_as_one_and_a_near_miss_as_a_name ... ok
+test page::keyset_tests::a_document_page_says_its_size_and_never_hands_out_the_byte_count ... ok
+test page::keyset_tests::a_computed_column_asked_of_a_table_that_has_no_blob_is_refused ... ok
+test page::keyset_tests::a_json_key_reads_back_through_the_page_door ... ok
+test page::keyset_tests::a_presence_test_is_projected_as_one_and_anything_else_as_a_name ... ok
+test page::keyset_tests::a_held_thumbnail_page_prepares_and_resolves_a_path_from_the_store ... ok
+test page::keyset_tests::a_size_that_is_a_claim_is_rounded_down_by_the_same_rule ... ok
+test page::keyset_tests::a_zero_limit_and_a_missing_order_column_are_both_refused ... ok
+test page::keyset_tests::a_predicate_that_reads_a_table_outside_the_list_is_refused ... ok
+test page::keyset_tests::an_original_the_library_holds_is_held_and_has_no_path ... ok
+test page::keyset_tests::the_authorizer_is_gone_after_a_refused_or_failed_prepare ... ok
+test page::keyset_tests::the_assistants_counts_read_an_index_and_scan_no_table ... ok
+test page::tests::a_bounded_union_is_one_in_filter ... ok
+test page::tests::a_deny_refuses_the_page_rather_than_answering_nothing ... ok
+test page::tests::a_field_mask_drops_what_it_does_not_admit ... ok
+test page::tests::filters_are_anded_onto_the_existing_predicate_and_never_ored ... ok
+test plans::tests::a_hole_marks_a_statement_dynamic ... ok
+test page::keyset_tests::a_reading_no_surface_may_embed_gets_no_path_though_the_bytes_are_held ... ok
+test plans::tests::a_select_in_a_string_is_found_and_one_in_a_comment_is_not ... ok
+test plans::tests::a_scan_of_a_table_is_a_full_scan_and_an_index_walk_is_not ... ok
+test plans::tests::an_update_or_a_delete_in_a_string_is_found_and_prose_that_starts_like_one_is_not ... ok
+test portable::zip::tests::a_name_that_is_not_ascii_is_flagged_utf8_and_read_back ... ok
+test portable::zip::tests::a_reader_that_gives_the_wrong_length_is_an_error ... ok
+test portable::zip::tests::an_empty_archive_is_just_the_end_record ... ok
+test portable::zip::tests::an_entry_past_the_zip64_line_gets_64_bit_sizes_and_the_archive_an_end_record ... ok
+test portable::zip::tests::entries_round_trip_through_the_central_directory ... ok
+test portable::zip::tests::memory_is_bounded_by_the_chunk_not_by_the_entry ... ok
+test roster::tests::a_stored_agenda_card_is_read_as_the_app_of_its_entity ... ok
+test roster::tests::every_app_is_a_card_and_a_scope ... ok
+test page::keyset_tests::the_cursor_is_absent_when_the_rows_end_and_present_when_they_do_not ... ok
+test time::civil::tests::a_wall_time_is_the_zones_and_a_designator_is_the_instants ... ok
+test time::civil::tests::the_gap_reads_after_the_change_and_the_fold_the_earlier_instant ... ok
+test time::occurrence::tests::a_future_override_applies_from_its_own_key_forward ... ok
+test time::occurrence::tests::a_row_of_another_series_kind_is_refused ... ok
+test time::occurrence::tests::a_row_with_no_key_is_not_an_exception_at_undefined ... ok
+test time::occurrence::tests::an_unreadable_override_is_not_an_invented_one ... ok
+test time::occurrence::tests::exceptions_arrive_oldest_first_and_only_for_their_series ... ok
+test time::occurrence::tests::the_column_is_named_exactly_once ... ok
+test time::occurrence::tests::the_search_window_is_a_bound_not_a_conversion ... ok
+test time::occurrence::tests::the_semantics_is_part_of_the_token ... ok
+test time::period::tests::a_year_has_52_or_53_weeks_by_the_week_start ... ok
+test time::period::tests::the_first_period_is_at_or_before_the_one_that_holds_the_day ... ok
+test time::period::tests::the_weekday_of_a_day_number_is_sunday_zero ... ok
+test time::period::tests::week_one_is_the_week_holding_january_fourth_whatever_the_week_start ... ok
+test plans::tests::a_tapped_page_read_keeps_its_statement ... ok
+test testdoor::tests::a_founded_vault_answers_the_questions_a_test_asks ... ok
+test time::recurrence::tests::a_completion_covers_its_own_civil_day_in_a_bare_date_series ... ok
+test time::recurrence::tests::a_floating_series_is_never_read_through_a_zone ... ok
+test time::recurrence::tests::a_pinned_day_in_the_spring_gap_moves_forward_and_one_in_the_fold_occurs_once ... ok
+test time::recurrence::tests::a_positional_day_before_the_anchor_starts_the_series_at_the_next_match ... ok
+test time::recurrence::tests::a_refused_rule_expands_to_nothing ... ok
+test time::recurrence::tests::a_repeating_task_collapses_rather_than_stacking ... ok
+test time::recurrence::tests::a_bare_date_series_rolls_over_to_a_date ... ok
+test time::recurrence::tests::a_rule_that_never_lands_expands_to_nothing_and_terminates ... ok
+test time::recurrence::tests::a_skip_keyed_on_the_resolved_instant_matches_nothing ... ok
+test time::recurrence::tests::a_skip_keyed_on_the_wall_clock_removes_its_occurrence ... ok
+test time::recurrence::tests::a_timed_series_keeps_its_wall_clock_across_dst_in_los_angeles ... ok
+test time::recurrence::tests::a_weekly_byday_rule_expands_on_its_days ... ok
+test time::recurrence::tests::a_repeating_task_on_a_month_position_advances_to_the_next_one ... ok
+test time::recurrence::tests::a_window_far_past_the_anchor_lands_on_the_same_days_as_a_walk_from_it ... ok
+test time::recurrence::tests::a_zoned_daily_series_keeps_its_wall_clock_across_a_dst_boundary ... ok
+test time::recurrence::tests::an_all_day_series_carries_dates ... ok
+test time::recurrence::tests::an_instant_parses_with_a_zone_designator ... ok
+test time::recurrence::tests::an_occurrence_in_the_spring_gap_moves_forward_by_the_gap_and_counts ... ok
+test time::recurrence::tests::an_overlapping_occurrence_appears_once_at_the_earlier_instant ... ok
+test time::recurrence::tests::count_is_observed_from_the_anchor_not_from_the_window ... ok
+test time::recurrence::tests::floating_and_all_day_series_expand_the_pinned_forms_too ... ok
+test time::recurrence::tests::count_until_and_interval_apply_to_the_pinned_months ... ok
+test time::recurrence::tests::the_31st_skips_the_months_that_have_none ... ok
+test time::recurrence::tests::the_forms_that_stay_refused_expand_to_nothing ... ok
+test time::recurrence::tests::the_last_day_of_the_month_is_the_28th_29th_30th_or_31st ... ok
+test time::recurrence::tests::the_last_friday_of_every_month_is_the_last_not_the_fourth ... ok
+test time::recurrence::tests::the_second_monday_of_every_month_across_a_year ... ok
+test time::temporal::tests::the_calendar_is_checked_not_only_the_shape ... ok
+test time::temporal::tests::the_four_readings_are_told_apart ... ok
+test time::temporal::tests::the_refusal_says_what_the_field_takes ... ok
+test time::zone::tests::a_gap_wall_time_resolves_to_nothing ... ok
+test time::zone::tests::a_vaults_zone_is_read_under_each_spelling_and_nothing_is_none ... ok
+test time::zone::tests::a_wall_clock_round_trips_through_its_epoch ... ok
+test time::zone::tests::an_ordinary_wall_time_resolves_unambiguously ... ok
+test time::zone::tests::an_overlapping_wall_time_resolves_once_at_the_earlier_instant ... ok
+test time::zone::tests::february_thirty_first_is_refused_rather_than_normalised ... ok
+test time::zone::tests::the_weekday_is_sunday_zero ... ok
+test time::zone::tests::there_is_no_third_tier ... ok
+test value::tests::a_blob_is_b64_and_never_null ... ok
+test value::tests::a_key_is_a_json_array_in_declared_order ... ok
+test value::tests::a_real_is_spelled_the_way_javascript_spells_it ... ok
+test value::tests::an_absent_key_and_a_null_are_two_different_images ... ok
+test value::tests::base64_round_trips_every_byte ... ok
+test value::tests::control_characters_and_astral_text_round_trip ... ok
+test value::tests::text_never_collides_with_the_two_wide_forms ... ok
+test value::tests::the_integer_boundary_is_max_safe_integer_and_not_i64 ... ok
+test words::tests::a_changed_table_is_refused_not_panicked_on_while_a_read_is_held ... ok
+test words::tests::a_number_given_out_again_to_another_word_is_a_whole_read ... ok
+test words::tests::a_purge_is_a_whole_read ... ok
+test words::tests::a_read_inside_a_commit_is_refused ... ok
+test words::tests::a_rebuilt_or_restored_table_is_a_whole_read_even_when_it_is_as_long ... ok
+test words::tests::a_rolled_back_write_never_reaches_the_cache_and_its_numbers_are_given_out_again ... ok
+test page::keyset_tests::a_page_asked_at_the_ceiling_still_says_more_rows_follow ... ok
+test words::tests::a_word_that_was_already_there_appends_nothing ... ok
+test time::recurrence::tests::next_occurrence_is_strictly_after ... ok
+test words::tests::an_empty_table_is_a_loaded_cache_and_stays_one ... ok
+test words::tests::the_cost_of_a_cache_of_150000_words ... ignored, a measurement, not a check: it prints what loading and validating cost
+test words::tests::appended_words_are_read_as_a_tail ... ok
+test words::tests::the_first_read_is_whole_and_an_unchanged_table_is_not_read_again ... ok
+test words::tests::the_words_containing_a_fragment_are_the_words_that_contain_it ... ok
+test words::tests::a_vault_serves_the_words_its_commits_index ... ok
+test time::recurrence::tests::a_bare_date_series_is_due_on_the_zones_day_for_all_of_it ... ok
+
+test result: ok. 244 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.89s
+
+     Running unittests src/bin/export-commands.rs (target/debug/deps/export_commands-b9d6fa88d1238929)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/export-ladder-ddl.rs (target/debug/deps/export_ladder_ddl-3421e903fcf7ec84)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/export-ontology-page.rs (target/debug/deps/export_ontology_page-39a35e31dd607e8f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/action_keys.rs (target/debug/deps/action_keys-72902ffc000611f4)
+
+running 6 tests
+test a_founded_vault_has_no_journal_and_holds_action_keys_instead ... ok
+test a_refused_or_failed_command_writes_nothing_anywhere ... ok
+test a_key_older_than_thirty_days_is_trimmed_by_the_next_keyed_commit ... ok
+test an_entity_has_no_version_and_a_touch_stamps_its_time_only ... ok
+test a_keyed_act_is_answered_replayed_after_a_restart_and_runs_once ... ok
+test the_write_counter_grows_by_one_per_changing_commit_and_not_for_a_no_op ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/alerts.rs (target/debug/deps/alerts-376dbe6653d433e1)
+
+running 24 tests
+test a_notification_says_the_title_and_time_and_never_a_sealed_value ... ok
+test a_cancelled_day_and_a_one_day_override_are_honoured ... ok
+test a_date_and_a_floating_alert_stay_on_their_wall_clock_through_both_changes ... ok
+test a_kill_between_the_commit_and_the_index_loses_no_alert ... ok
+test a_repeating_event_holds_its_next_firing_and_advance_moves_it_on ... ok
+test a_repeating_task_holds_its_next_firing_and_a_snooze_is_its_one_alert ... ok
+test a_snooze_is_refused_where_there_is_no_alert_to_move ... ok
+test a_reminder_goes_on_an_event_a_task_a_persons_date_or_a_locker_date_and_nowhere_else ... ok
+test a_snooze_moves_only_the_alert_it_names_for_every_kind_a_reminder_goes_on ... ok
+test alerts_are_queued_in_the_commit_and_written_after_it ... ok
+test a_zoned_alert_follows_its_zones_offset_through_the_spring_forward ... ok
+test a_trashed_item_or_one_in_a_trashed_holder_has_no_alert_restore_brings_it_back_purge_removes_it ... ok
+test child_commits_a_reminder_and_stops ... ok
+test an_alert_in_the_fall_back_fold_sounds_once_at_the_earlier_instant ... ok
+test an_event_that_is_still_running_keeps_its_row_past_the_keep_window ... ok
+test an_alert_in_the_spring_gap_moves_forward_once_and_the_next_day_is_back_on_its_clock ... ok
+test feb_29_falls_on_feb_28_in_a_year_with_no_leap_day_and_on_the_29th_in_one ... ok
+test editing_a_tasks_due_clears_its_snooze_and_saving_the_same_due_does_not ... ok
+test the_nine_oclock_rule_and_a_lead_on_a_dst_day_are_wall_clock_arithmetic ... ok
+test the_next_firing_of_each_kind_of_moment_with_the_lead_counted_back ... ok
+test the_same_wall_time_is_a_different_instant_in_each_zone_and_travel_changes_nothing_stored ... ok
+test the_alerts_equal_a_rebuild_from_the_rows ... ok
+test what_the_phone_holds_the_phone_alerts_until_the_member_changes_it_or_it_is_gone ... ok
+test the_next_few_are_one_seek_on_alert_by_fire_whatever_the_vault_holds ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.36s
+
+     Running tests/arrivals.rs (target/debug/deps/arrivals-43637e2be6936ceb)
+
+running 2 tests
+test a_way_in_that_does_not_bring_in_that_kind_is_refused ... ok
+test each_shared_type_lands_with_the_arrival_its_format_names ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+     Running tests/backup_engine.rs (target/debug/deps/backup_engine-61c67f0f514c6f42)
+
+running 25 tests
+test a_gateway_that_loses_the_head_while_media_goes_up_restarts_the_pass ... ok
+test a_chunk_is_read_and_sealed_once_for_every_gateway_that_owes_it ... ok
+test a_member_who_undid_a_delete_keeps_those_names_for_a_week ... ok
+test a_first_backup_confirms_records_then_thumbnails_then_originals ... ok
+test a_one_page_edit_stores_three_objects_with_no_exists_calls ... ok
+test a_photo_is_held_whole_only_when_every_chunk_is_reachable_from_oroot ... ok
+test collection_stops_in_doubt_when_a_kept_root_will_not_open ... ok
+test a_recovery_pass_uses_exists ... ok
+test nothing_an_os_reports_marks_anything_stored ... ok
+test full_and_restage_do_not_persist_reach_unreachable ... ok
+test on_a_metered_link_with_the_default_rule_nothing_moves ... ok
+test os_bundles_are_at_most_four_files_of_at_most_32_mib ... ok
+test partial_bundle_response_retries_unanswered_frames ... ok
+test peer_gateway_repairs_cloud_only_original_to_newly_paired_gateway ... ok
+test collection_deletes_what_no_kept_root_reaches_and_never_a_reachable_name ... ok
+test read_back_finds_a_rotten_chunk_withdraws_the_claims_and_the_next_pass_mends_it ... ok
+test retention_keeps_seven_daily_four_weekly_six_monthly_and_always_the_newest ... ok
+test the_commit_rule_is_asserted_when_a_gateway_leaves_a_frame_unanswered ... ok
+test the_members_rule_decides_which_class_crosses_which_link ... ok
+test records_of_every_gateway_go_before_thumbnails_of_any_before_originals_of_any ... ok
+test thumbnails_go_newest_first ... ok
+test unauthorized_stops_with_pair_again_and_persists_reach_pair_again ... ok
+test unstreamed_os_original_blocks_oroot_confirmation_until_streamed ... ok
+test retention_collect_visits_shared_blobs_subtrees_once_across_kept_snapshots ... ok
+test a_pass_killed_after_any_step_resumes_and_ends_the_same ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.31s
+
+     Running tests/backup_sealed.rs (target/debug/deps/backup_sealed-a6cf46cdf17b1e90)
+
+running 5 tests
+test a_sealed_file_is_in_the_tree_with_every_exclusion_on ... ok
+test a_sealed_file_is_never_among_what_a_pass_may_free ... ok
+test the_listing_flags_a_sealed_file_and_an_earlier_one_stays_flagged ... ok
+test a_sealed_file_crosses_to_the_gateway_and_back_with_every_exclusion_on ... ok
+test no_derivative_is_ever_made_from_a_sealed_file ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+
+     Running tests/backup_sim.rs (target/debug/deps/backup_sim-9f2d050470d36638)
+
+running 2 tests
+test every_planted_bug_is_caught has been running for over 60 seconds
+test the_correct_engine_has_no_violation_at_any_seed has been running for over 60 seconds
+test the_correct_engine_has_no_violation_at_any_seed ... ok
+test every_planted_bug_is_caught ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 152.98s
+
+     Running tests/backup_snapshot.rs (target/debug/deps/backup_snapshot-a6193abf1568b968)
+
+running 22 tests
+test a_checkpoint_made_behind_the_core_is_caught_immediately_by_the_next_snapshot ... ok
+test a_clean_close_with_no_member_write_forces_a_full_read ... ok
+test a_clean_close_then_new_write_forces_a_full_read_and_restores_both_writes ... ok
+test a_damaged_vault_is_refused_before_any_root_exists ... ok
+test a_one_page_edit_reads_one_range_on_a_normal_snapshot ... ok
+test a_full_read_is_at_least_daily ... ok
+test a_clean_close_after_a_write_forces_a_full_read_and_restores_all_rows ... ok
+test a_steady_vault_that_is_not_closed_reads_no_range_snapshot_after_snapshot ... ok
+test concurrent_wal_fold_during_unlocked_snapshot_never_loses_post_pin_writes ... ok
+test fold_wal_if_needed_truncates_wal_and_next_incremental_snapshot_restores_every_write ... ok
+test a_search_only_write_then_clean_close_forces_a_full_read_and_restores_a_whole_file ... ok
+test hydrate_blob_chunks_from_root_recovers_cloud_only_originals_across_lose_state ... ok
+test photos_become_entries_once_and_their_chunks_are_read_once ... ok
+test reusing_unchanged_blob_updates_taken_at_metadata ... ok
+test nothing_changed_reads_no_range_and_makes_the_same_root_but_for_its_time ... ok
+test the_checkpoint_comes_after_the_pin_and_pages_written_during_it_are_carried ... ok
+test the_index_file_is_in_no_snapshot_staging_or_dirty_range_record ... ok
+test a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state ... ok
+test the_first_snapshot_reads_every_range_and_hashes_the_whole_vault ... ok
+test the_quick_check_runs_before_the_head_is_signed ... ok
+test toggling_exclude_videos_after_free_up_space_preserves_video_refs_via_blob_chunk ... ok
+test the_periodic_full_read_runs_every_full_every_snapshots ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.15s
+
+     Running tests/backup_state.rs (target/debug/deps/backup_state-1a6c2f7088dcc6ed)
+
+running 13 tests
+test a_crash_between_fsync_and_rename_leaves_only_a_partial_which_open_sweeps ... ok
+test a_file_that_is_not_ours_or_is_newer_is_refused ... ok
+test every_constraint_the_code_states_is_in_the_database_too ... ok
+test local_bytes_keep_the_blobs_doors_contract ... ok
+test gateway_notes_blob_chunks_and_dirty_ranges_round_trip ... ok
+test staging_refuses_past_its_budget_and_a_name_is_whole_or_absent ... ok
+test the_budget_is_the_smaller_of_512_mib_and_a_tenth_of_free_space ... ok
+test os_bundles_persist_across_reopen_and_rotate_by_set_difference ... ok
+test the_device_row_and_staged_rows_and_undone_names_round_trip ... ok
+test the_node_cache_keeps_and_forgets_by_name ... ok
+test a_regressed_head_is_kept_until_a_new_head_is_confirmed_there ... ok
+test the_schema_has_no_outbox_and_one_rung ... ok
+test what_a_gateway_confirmed_survives_a_reopen_and_a_new_epoch_is_a_new_ask ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/backup_tree.rs (target/debug/deps/backup_tree-4224bd1f07ca227b)
+
+running 13 tests
+test a_missing_node_is_a_typed_refusal_not_a_guess ... ok
+test a_node_the_encoder_would_not_write_is_refused ... ok
+test blobs_stats_roll_up_across_splits_and_tampered_leaf_stats_fail_decode ... ok
+test a_leaf_over_the_limit_splits_by_the_next_byte_of_the_hash ... ok
+test crafted_huge_counts_and_page_size_overflow_are_refused ... ok
+test collect_everything_into_visits_shared_subtrees_once ... ok
+test diff_entries_walks_only_changed_path ... ok
+test a_blobs_leaf_with_large_entries_splits_before_hitting_four_mib ... ok
+test negative_taken_at_ms_round_trips_byte_for_byte ... ok
+test lookup_entry_reads_at_most_depth_plus_one_nodes ... ok
+test a_new_photo_of_k_chunks_makes_at_most_k_plus_five_objects ... ok
+test one_changed_range_makes_one_chunk_one_leaf_and_one_root ... ok
+test every_node_decodes_to_what_was_encoded_and_encoding_is_canonical ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.19s
+
+     Running tests/blob_release.rs (target/debug/deps/blob_release-0c8cfbba52f94eeb)
+
+running 17 tests
+test a_derivative_written_twice_is_one_row_and_both_tables_have_rowids ... ok
+test a_derivatives_file_is_a_rented_blob_that_follows_its_original ... ok
+test a_clock_far_ahead_leaves_every_trashed_blob_in_the_backup ... ok
+test a_command_that_replaces_a_blob_and_collects_in_the_same_commit_keeps_the_earlier_bytes ... ok
+test a_file_with_no_row_is_swept_and_a_file_with_one_is_not ... ok
+test a_new_column_that_references_blob_is_refused_until_the_backup_says_whose_it_is ... ok
+test a_variants_shape_is_the_lookup_rows_has_out ... ok
+test blob_collect_releases_the_files_it_collects ... ok
+test collecting_inside_a_commit_still_frees_what_a_purge_in_that_commit_released ... ok
+test derivative_drop_and_write_release_the_bytes_they_stop_naming ... ok
+test collecting_with_a_limit_takes_a_piece_and_says_when_more_is_left ... ok
+test re_adding_a_rotted_blob_replaces_the_bad_file ... ok
+test the_file_sweep_looks_at_a_bounded_batch_and_resumes ... ok
+test the_backup_lists_no_blob_only_a_lapsed_entity_names ... ok
+test the_collector_and_the_backup_agree_on_every_column_that_rents_a_blob ... ok
+test the_pass_collects_what_it_released_after_its_last_batch_in_pieces ... ok
+test earlier_bytes_are_kept_while_the_entity_lives_and_a_purge_frees_them ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.02s
+
+     Running tests/calendar_follow.rs (target/debug/deps/calendar_follow-50ceacd3bd2ca7aa)
+
+running 21 tests
+test a_calendar_followed_again_keeps_its_calendar_and_adds_no_event_twice ... ok
+test a_followed_calendar_the_member_trashed_stays_trashed_until_the_member_restores_it ... ok
+test a_calendar_the_member_renamed_keeps_their_name_and_one_they_did_not_follows_the_phone ... ok
+test a_calendar_that_lost_most_of_its_events_trashes_none_of_them ... ok
+test a_followed_series_skips_what_the_phone_does_not_show_and_moves_what_it_moved ... ok
+test a_phone_change_the_vault_did_not_touch_lands_and_a_members_edit_stands ... ok
+test a_phones_alerts_land_as_reminder_rows_the_members_change_stands_and_one_alert_sounds_per_thing ... ok
+test a_phones_location_is_words_and_never_makes_a_place ... ok
+test a_phone_delete_trashes_an_untouched_event_and_only_forgets_an_edited_one ... ok
+test a_phones_guests_are_guests_whether_or_not_they_are_in_people_and_follow_one_by_one ... ok
+test a_phones_moved_day_keeps_its_timing_link_and_location_through_the_follower ... ok
+test a_row_the_phone_unlinked_reports_nothing ... ok
+test a_purged_phone_calendar_ends_its_follow_and_the_next_pass_makes_it_again ... ok
+test a_series_that_moves_in_the_day_takes_its_overrides_with_it_and_one_that_stops_landing_drops_them ... ok
+test a_second_identical_read_writes_no_source_row_and_makes_no_revision ... ok
+test an_event_the_member_trashed_or_edited_while_the_calendar_was_stopped_stays_that_way ... ok
+test an_event_reports_its_followed_fields_and_its_guests_item_by_item_and_a_take_puts_them_back ... ok
+test an_address_the_phone_brings_fills_the_row_of_a_guest_with_none_and_two_such_guests_survive_a_pass ... ok
+test each_phone_calendar_is_a_calendar_of_the_vault_with_the_phones_colour ... ok
+test taking_a_followed_series_puts_its_days_back ... ok
+test the_phone_does_not_undo_a_day_the_member_changed_and_a_slid_window_forgets_nothing ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.33s
+
+     Running tests/change_census.rs (target/debug/deps/change_census-f3da8249e9aa24d4)
+
+running 3 tests
+test a_rollback_reports_nothing_and_does_not_leak_into_the_next_commit ... ok
+test a_commit_that_edits_one_table_reports_that_table_only ... ok
+test a_commit_that_writes_a_without_rowid_table_reports_it ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/chat.rs (target/debug/deps/chat-071d476eb65daff9)
+
+running 25 tests
+test a_chat_is_no_link_end_no_title_target_and_takes_no_tag ... ok
+test a_card_is_live_while_its_row_is_and_an_unknown_word_is_not_evidence_of_a_hole ... ok
+test a_change_the_assistant_makes_is_the_assistants_in_history ... ok
+test a_card_is_an_item_and_a_closed_code_and_no_word_of_it ... ok
+test a_chat_is_titled_by_words_and_the_kind_says_it_needs_one ... ok
+test a_new_turn_dismisses_the_proposal_waiting_and_only_the_last_can_wait ... ok
+test a_chat_is_renamed_trashed_restored_and_deleted_forever_like_every_kind ... ok
+test a_proposal_settles_once_as_each_of_its_four_outcomes ... ok
+test a_refusal_never_quotes_what_was_said ... ok
+test a_retry_replaces_the_last_turn_and_only_that_one ... ok
+test a_refusal_names_a_seeded_reason_and_a_notice_a_seeded_notice ... ok
+test a_regenerated_turn_releases_the_thumbnail_it_replaced_as_hashes ... ok
+test a_thumbnail_is_kept_while_its_chat_lives_and_released_when_it_is_purged ... ok
+test a_thread_reopens_with_the_live_title_of_an_attached_photo_or_a_tombstone ... ok
+test a_turn_is_one_commit_with_its_cards_and_attachments ... ok
+test a_purged_item_leaves_none_of_its_words_in_a_chat_and_its_card_is_a_tombstone ... ok
+test a_trashed_attachment_reads_as_lost_and_a_purged_one_leaves_the_pointer_empty ... ok
+test messages_are_appended_in_order_and_each_outcome_is_kept ... ok
+test the_ddl_holds_no_app_word_and_a_threads_scope_is_a_bare_column ... ok
+test an_attachment_is_a_photo_a_document_or_an_image_and_names_only_its_own ... ok
+test search_finds_a_chat_by_its_title_and_the_members_words_never_the_assistants ... ok
+test the_roster_is_the_schemas_not_a_check ... ok
+test clear_deletes_every_chat_live_or_trashed ... ok
+test thread_clear_releases_every_thumbnail_it_drops ... ok
+test threads_list_newest_activity_first_and_the_list_walks_an_index ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.39s
+
+     Running tests/clock_bound.rs (target/debug/deps/clock_bound-ef4428af015a11c1)
+
+running 5 tests
+test a_phone_idle_eight_days_purges_after_its_first_write ... ok
+test a_clock_behind_the_last_commit_purges_nothing_either ... ok
+test the_bound_is_seven_days_to_the_millisecond_in_both_directions ... ok
+test a_clock_years_ahead_prunes_no_action_key_and_a_normal_one_does ... ok
+test a_clock_years_ahead_purges_nothing_and_a_normal_gap_still_purges ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+
+     Running tests/command_list.rs (target/debug/deps/command_list-b1f02ca4e3da088b)
+
+running 2 tests
+test the_command_list_is_the_registry ... ok
+test every_command_is_a_kind_or_group_and_a_verb_of_the_closed_list ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/commands.rs (target/debug/deps/commands-9c3ab0f2aa068997)
+
+running 10 tests
+test a_duplicate_registration_and_a_misnamed_command_are_refused ... ok
+test a_handler_that_errors_rolls_back_and_leaves_nothing ... ok
+test a_failed_precondition_refuses_with_a_sentence_and_writes_nothing ... ok
+test a_malformed_input_is_refused_by_the_schema ... ok
+test a_command_executes_and_reports_the_tables_it_changed ... ok
+test the_registry_carries_the_shared_verbs_and_the_plugged_modules_and_nothing_else ... ok
+test a_read_only_device_is_denied_before_its_input_is_looked_at ... ok
+test an_unknown_command_is_an_error ... ok
+test an_apps_declared_reach_is_a_ceiling_on_its_commands ... ok
+test touch_stamps_the_entity_and_an_unknown_entity_is_an_error ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/commit_kill.rs (target/debug/deps/commit_kill-11168838f3b049dc)
+
+running 2 tests
+test child_commits_and_stops ... ok
+test a_process_killed_mid_commit_loses_the_commit_and_opens_clean ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.18s
+
+     Running tests/commitments.rs (target/debug/deps/commitments-998a75a62cf0b7e9)
+
+running 10 tests
+test every_column_the_past_index_reads_is_findable ... ok
+test a_sealed_column_is_named_by_neither_text_writer_as_text ... ok
+test every_blob_column_is_a_slot_or_omitted_and_has_a_renter ... ok
+test every_kind_has_exactly_one_host_and_the_hosts_are_exactly_the_composite_cascade_keys ... ok
+test every_foreign_key_column_leads_an_index ... ok
+test the_lookup_seeds_equal_the_rust_lists_that_mirror_them ... ok
+test no_check_or_trigger_names_a_value_a_lookup_table_holds ... ok
+test every_hash_in_the_file_sits_in_a_foreign_key_into_blob ... ok
+test the_trash_pair_lives_on_entity_only ... ok
+test every_text_column_is_findable_sealed_or_argued_out ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s
+
+     Running tests/container_style.rs (target/debug/deps/container_style-69a3aab4046aeaa9)
+
+running 4 tests
+test the_curated_icons_are_all_in_icons_toml_and_the_colours_are_the_list_palette ... ok
+test a_list_is_made_renamed_and_styled ... ok
+test a_calendar_is_made_renamed_and_styled ... ok
+test a_colour_an_icon_or_a_kind_that_is_not_the_palettes_is_refused_with_a_sentence ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s
+
+     Running tests/disk_full.rs (target/debug/deps/disk_full-b8841ae9179e1988)
+
+running 3 tests
+test a_full_disk_at_the_log_insert_rolls_the_whole_commit_back ... ok
+test a_full_disk_in_a_migration_at_open_changes_nothing_and_the_file_opens_when_there_is_room ... ok
+test a_full_disk_while_founding_leaves_no_vault_and_no_side_file_and_says_so ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/docs_photos.rs (target/debug/deps/docs_photos-525e1111470dd368)
+
+running 21 tests
+test a_document_is_refused_with_a_sentence_and_an_upload_is_an_arrival ... ok
+test a_folder_takes_its_contents_to_the_trash_and_brings_back_exactly_those ... ok
+test a_live_photograph_keeps_its_clip_and_a_burst_is_one_index_seek ... ok
+test a_document_sits_in_one_folder_and_moves_through_entity_move ... ok
+test a_named_place_attaches_by_the_members_choice_and_is_found_by_its_name ... ok
+test a_picked_photograph_is_an_arrival_and_the_form_follows_the_bytes ... ok
+test a_place_is_made_edited_and_trashed_by_the_member_only ... ok
+test an_album_adds_reorders_and_removes_and_a_photograph_may_be_in_two ... ok
+test collecting_in_the_same_commit_as_a_replace_cannot_take_the_earlier_bytes ... ok
+test an_album_keeps_its_cover_while_the_photograph_is_there ... ok
+test an_edit_keeps_the_originals_date_place_coordinates_and_caption ... ok
+test derivatives_are_files_or_text_as_the_lookup_says_and_the_words_are_searchable ... ok
+test documents_in_a_folder_are_one_index_seek ... ok
+test identity_is_the_wrapper_two_documents_may_share_their_bytes ... ok
+test restoring_an_album_version_leaves_its_current_cover_as_it_is ... ok
+test replacing_keeps_the_earlier_bytes_through_its_history_slot_and_a_restore_brings_them_back ... ok
+test text_is_written_through_the_blob_door_and_found_by_its_words ... ok
+test one_file_restored_out_of_a_trashed_folder_lands_at_the_top ... ok
+test the_words_a_phone_read_out_of_a_file_are_what_it_is_found_by ... ok
+test where_a_photograph_was_taken_is_kept_and_never_makes_a_place ... ok
+test the_same_bytes_offered_twice_commit_once_and_a_trashed_photograph_stays_trashed ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.54s
+
+     Running tests/docs_photos_follow.rs (target/debug/deps/docs_photos_follow-17b5687acc9c3789)
+
+running 9 tests
+test a_followed_file_claims_its_bytes_in_the_command_and_a_read_that_lost_most_is_doubted ... ok
+test a_member_rename_is_kept_and_what_the_phone_said_stays_readable ... ok
+test a_followed_folder_fills_its_folder_and_a_changed_file_is_a_new_version ... ok
+test a_file_gone_from_the_phone_goes_to_the_trash_and_comes_back_with_it ... ok
+test a_roll_pass_adds_photographs_that_are_a_stores_with_no_place_and_a_point_on_the_map ... ok
+test the_product_registers_both_maps_and_the_lookups_name_what_they_fill_and_yield ... ok
+test a_stopped_roll_keeps_every_photograph_and_one_picked_is_a_different_thing ... ok
+test what_the_member_corrected_stands_and_the_files_facts_never_change ... ok
+test a_trashed_photograph_stays_trashed_and_a_purged_one_is_never_added_again ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.04s
+
+     Running tests/document_portable.rs (target/debug/deps/document_portable-50b0a2294ec7a309)
+
+running 6 tests
+test a_folder_that_is_not_there_is_refused_in_words ... ok
+test it_writes_nothing_to_the_vault_and_replaces_the_last_staged_file ... ok
+test an_archive_with_nothing_left_out_has_no_note_and_unsafe_titles_are_made_safe ... ok
+test a_folder_scope_holds_that_folder_and_the_ones_below_it_relative_to_it ... ok
+test the_archive_holds_every_original_byte_for_byte_under_the_members_folders ... ok
+test the_trash_the_missing_and_the_duplicates ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/earlier_versions_found.rs (target/debug/deps/earlier_versions_found-a13fab2a00dd432e)
+
+running 4 tests
+test a_note_is_found_by_the_words_it_said_before ... ok
+test a_restored_version_is_found_by_what_it_replaced ... ok
+test an_unchanged_body_adds_no_second_copy_and_a_renamed_title_adds_the_old_one ... ok
+test a_purge_removes_the_past_rows_and_their_words_in_the_same_transaction ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/edge_walks.rs (target/debug/deps/edge_walks-3300052b31f8d1d4)
+
+running 1 test
+test the_edge_order_index_has_a_reader_and_is_kept ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+
+     Running tests/event_portable.rs (target/debug/deps/event_portable-cd3a8a7ff19f9acf)
+
+running 7 tests
+test a_split_series_is_two_events_the_first_ending_in_an_until ... ok
+test a_series_carries_its_rule_its_skipped_day_and_its_moved_day ... ok
+test a_changed_day_of_a_series_is_its_own_event_with_the_guests_repeated ... ok
+test a_calendar_is_its_own_file_one_event_is_named_for_it_and_the_trash_is_left_out ... ok
+test all_day_and_floating_events_keep_their_reading ... ok
+test an_event_is_written_with_escaping_folding_and_its_own_zone ... ok
+test an_event_carries_its_guests_with_their_answers_roles_organizer_and_its_travel_allowance ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/event_reads.rs (target/debug/deps/event_reads-e5e4ff827fecf94e)
+
+running 6 tests
+test an_overlap_is_a_read_never_a_refusal ... ok
+test a_series_shows_its_days_with_the_changes_to_them ... ok
+test a_day_a_week_and_a_month_hold_the_events_that_are_on_them_in_the_viewers_zone ... ok
+test people_s_dates_are_shown_on_their_day_and_are_never_events ... ok
+test every_statement_of_a_calendar_read_is_an_index_walk ... ok
+test a_long_event_is_found_by_its_own_index_and_costs_a_window_nothing_it_did_not_hold ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s
+
+     Running tests/events.rs (target/debug/deps/events-0929624d91811f90)
+
+running 19 tests
+test a_day_with_its_own_timing_keeps_it_and_one_that_states_the_series_own_stores_none ... ok
+test a_busy_event_may_land_on_a_busy_one_and_the_read_says_so ... ok
+test a_day_of_a_series_is_skipped_moved_and_put_back_by_its_wall_clock ... ok
+test a_change_to_the_whole_series_moves_its_days_with_it_and_a_new_timing_drops_them ... ok
+test a_floating_time_is_a_wall_clock_to_the_minute_and_an_all_day_one_a_date ... ok
+test a_split_that_changes_no_time_carries_the_days_and_shares_out_a_count ... ok
+test a_series_day_that_is_skipped_or_moved_moves_the_alert ... ok
+test a_guest_resolves_to_a_person_by_address_and_survives_that_persons_purge ... ok
+test a_zoned_time_is_the_instant_its_wall_clock_is_and_a_skipped_clock_is_refused ... ok
+test an_edit_changes_what_it_states_and_a_moved_start_keeps_the_length ... ok
+test a_person_with_no_email_is_a_guest_and_their_purge_leaves_no_orphan_row ... ok
+test an_earlier_version_with_three_guests_restores_three_and_keeps_no_copy_of_the_start ... ok
+test an_events_alerts_are_reminder_rows_set_changed_and_moved_with_the_event ... ok
+test guests_are_added_edited_and_removed_and_a_guest_not_in_people_is_still_a_guest ... ok
+test moving_an_event_re_sorts_it_on_a_persons_timeline_by_one_index ... ok
+test the_calendar_is_the_events_home_and_a_move_is_the_shared_verb ... ok
+test splitting_at_the_first_day_is_the_edit_of_the_whole_series_and_a_day_off_the_rule_is_refused ... ok
+test this_and_following_splits_the_series_and_a_change_of_timing_to_the_future_is_allowed ... ok
+test where_it_is_is_words_and_never_makes_a_place ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+     Running tests/first_item.rs (target/debug/deps/first_item-fa26b44bfcc08817)
+
+running 5 tests
+test a_second_person_counts_and_the_founding_one_does_not ... ok
+test the_first_note_is_the_first_item_at_the_notes_time ... ok
+test a_workout_alone_is_a_first_item ... ok
+test starters_and_the_founding_person_alone_are_no_first_item ... ok
+test the_retired_starter_tasks_are_no_first_item ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/follow_gaps.rs (target/debug/deps/follow_gaps-e75229b8c7f0121c)
+
+running 10 tests
+test a_record_gone_from_a_complete_read_trashes_its_row_and_its_return_undoes_exactly_that ... ok
+test a_read_that_lost_most_of_what_the_vault_follows_trashes_nothing ... ok
+test a_changed_record_still_writes_its_source_and_a_returned_one_clears_gone ... ok
+test a_row_the_member_trashed_stays_trashed_and_one_they_edited_is_kept_when_its_record_goes ... ok
+test a_purged_rows_source_is_a_tombstone_and_a_record_that_returns_adds_no_row ... ok
+test every_system_that_trashes_what_a_read_loses_has_a_doubted_read_proved ... ok
+test a_second_identical_pass_writes_no_source_row_and_makes_no_revision ... ok
+test a_trashed_photo_stays_trashed_after_a_rescan_and_a_purged_one_is_never_added_again ... ok
+test the_owner_is_nobodys_record ... ok
+test another_phone_finds_a_purged_rows_tombstone_and_never_revives_the_row ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.90s
+
+     Running tests/follow_items.rs (target/debug/deps/follow_items-5e28db87ec2ce9f3)
+
+running 2 tests
+test the_differences_name_each_item_and_a_take_puts_one_item_back ... ok
+test an_untouched_item_takes_the_sources_change_and_the_members_items_stand ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+     Running tests/follow_reminders.rs (target/debug/deps/follow_reminders-888838c83acef60f)
+
+running 5 tests
+test a_reminder_arrives_in_its_list_edits_stand_and_a_phone_completion_completes_the_task ... ok
+test a_reminder_gone_from_a_complete_read_goes_to_the_trash_comes_back_and_an_older_arrival_is_taken_over ... ok
+test a_reminder_losing_its_due_loses_its_rule_and_its_alerts_in_one_write ... ok
+test a_read_that_lost_most_of_the_list_trashes_none_of_its_reminders ... ok
+test the_phone_alerts_for_what_it_states_and_the_vault_for_what_the_member_changed ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/follow_retire.rs (target/debug/deps/follow_retire-fa7683e2fcddf11b)
+
+running 7 tests
+test a_statement_is_an_accounts_one_origin_names_no_device_and_is_never_stopped ... ok
+test a_home_the_origin_names_is_the_kind_its_system_fills_and_is_kept ... ok
+test a_pass_of_a_system_the_file_does_not_know_or_of_a_kind_it_does_not_yield_is_refused ... ok
+test a_row_the_member_trashed_or_renamed_while_stopped_stays_as_they_left_it ... ok
+test a_system_that_cannot_retire_is_refused_with_a_sentence_and_nothing_stops ... ok
+test following_a_store_makes_an_origin_with_the_home_its_system_fills ... ok
+test stop_retires_the_origin_and_following_the_same_ref_finds_it_and_its_sources ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/follow_stated.rs (target/debug/deps/follow_stated-bc944a4f96b92d72)
+
+running 7 tests
+test a_take_with_nothing_to_take_is_refused_with_a_sentence_and_writes_nothing ... ok
+test a_member_who_sets_the_title_keeps_it_and_a_pass_that_says_what_it_said_writes_nothing ... ok
+test a_record_one_store_stops_stating_is_not_gone_while_another_still_does ... ok
+test a_record_becomes_a_row_and_a_changed_one_merges_field_by_field_against_its_source ... ok
+test every_revision_a_pass_writes_is_the_stores_and_nothing_is_read_off_a_command_name ... ok
+test moving_sources_is_refused_across_kinds_and_into_the_owner ... ok
+test one_row_with_two_sources_merges_each_pass_against_that_sources_own_statement ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+
+     Running tests/follow_totals.rs (target/debug/deps/follow_totals-7868cd1d6e7e30d9)
+
+running 4 tests
+test a_health_store_writes_a_days_totals_and_a_correction_overwrites_the_figure ... ok
+test a_figure_the_member_overrode_survives_the_next_read_and_clear_gives_the_store_back ... ok
+test only_a_followed_health_store_writes_totals_and_the_table_refuses_the_rest ... ok
+test a_hand_figure_typed_before_the_store_states_the_day_becomes_an_override ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/format_identity.rs (target/debug/deps/format_identity-b953ca6eb0c6d319)
+
+running 7 tests
+test a_file_that_is_not_a_vault_at_all_is_still_not_a_vault ... ok
+test a_file_of_the_earlier_model_is_refused_with_a_sentence ... ok
+test a_migration_leaves_no_plaintext_copy_of_the_vault ... ok
+test a_file_whose_schema_is_not_this_versions_is_refused_with_a_sentence ... ok
+test a_vault_opened_through_a_migration_has_foreign_keys_and_its_clock ... ok
+test open_of_a_damaged_vault_is_a_typed_error ... ok
+test a_vault_the_release_wrote_opens_on_this_code_and_keeps_what_it_held ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/founding_kill.rs (target/debug/deps/founding_kill-dab12f2a16cf8f6b)
+
+running 3 tests
+test child_founds_and_stops ... ok
+test an_open_during_a_founding_leaves_its_side_file_alone ... ok
+test a_process_killed_mid_founding_leaves_a_vault_that_founds_again ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/graph.rs (target/debug/deps/graph-97b797ca72afd90e)
+
+running 5 tests
+test purging_a_relation_label_takes_the_edges_that_wore_it ... ok
+test the_models_relations_are_the_shape_tables_and_the_commands_accept_the_same ... ok
+test merging_one_item_into_another_moves_its_edges_keeping_places_and_anchors_with_no_duplicate ... ok
+test purging_an_item_takes_its_edges_with_it_by_the_tables_own_cascade ... ok
+test an_edge_is_added_exactly_where_a_shape_joins_the_two_kinds ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.81s
+
+     Running tests/health.rs (target/debug/deps/health-63c83f1d799938d3)
+
+running 22 tests
+test a_health_pass_makes_workouts_and_readings_and_a_totals_batch_names_the_same_store ... ok
+test a_health_store_writes_totals_once_and_a_hand_figure_over_it_is_an_override ... ok
+test a_day_has_one_total_set_by_hand_corrected_or_taken_back ... ok
+test a_member_edit_of_a_followed_workout_and_reading_is_kept_and_the_phone_says_its_figure ... ok
+test a_pass_moves_the_cursor_with_its_records_and_another_install_takes_the_origin_over ... ok
+test a_reading_has_no_title_cannot_be_linked_or_tagged_or_found ... ok
+test a_watch_sync_adopts_the_workout_the_member_logged_and_keeps_their_figure ... ok
+test a_member_logs_a_workout_with_its_kind_place_notes_and_people_and_changes_it ... ok
+test a_workout_a_delta_names_deleted_keeps_its_row_and_forgets_its_source ... ok
+test a_reading_is_added_edited_trashed_restored_and_deleted_forever ... ok
+test a_workout_keeps_its_earlier_versions_and_gives_one_back ... ok
+test a_workout_gone_from_the_phone_stays_and_is_found_again_by_kind_and_minute ... ok
+test another_install_following_a_stopped_store_takes_the_origin_over_and_a_stray_cursor_does_not_revive_it ... ok
+test health_days_and_the_cursor_past_them_are_one_commit_and_a_refused_batch_moves_neither ... ok
+test health_followed_again_after_a_stop_starts_with_no_cursor_and_finds_its_rows ... ok
+test health_exports_totals_readings_and_workouts_as_csv_and_leaves_the_trash_out ... ok
+test no_table_or_command_stores_a_raw_sensor_stream ... ok
+test the_health_store_followed_again_after_stop_adds_nothing_twice ... ok
+test taking_what_the_phone_says_of_a_workout_figure_follows_it_again ... ok
+test the_reads_are_bounded_index_walks_formatted_in_the_members_units ... ok
+test what_happened_on_a_day_spans_workouts_and_touches_by_an_index_walk ... ok
+test whole_measures_take_integer_valued_floats_on_log_and_edit ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.30s
+
+     Running tests/history.rs (target/debug/deps/history-d077ba6bb7f31a75)
+
+running 33 tests
+test a_documents_bytes_and_media_type_are_a_slot ... ok
+test a_body_edit_after_a_title_save_starts_a_version_that_keeps_the_words_the_first_elided ... ok
+test a_different_actor_command_or_an_act_between_ends_the_session ... ok
+test a_containers_cover_is_a_view_and_no_version_keeps_it ... ok
+test a_hosts_snapshot_holds_its_title_home_kind_row_and_owned_children_only ... ok
+test a_move_writes_a_revision_whose_state_holds_the_old_home ... ok
+test a_note_asset_is_a_slot_per_row_and_a_removed_asset_comes_back ... ok
+test a_locker_sealed_file_is_a_slot_per_field_and_stays_sealed ... ok
+test a_persons_avatar_is_a_slot ... ok
+test a_page_of_versions_is_keyset_paged_and_a_trashed_item_offers_none ... ok
+test a_photos_motion_clip_is_a_slot ... ok
+test a_purge_takes_the_history_with_it ... ok
+test a_restore_never_puts_a_holder_inside_what_it_holds ... ok
+test a_restore_leaves_the_home_where_it_is_when_the_old_home_can_no_longer_hold_it ... ok
+test a_restore_never_folds_even_marked_quiet ... ok
+test a_restore_refuses_a_version_that_is_not_there_and_a_trashed_record ... ok
+test a_version_written_in_a_newer_grammar_is_refused_not_misread ... ok
+test a_restore_writes_the_state_back_through_the_same_tables_and_is_itself_undone_by_restoring ... ok
+test an_empty_slot_is_kept_as_null_and_a_restore_clears_it ... ok
+test every_blob_column_is_a_slot_or_omitted ... ok
+test every_revision_names_who_made_it_and_the_door_says_so ... ok
+test every_table_every_kind_and_every_blob_column_is_classified ... ok
+test no_hash_is_stored_inside_a_state_or_a_cause ... ok
+test an_unchanged_commit_writes_zero_versions_and_creating_many_writes_none ... ok
+test quiet_saves_within_the_session_are_one_version_holding_the_state_before_it ... ok
+test restore_many_refuses_the_whole_batch_before_writing_any_record ... ok
+test setting_a_budget_writes_no_copy_of_the_categorys_other_budgets_or_rules ... ok
+test restore_many_checks_every_expected_revision_inside_its_single_preflight ... ok
+test starring_pinning_archiving_and_a_locker_use_write_no_revision_and_leave_updated_at_alone ... ok
+test restore_many_takes_back_one_bulk_move_atomically ... ok
+test the_idle_gap_is_ten_minutes_to_the_millisecond_and_a_sitting_ends_after_an_hour ... ok
+test the_words_of_a_refused_stale_save_are_kept_beside_the_record_as_it_is ... ok
+test undoing_the_last_change_and_a_named_one_that_nothing_has_changed_again ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.34s
+
+     Running tests/homed_captures.rs (target/debug/deps/homed_captures-47597023ebf8f04d)
+
+running 4 tests
+test the_same_bytes_in_the_library_and_in_an_item_are_two_photographs ... ok
+test a_capture_is_never_filed_in_a_locker_item_a_reading_or_a_folder_and_an_item_at_once ... ok
+test a_capture_is_homed_in_its_item_and_goes_to_the_trash_and_comes_back_with_it ... ok
+test a_capture_on_a_person_survives_merging_them_and_an_attached_library_photo_is_not_taken ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/index_file.rs (target/debug/deps/index_file-2309feaa9ac82079)
+
+running 6 tests
+test a_database_that_is_not_ours_at_the_index_path_is_refused_and_left_unchanged ... ok
+test a_current_file_is_trusted_and_a_reopen_owes_nothing ... ok
+test a_missing_index_file_is_rebuilt_not_trusted ... ok
+test an_index_file_of_another_vault_is_rebuilt_not_trusted ... ok
+test the_index_file_and_its_sidecars_are_named_so_the_backup_plane_can_leave_them_out ... ok
+test an_index_file_written_under_another_tokenizer_is_rebuilt_not_trusted ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running tests/index_geo.rs (target/debug/deps/index_geo-6e330fb5a4dbb10b)
+
+running 1 test
+test a_viewport_is_the_photos_and_places_in_the_box_and_a_point_follows_its_row ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+     Running tests/index_owed.rs (target/debug/deps/index_owed-f6244d3f6bb4ecb7)
+
+running 9 tests
+test a_commit_is_searchable_when_it_returns_and_owes_nothing ... ok
+test a_kill_between_the_vault_commit_and_the_index_write_loses_nothing ... ok
+test a_kill_after_the_index_write_and_before_the_queue_is_cleared_writes_it_again_to_the_same_rows ... ok
+test a_word_an_edit_removed_has_no_posting_so_it_is_never_offered_and_a_rebuild_drops_it ... ok
+test a_trash_takes_the_past_rows_and_a_restore_brings_them_back ... ok
+test child_commits_and_stops ... ok
+test a_purge_removes_every_row_of_the_entity_and_its_number_is_never_given_again ... ok
+test after_any_run_of_creates_edits_renames_trashes_restores_and_purges_the_index_is_a_rebuilds ... ok
+test a_label_of_many_members_leaves_the_rest_owed_and_draining_it_equals_a_rebuild ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.18s
+
+     Running tests/index_past.rs (target/debug/deps/index_past-e22a301b8d3230f7)
+
+running 3 tests
+test every_earlier_text_column_is_a_plain_text_column_of_the_schema ... ok
+test a_locker_items_plain_fields_and_a_passkeys_site_are_found_and_nothing_sealed_is ... ok
+test what_a_locker_item_said_before_is_found_in_the_past_and_a_trashed_item_has_none ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+     Running tests/index_walks.rs (target/debug/deps/index_walks-97788fdda2bf4b19)
+
+running 5 tests
+test a_search_is_a_match_joined_to_entity_by_its_key ... ok
+test a_viewport_is_one_rtree_query_joined_to_entity_by_its_key ... ok
+test the_content_listing_walks_the_hash_index_and_never_sorts ... ok
+test the_owed_queue_is_read_in_key_order_without_a_sort ... ok
+test an_idle_batch_changes_a_bounded_number_of_rows_however_much_is_owed ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+     Running tests/ladder_ddl.rs (target/debug/deps/ladder_ddl-d99127e809ab3b32)
+
+running 3 tests
+test the_ddl_fixture_is_not_vacuous ... ok
+test nothing_the_model_deleted_is_founded ... ok
+test the_ddl_fixture_still_describes_what_a_new_vault_founds ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/lane_follow_people.rs (target/debug/deps/lane_follow_people-cbc7afab11e01432)
+
+running 13 tests
+test a_contact_named_like_the_owner_is_added_beside_the_owner_and_an_owner_with_a_source_is_not_trashed ... ok
+test a_read_that_lost_most_of_what_is_followed_trashes_nothing_and_four_of_six_is_ordinary ... ok
+test a_person_reports_title_scalars_and_points_while_they_differ_and_nothing_once_equal ... ok
+test a_point_the_member_relabelled_survives_the_source_and_keeps_its_parts_and_follows_again_when_set_back ... ok
+test a_record_that_returns_restores_the_person_its_absence_trashed_and_the_members_trash_stands ... ok
+test a_take_that_has_nothing_to_take_is_refused_with_a_sentence_and_writes_nothing ... ok
+test an_untouched_point_takes_the_sources_new_label_and_its_removal ... ok
+test an_imported_date_is_silent_until_the_member_asks_and_the_follower_writes_no_reminder ... ok
+test points_the_member_added_or_removed_stay_as_they_left_them ... ok
+test another_phone_re_finds_a_purged_persons_tombstone_and_a_gone_tombstone_is_forgotten ... ok
+test nothing_is_reported_without_a_live_link_a_stated_field_or_for_a_tombstone ... ok
+test taking_a_scalar_makes_it_follow_again_and_the_next_pass_propagates ... ok
+test taking_points_restores_replaces_or_removes_each_item ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s
+
+     Running tests/links.rs (target/debug/deps/links-7b2a49390eddddff)
+
+running 9 tests
+test a_thing_is_not_linked_to_itself_and_a_missing_or_trashed_end_is_refused ... ok
+test a_link_shows_on_both_pages_and_either_page_takes_it_off ... ok
+test a_locker_item_is_an_ordinary_end_listed_on_the_other_page_and_offered_by_the_picker ... ok
+test a_title_written_in_a_notes_text_reads_in_text_from_both_ends_and_a_picked_link_does_not ... ok
+test a_trashed_item_is_not_listed ... ok
+test a_purged_item_takes_its_links_with_it_and_its_mentions_wait_for_a_title_again ... ok
+test merging_one_item_into_another_moves_every_link_with_no_duplicate_either_way ... ok
+test the_picker_lists_one_kind_by_typed_term_bounded_and_offers_nothing_that_is_no_end ... ok
+test every_linkable_kind_links_to_every_other_in_either_order_and_the_rest_are_refused ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.90s
+
+     Running tests/locker_clock.rs (target/debug/deps/locker_clock-3c04cacd651a8b5a)
+
+running 2 tests
+test every_locker_table_stamps_the_injected_clock ... ok
+test the_file_refuses_what_the_commands_say_in_a_sentence ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/locker_commands.rs (target/debug/deps/locker_commands-c270706b653eb358)
+
+running 11 tests
+test a_custom_field_cannot_take_the_id_another_items_built_in_field_would_have ... ok
+test a_passkeys_private_key_is_held_to_the_budget_of_every_other_sealed_value ... ok
+test a_duplicate_takes_plain_fields_and_tags_and_the_cores_re_sealed_secrets_but_not_the_alias ... ok
+test a_cards_expiry_is_the_last_day_of_its_month_takes_a_reminder_and_notifies_without_a_value ... ok
+test a_secret_must_arrive_sealed_under_the_live_generation_and_a_refusal_never_quotes_it ... ok
+test a_secrets_age_moves_only_when_its_value_changes_and_a_seed_is_revealable ... ok
+test an_item_holds_several_passkeys_found_by_their_site_and_a_rename_keeps_the_key ... ok
+test autofill_finds_the_items_for_a_site_by_the_url_index_and_a_use_is_not_an_edit ... ok
+test an_items_type_can_change_and_a_field_the_new_type_lacks_stays_as_an_extra_field ... ok
+test several_urls_an_alias_held_by_one_item_and_one_of_each_single_key ... ok
+test every_type_is_created_edited_trashed_and_restored_with_its_built_in_keys ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.17s
+
+     Running tests/locker_files.rs (target/debug/deps/locker_files-662d2f2441974925)
+
+running 5 tests
+test the_committed_vectors_still_hold ... ok
+test write_the_vectors ... ignored, writes tests/vectors/lkf1.json; run once with LKF1_WRITE_VECTORS=1
+test nothing_is_ever_made_from_a_sealed_file_and_it_is_always_kept_and_sent ... ok
+test a_file_field_holds_ciphertext_by_hash_and_a_replaced_or_removed_file_stays_readable ... ok
+test a_large_file_is_sealed_into_the_store_and_opened_as_a_stream ... ok
+
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.13s
+
+     Running tests/locker_plaintext_gate.rs (target/debug/deps/locker_plaintext_gate-21b6291a8b3b78fe)
+
+running 2 tests
+test the_command_plane_cannot_be_talked_into_storing_a_plaintext_secret ... ok
+test nothing_the_vault_serves_indexes_notifies_or_backs_up_carries_locker_plaintext ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.18s
+
+     Running tests/locker_search.rs (target/debug/deps/locker_search-fc8881df309b97e2)
+
+running 2 tests
+test what_an_item_said_before_is_found_as_plain_text_and_a_changed_secret_leaves_no_token ... ok
+test every_plain_field_of_every_type_is_found_and_no_secret_is ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+
+     Running tests/locker_wall.rs (target/debug/deps/locker_wall-1b8c56e52faddf94)
+
+running 3 tests
+test links_and_edges_have_no_locker_branch ... ok
+test an_items_contents_leave_only_through_lockers_own_export_which_needs_a_passcode ... ok
+test an_item_is_linked_mentioned_tagged_attached_and_listed_on_a_persons_page_like_any_item ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/lookups.rs (target/debug/deps/lookups-236b7cb918c91164)
+
+running 11 tests
+test a_founded_vault_has_its_index_file_attached_and_its_tables_are_not_the_vaults ... ok
+test a_database_that_is_not_ours_at_the_index_path_is_refused_and_left_alone ... ok
+test a_label_colour_is_a_palette_key ... ok
+test a_missing_index_file_is_founded_again_and_owes_every_entity ... ok
+test every_container_kind_code_is_an_entity_kind_and_the_plain_domains_hold_no_underscore ... ok
+test a_photo_form_is_the_photo_form_lookup ... ok
+test kind_is_the_entity_kind_lookup_and_its_attributes ... ok
+test rel_is_the_set_of_relations_edge_shape_holds ... ok
+test nothing_writes_a_lookup_table_after_founding ... ok
+test the_lookup_list_is_the_tables_founding_seeds_beyond_the_three_that_hold_members ... ok
+test a_vocabulary_column_refuses_an_unknown_code_and_a_code_of_another_domain ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running tests/merges.rs (target/debug/deps/merges-2c2c29b1274c9f3f)
+
+running 5 tests
+test a_merge_inside_itself_or_across_kinds_is_refused ... ok
+test a_kind_of_workout_and_a_kind_of_touch_merged_move_what_was_of_their_kind ... ok
+test a_category_merged_into_another_files_its_parts_budget_and_rules_under_the_other ... ok
+test a_place_merged_into_another_takes_every_column_that_named_it ... ok
+test a_tag_merged_into_another_puts_its_items_under_the_other_and_its_children_inside_it ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s
+
+     Running tests/money.rs (target/debug/deps/money-100a8d8b805dc86a)
+
+running 29 tests
+test a_category_is_added_under_a_group ... ok
+test a_budget_is_a_month_a_carry_and_an_amount_in_the_vaults_currency_and_writes_no_copy_of_others ... ok
+test a_hand_line_is_entered_edited_and_trashed_on_any_account_and_there_is_no_void ... ok
+test a_dismissed_pair_is_not_proposed_again_and_the_other_pairs_still_are ... ok
+test a_layout_is_remembered_on_the_statement_origin_and_forgotten_with_null ... ok
+test a_line_a_csv_brought_in_once_is_an_arrival_and_a_hand_line ... ok
+test a_hand_line_keeps_earlier_versions_and_a_confirmed_one_cannot_go_back_to_the_amount_before ... ok
+test a_pending_line_the_bank_posts_later_and_a_foreign_purchase_are_the_banks_word ... ok
+test a_line_in_a_transfer_or_a_split_that_would_change_amount_is_not_confirmed_silently ... ok
+test a_line_is_found_by_its_name_memo_category_and_account_and_by_its_earlier_words ... ok
+test a_line_has_one_part_several_or_none_and_the_parts_add_up_to_the_amount ... ok
+test a_purged_category_refiles_its_parts_under_its_group_and_the_line_keeps_summing ... ok
+test a_purged_category_with_no_group_leaves_a_split_line_uncategorised_and_a_purge_is_never_refused ... ok
+test a_statement_is_followed_line_by_line_and_a_reimport_writes_nothing ... ok
+test a_rule_names_a_line_when_it_is_added_and_the_banks_words_stay_in_the_statement ... ok
+test a_statement_line_edit_survives_a_re_import_and_the_banks_figure_is_read_beside_it ... ok
+test a_rule_files_history_by_the_banks_words_the_most_specific_decides_and_a_split_line_is_left_alone ... ok
+test a_statement_that_seems_to_be_a_hand_line_only_proposes_the_match_and_confirm_makes_it_one_line ... ok
+test an_account_has_a_type_from_the_lookup_and_an_origin_only_when_a_statement_needs_one ... ok
+test an_opening_balance_needs_its_day_and_the_currency_may_change_before_the_first_line ... ok
+test every_path_that_writes_a_line_or_its_parts_is_held_to_the_sum_by_the_commit_guard ... ok
+test changing_an_accounts_currency_rescales_every_figure_kept_in_it_and_refuses_a_lost_fraction ... ok
+test a_transfer_pairs_two_lines_of_two_accounts_in_one_currency_or_two_and_goes_with_either_line ... ok
+test only_a_hand_line_against_a_statement_line_of_one_account_is_dismissed ... ok
+test spending_by_category_and_month_reads_the_one_table_and_leaves_out_what_is_not_spent ... ok
+test purging_either_line_removes_the_dismissal_and_confirming_the_hand_line_clears_its_others ... ok
+test what_a_month_balance_and_proposal_read_each_walk_an_index_and_sort_nothing ... ok
+test the_balance_on_a_day_is_derived_at_read_time_and_a_checkpoint_is_a_stated_row ... ok
+test trashing_an_account_takes_its_lines_and_restoring_brings_them_back_and_a_purge_takes_all ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.42s
+
+     Running tests/note_portable.rs (target/debug/deps/note_portable-4486695a6d515ec1)
+
+running 3 tests
+test a_preview_writes_nothing_and_the_import_makes_notes_mentions_tags_and_notebooks ... ok
+test an_export_of_one_notebook_holds_its_notes_and_a_file_too_big_for_a_note_is_left_out ... ok
+test an_archive_imported_into_another_vault_gives_the_notes_back_with_their_links_assets_and_days ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+     Running tests/notes.rs (target/debug/deps/notes-0b3606385b4b9417)
+
+running 19 tests
+test a_notebooks_notes_by_last_edited_is_one_seek_on_entity_with_no_join ... ok
+test a_journal_day_is_set_changed_and_cleared_and_being_about_the_owner_is_not_one ... ok
+test a_note_is_refused_in_what_is_not_a_notebook_and_a_bad_edit_is_refused_in_a_sentence ... ok
+test a_note_is_made_at_the_top_or_in_a_notebook_edited_and_moved_through_entity_move ... ok
+test a_notes_title_and_body_are_searchable_now_and_in_earlier_versions ... ok
+test an_about_is_an_edge_with_or_without_an_anchor_and_an_anchor_survives_a_save ... ok
+test a_stale_save_is_refused_a_fresh_one_answers_the_next_revision_and_a_trashed_note_is_stale_trashed ... ok
+test a_reading_a_chat_a_container_or_a_label_is_never_a_target ... ok
+test a_rename_of_the_target_does_not_rewrite_the_note_and_a_purge_makes_its_mentions_wait_again ... ok
+test an_asset_goes_with_its_note_and_its_bytes_are_released_when_the_note_is_purged ... ok
+test an_autosave_folds_into_one_version_and_an_edit_that_changes_nothing_writes_nothing ... ok
+test an_asset_is_added_reordered_and_removed_and_is_in_no_list_or_search ... ok
+test mentioned_in_for_any_item_reads_the_mention_rows ... ok
+test an_earlier_version_gets_its_asset_back_on_restore ... ok
+test restoring_a_version_with_an_earlier_title_resolves_the_mentions_waiting_for_it ... ok
+test the_resolving_reads_are_index_seeks ... ok
+test mentions_are_rebuilt_on_every_save_and_keep_every_occurrence_and_every_waiting_title ... ok
+test two_items_sharing_a_title_keep_both ... ok
+test creating_or_renaming_any_linkable_item_resolves_the_mentions_waiting_for_its_title ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.36s
+
+     Running tests/one_hash.rs (target/debug/deps/one_hash-5b77614d1e4c835b)
+
+running 2 tests
+test every_allowlisted_file_still_needs_its_exemption ... ok
+test sha256_appears_only_where_an_allowlist_says_why ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.45s
+
+     Running tests/ontology_page.rs (target/debug/deps/ontology_page-6763bafe530d4b0b)
+
+running 5 tests
+test the_entity_map_names_every_kind_once_under_its_host ... ok
+test the_relations_and_the_counts_are_the_codes ... ok
+test the_astro_rail_points_at_sections_that_exist ... ok
+test the_schema_section_is_what_a_founded_vault_renders ... ok
+test every_table_of_a_founded_vault_has_a_sentence_and_one_group ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/ontology_widen.rs (target/debug/deps/ontology_widen-b354b1c2be804a3d)
+
+running 4 tests
+test no_sealed_value_goes_into_an_edge_anchor ... ok
+test a_document_a_line_a_photograph_and_a_login_may_be_joined_to_a_person_and_nothing_else_may ... ok
+test a_person_is_not_found_by_a_memo_about_a_line_or_a_login_that_is_with_them ... ok
+test a_persons_trash_takes_touches_and_never_a_note_a_document_a_line_a_photo_or_a_login ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running tests/origin_cursor.rs (target/debug/deps/origin_cursor-488e5840b6ea2cdf)
+
+running 4 tests
+test stop_clears_the_cursor_and_a_stray_batch_after_it_neither_writes_one_nor_revives_the_origin ... ok
+test a_cursor_with_no_record_moves_alone_and_is_idempotent ... ok
+test a_pass_and_the_cursor_past_it_are_one_commit_and_the_origin_names_the_install ... ok
+test another_install_takes_the_origin_over_and_a_pass_that_names_no_cursor_forgets_the_old_one ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running tests/page_defensive.rs (target/debug/deps/page_defensive-671eff5fbc40df0f)
+
+running 1 test
+test the_page_table_cannot_be_written_through_the_vaults_own_connection ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/page_source.rs (target/debug/deps/page_source-929728a4370ed85a)
+
+running 9 tests
+test a_gateway_call_under_a_live_pin_is_caught - should panic ... ok
+test a_vault_that_is_not_in_wal_mode_is_refused_with_a_typed_error ... ok
+test a_damaged_page_is_found_on_the_pin ... ok
+test a_read_that_fails_part_way_releases_the_pin ... ok
+test the_pin_never_spans_a_gateway_call ... ok
+test this_build_compiles_the_page_table_in ... ok
+test page_read_equals_online_backup ... ok
+test a_vault_that_grows_after_the_pin_still_yields_the_pinned_pages ... ok
+test no_plaintext_vault_copy_on_disk ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.62s
+
+     Running tests/people.rs (target/debug/deps/people-1dffce830fd3cee1)
+
+running 14 tests
+test a_person_is_in_one_list_at_a_time ... ok
+test a_person_is_added_edited_and_found_by_what_is_known_of_them ... ok
+test a_person_is_trashed_and_restored_and_the_owner_never_is ... ok
+test a_person_has_one_birthday_and_any_number_of_other_dates_with_or_without_a_year ... ok
+test a_reminder_on_two_dates_with_the_same_lead_is_two_reminders_and_a_date_goes_with_them ... ok
+test a_relationship_is_a_labelled_edge_to_a_person_the_vault_may_already_know ... ok
+test a_touch_is_logged_with_several_people_edited_and_trashed_and_spawns_no_note ... ok
+test earlier_versions_of_a_person_name_what_changed_and_are_searchable ... ok
+test calendar_reads_whose_dates_fall_on_a_day_or_in_a_month_whatever_the_year ... ok
+test in_your_vault_lists_what_a_person_is_linked_to_a_locker_item_like_any_other ... ok
+test an_avatar_is_set_replaced_and_taken_off_and_the_picture_it_replaced_is_in_the_earlier_version ... ok
+test contact_points_are_one_per_spelling_and_one_preferred_per_kind_and_found_by_the_key ... ok
+test last_contacted_is_computed_at_read_and_a_cadence_says_who_is_due ... ok
+test the_contact_point_lookup_plan_names_its_index ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+
+     Running tests/people_merge.rs (target/debug/deps/people_merge-e0acd7f79dbfc7fa)
+
+running 16 tests
+test a_merge_is_confirmed_like_every_destructive_command ... ok
+test a_person_a_phone_follows_is_not_merged_into_the_owner_who_is_nobodys_record ... ok
+test a_merged_person_keeps_both_sources_and_both_keep_syncing ... ok
+test a_merge_is_refused_for_the_owner_a_stranger_a_trashed_person_and_two_who_are_one ... ok
+test a_reminder_on_a_date_goes_with_it_and_the_same_lead_on_equal_dates_is_one ... ok
+test an_avatar_the_survivor_lacks_is_the_one_who_went ... ok
+test a_followed_person_merged_into_a_typed_one_keeps_syncing_and_a_typed_one_into_a_followed_one_too ... ok
+test blanks_are_filled_from_the_one_who_goes_and_the_survivors_words_stand ... ok
+test contact_points_are_kept_once_by_normalized_value_and_the_survivors_preference_stands ... ok
+test every_table_that_points_at_a_person_is_one_the_merge_moves ... ok
+test an_invitation_names_the_survivor_and_an_event_with_both_keeps_the_survivors_row ... ok
+test every_touch_is_the_survivors_and_a_touch_with_both_is_with_them_once ... ok
+test the_person_who_goes_is_purged_with_their_history_and_the_survivor_is_stamped ... ok
+test every_link_edge_and_mention_goes_to_the_survivor_with_no_duplicate_either_way ... ok
+test readings_and_daily_figures_are_the_survivors_and_a_day_both_have_is_the_survivors ... ok
+test two_birthdays_keep_the_survivors_and_the_other_becomes_another_date_and_equal_ones_are_one ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.65s
+
+     Running tests/person_portable.rs (target/debug/deps/person_portable-f747c0106b76ca95)
+
+running 6 tests
+test a_repeated_name_within_a_file_adds_its_points_to_the_first_card ... ok
+test an_export_is_a_vcf_that_reads_back_and_a_list_is_its_own_file ... ok
+test a_vcard_round_trips_org_title_given_family_and_every_date_and_arrives_as_an_import ... ok
+test a_spreadsheet_round_trips_the_same_people_and_a_matching_row_only_adds ... ok
+test matches_are_proposals_nothing_is_written_until_confirmed_and_a_second_import_adds_nothing ... ok
+test one_person_is_their_own_card_named_for_them ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/photo_portable.rs (target/debug/deps/photo_portable-186cab5f7a7e0bc1)
+
+running 5 tests
+test an_album_that_is_not_there_is_refused_in_words ... ok
+test it_writes_nothing_to_the_vault_and_replaces_the_last_staged_file ... ok
+test the_archive_holds_every_original_byte_for_byte_named_by_when_it_was_taken ... ok
+test an_album_scope_holds_that_album_and_is_named_after_it ... ok
+test the_trash_the_missing_the_undated_and_the_duplicates ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/pragmas.rs (target/debug/deps/pragmas-11f561ef09889346)
+
+running 2 tests
+test apple_targets_set_fullfsync ... ok
+test a_founded_vault_reads_the_pragmas_the_list_names ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/properties.rs (target/debug/deps/properties-77dcd862042547c7)
+
+running 2 tests
+test the_canonical_form_does_not_depend_on_insertion_order ... ok
+test a_row_image_round_trips_through_the_logs_json ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/purge_rules.rs (target/debug/deps/purge_rules-068b86eb95088f8c)
+
+running 2 tests
+test the_purge_rules_are_the_foreign_keys_that_delete_nothing_into_an_entity_or_a_kind ... ok
+test the_database_refuses_to_delete_what_a_row_still_points_at ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/restore_drill.rs (target/debug/deps/restore_drill-65c93d354b15d764)
+
+running 9 tests
+test a_backup_of_an_earlier_baseline_is_refused_with_a_sentence_before_anything_is_written ... ok
+test a_range_that_rotted_on_the_gateway_is_refused_and_no_vault_is_claimed ... ok
+test a_gateway_that_lost_an_object_is_made_up_by_another ... ok
+test check_my_backup_restores_into_scratch_and_removes_it ... ok
+test the_head_to_restore_is_the_greatest_epoch_generation_and_writes ... ok
+test back_up_lose_everything_restore_in_the_order_of_r3_and_prove_it ... ok
+test the_structural_check_still_judges_a_vault_file ... ok
+test a_restore_founds_the_index_file_again_and_search_equals_the_backed_up_vault ... ok
+test records_leaves_no_index_file_and_the_first_open_owes_every_entity ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.44s
+
+     Running tests/revision_kept.rs (target/debug/deps/revision_kept-60ddb6ebd62aa816)
+
+running 1 test
+test a_revision_is_never_rewritten_and_goes_with_its_entity_alone ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/rrule_expansion.rs (target/debug/deps/rrule_expansion-f5a0f2c14b167b36)
+
+running 28 tests
+test a_floating_series_has_no_gap_and_no_fold ... ok
+test a_month_position_in_the_gap_moves_forward_too ... ok
+test a_09_00_weekly_event_stays_09_00_local_across_new_yorks_spring_forward ... ok
+test a_refused_rule_expands_to_nothing_whatever_the_shape ... ok
+test a_sydney_morning_event_keeps_09_00_through_the_april_fold ... ok
+test a_bare_date_task_rolls_to_the_next_date_of_the_new_shapes ... ok
+test a_tasks_next_occurrence_follows_the_new_shapes ... ok
+test a_repeating_task_collapses_the_periods_of_the_new_shapes ... ok
+test a_week_number_alone_takes_the_anchors_weekday ... ok
+test a_yearly_event_on_a_gap_day_moves_forward_that_year_and_counts ... ok
+test an_exception_keys_off_the_wall_clock_of_a_bysetpos_series ... ok
+test an_implied_day_and_a_named_day_both_skip_and_count_counts_real_occurrences ... ok
+test an_until_instant_decides_the_last_day_across_the_fall_back ... ok
+test count_counts_occurrences_from_the_first_match_and_never_the_months ... ok
+test a_tasks_next_occurrence_and_collapse_follow_the_skip_and_the_forward_gap ... ok
+test every_rfc_5545_example_expands_to_the_rfcs_list ... ok
+test londons_gap_and_fold_fall_on_the_last_sundays_of_march_and_october ... ok
+test new_yorks_gap_moves_forward_and_counts_and_its_fold_occurs_once_at_the_earlier_instant ... ok
+test sydneys_fold_is_in_april_and_its_gap_in_october ... ok
+test the_default_week_starts_on_monday ... ok
+test every_part_and_combination_expands_to_its_frozen_list ... ok
+test the_last_year_of_the_calendar_ends_the_walk ... ok
+test the_rfc_examples_with_an_until_end_where_the_rfc_says ... ok
+test until_binds_a_floating_series_on_its_wall_clock_and_an_all_day_one_on_its_date ... ok
+test until_is_inclusive_in_every_spelling_and_zone ... ok
+test a_window_far_past_the_anchor_equals_a_walk_from_the_anchor ... ok
+test the_instance_caps_hold ... ok
+test a_rule_that_never_lands_expands_to_nothing_and_stops ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.99s
+
+     Running tests/rrule_parse.rs (target/debug/deps/rrule_parse-86ad34c592e4ad61)
+
+running 18 tests
+test a_rule_has_a_structural_shape_and_no_words ... ok
+test a_rule_has_one_canonical_spelling_and_it_round_trips ... ok
+test an_unknown_a_repeated_or_part_less_segment_is_refused_never_dropped ... ok
+test count_together_with_until_is_refused ... ok
+test a_part_the_frequency_may_not_carry_is_refused ... ok
+test every_frequency_takes_the_parts_the_rfc_gives_it ... ok
+test every_part_parses_to_the_fields_the_rfc_names ... ok
+test a_value_that_is_not_what_its_part_takes_is_refused_naming_the_part ... ok
+test sub_daily_frequencies_are_refused_and_named ... ok
+test every_until_spelling_reads_as_what_it_means ... ok
+test text_that_is_not_a_rule_is_malformed ... ok
+test the_canonical_form_of_every_accepted_shape_parses_back_to_the_same_rule ... ok
+test the_cautionary_case_stays_refused_and_its_replacement_is_a_rule ... ok
+test the_refusal_sentence_quotes_the_rule ... ok
+test the_lenient_spellings_stay ... ok
+test the_non_gregorian_calendar_parts_of_rfc_7529_are_refused ... ok
+test the_weekday_tokens_and_ordinals_parse ... ok
+test the_time_of_day_parts_are_refused_under_every_frequency ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/rrule_repeat.rs (target/debug/deps/rrule_repeat-55e727c549f33ad2)
+
+running 8 tests
+test a_rule_the_editor_shows_reads_back_as_its_spec ... ok
+test a_rule_outside_the_editor_reads_as_none ... ok
+test a_spec_that_is_no_rule_writes_nothing ... ok
+test fields_that_do_not_apply_to_the_frequency_are_not_written ... ok
+test weekdays_are_monday_first_and_round_trip_their_tokens ... ok
+test a_spec_writes_the_canonical_rule ... ok
+test a_built_rule_expands_as_the_spec_says ... ok
+test every_spec_round_trips_through_its_rule ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/schema_rules.rs (target/debug/deps/schema_rules-97ed6848b2da7fb5)
+
+running 50 tests
+test a_colour_is_a_palette_key_and_only_a_tag_wears_one ... ok
+test a_concept_sits_in_a_concept_of_its_own_kind_and_never_in_itself ... ok
+test a_card_is_an_item_and_a_closed_code_and_a_purged_item_leaves_a_tombstone ... ok
+test a_chat_needs_a_title_and_a_message_is_a_state_machine_with_lookup_reasons ... ok
+test a_cursor_is_one_installs_and_a_retired_origin_holds_none ... ok
+test a_day_has_one_total_of_a_daily_metric_and_never_a_negative_one ... ok
+test a_contact_point_is_one_per_spelling_and_one_is_preferred_per_kind ... ok
+test a_document_a_folder_an_album_and_a_place_need_a_name_and_a_photograph_does_not ... ok
+test a_derivative_is_a_file_or_text_as_its_variant_says ... ok
+test a_document_sits_in_a_folder_and_a_folder_in_a_folder_and_nothing_else_is_a_home_for_one ... ok
+test a_floating_time_has_no_seconds_and_a_zoned_one_is_an_instant ... ok
+test a_kind_that_needs_a_home_has_one_and_a_reading_has_no_name ... ok
+test a_home_is_of_a_kind_the_shape_allows_and_never_a_loop ... ok
+test a_link_has_its_lower_id_first_and_joins_only_linkable_kinds ... ok
+test a_guest_is_one_address_of_an_event_with_one_organizer_and_outlives_its_person ... ok
+test a_locker_field_holds_the_columns_its_kind_says ... ok
+test a_link_pair_is_one_row_and_its_ends_never_change ... ok
+test a_mention_is_one_row_of_its_note_by_ordinal_and_goes_with_it ... ok
+test a_mention_names_a_linkable_item_or_none_and_waits_again_when_its_target_goes ... ok
+test a_person_needs_a_name_and_a_form_the_lookup_holds ... ok
+test a_person_date_is_a_day_of_a_kind_the_lookup_holds_and_a_single_kind_is_held_once ... ok
+test a_note_has_a_real_day_a_known_format_and_assets_that_name_held_bytes_and_go_with_it ... ok
+test a_reading_may_be_negative_has_a_context_when_it_says_so_and_is_a_person_s ... ok
+test a_one_day_override_is_keyed_in_its_series_form_and_belongs_to_its_timing ... ok
+test a_photograph_is_a_picture_with_a_kept_clip_whole_coordinates_and_a_lineage_without_loops ... ok
+test a_reminder_counts_back_from_a_due_so_a_task_without_one_holds_none ... ok
+test a_repeat_needs_a_due_and_its_series_is_a_minted_id_that_points_at_no_row ... ok
+test a_reminder_goes_only_where_there_is_a_time_to_fire_at ... ok
+test a_revision_is_history_and_a_version_names_only_blobs_the_vault_holds ... ok
+test a_revision_names_its_actor_and_only_a_store_names_an_origin ... ok
+test a_source_is_of_a_kind_its_system_yields_and_names_a_device_only_where_its_system_does ... ok
+test a_snooze_names_a_target_a_reminder_may_name_and_goes_with_its_item ... ok
+test a_split_goes_to_a_category_and_a_reading_is_one_of_its_metric ... ok
+test a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own ... ok
+test a_tag_goes_only_on_a_linkable_kind ... ok
+test a_touch_has_a_touch_kind_and_does_not_end_before_it_starts ... ok
+test a_workout_is_of_a_workout_kind_in_a_span_and_a_place_that_is_one ... ok
+test an_album_holds_photographs_in_an_order_and_a_photograph_may_be_in_two ... ok
+test a_trashed_by_names_a_trash_and_an_arrival_has_both_its_words ... ok
+test an_alert_row_is_a_key_in_a_timing_it_says ... ok
+test an_edge_joins_the_kinds_a_shape_names_and_wears_what_the_shape_allows ... ok
+test an_account_a_line_a_transfer_a_budget_and_a_rule_hold_the_rules_money_states ... ok
+test an_attachment_is_a_photo_a_document_or_an_image_and_a_purged_item_leaves_its_label ... ok
+test an_entity_id_is_a_lowercase_uuidv7_or_a_slug_of_its_own_kind ... ok
+test an_origin_fills_the_kind_its_system_says_and_only_a_phone_store_retires_or_names_a_device ... ok
+test an_event_reads_its_times_in_the_form_its_timing_says_and_needs_a_calendar ... ok
+test every_instant_column_carries_the_clocks_form_and_the_database_refuses_the_rest ... ok
+test nothing_live_is_made_moved_or_restored_inside_a_trash ... ok
+test the_owner_is_nobodys_record_and_a_purged_rows_source_never_takes_a_row_again ... ok
+test the_edge_trigger_joins_exactly_the_pairs_edge_shape_says_over_every_pair_of_kinds ... ok
+
+test result: ok. 50 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.15s
+
+     Running tests/secure_delete.rs (target/debug/deps/secure_delete-34ab803cb050f261)
+
+running 1 test
+test a_purge_leaves_no_deleted_text_in_the_file_or_wal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/shared_verbs.rs (target/debug/deps/shared_verbs-9f5808f99e42500d)
+
+running 26 tests
+test a_holder_takes_its_contents_to_the_trash_naming_itself_and_a_restore_brings_back_only_those ... ok
+test a_caller_chosen_id_is_a_uuid_v7_or_it_is_refused ... ok
+test a_flag_is_an_instant_on_the_row_and_setting_it_is_not_an_edit ... ok
+test a_holders_confirm_names_how_many_go_with_it ... ok
+test a_new_entity_id_is_a_uuid_v7_minted_from_the_injected_clock ... ok
+test a_concept_hierarchy_is_the_home_of_its_own_kind ... ok
+test a_home_of_the_wrong_kind_a_loop_and_a_missing_home_are_refused_in_a_sentence ... ok
+test a_line_split_across_categories_keeps_a_sum_when_one_is_purged ... ok
+test a_new_label_wears_the_palette_colour_fewest_labels_wear_and_a_recolour_sticks ... ok
+test a_one_time_arrival_stamps_both_its_columns_and_makes_no_origin_or_source ... ok
+test a_tag_goes_on_what_edge_shape_says_and_the_command_says_so_when_it_does_not ... ok
+test a_tag_is_minted_by_its_folded_label_and_a_tagging_changes_nothing_on_the_entity ... ok
+test an_account_a_person_and_a_task_hold_what_belongs_to_them ... ok
+test a_purge_removes_everything_homed_in_a_holder_contents_before_the_holder ... ok
+test a_purge_refuses_only_the_owner_the_founded_calendar_and_a_kind_in_use ... ok
+test an_entity_number_is_never_reused_after_a_purge ... ok
+test moving_a_note_a_container_a_task_and_a_concept_is_one_command_and_one_path ... ok
+test emptying_the_trash_takes_one_kind_or_all_and_only_what_is_due_when_asked ... ok
+test nested_holders_each_name_their_own_holder_and_come_back_together ... ok
+test one_item_comes_out_of_a_trashed_holder_at_the_top_and_one_that_needs_a_home_does_not ... ok
+test retitle_changes_the_title_once_and_refuses_what_it_does_not_serve ... ok
+test the_flags_the_arrivals_and_the_colours_are_what_the_founded_file_holds ... ok
+test the_vault_is_renamed_by_its_own_command_and_never_to_nothing ... ok
+test empty_trash_with_nested_holders_always_succeeds ... ok
+test what_cannot_outlive_its_target_goes_with_it_and_what_can_lets_go ... ok
+test every_shared_verb_acts_on_a_hundred_rows_in_one_commit_and_a_bad_one_stops_them_all ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.26s
+
+     Running tests/shared_verbs_blobs.rs (target/debug/deps/shared_verbs_blobs-4abbce43a9c9dfcb)
+
+running 3 tests
+test staging_bytes_is_idempotent_and_the_same_bytes_have_one_size ... ok
+test a_derivative_is_one_row_per_variant_and_checks_its_own_shape ... ok
+test garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_blob_named ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running tests/shared_verbs_edges.rs (target/debug/deps/shared_verbs_edges-f04eee4552c39a2f)
+
+running 4 tests
+test an_edge_joins_what_edge_shape_allows_and_says_so_in_a_sentence_when_it_does_not ... ok
+test a_relation_label_is_a_concept_the_member_names_found_by_its_key_and_never_built ... ok
+test a_notes_about_takes_an_anchor_with_its_version_and_touches_the_note_and_no_other_edge_does ... ok
+test an_ordered_relation_keeps_a_place_and_an_item_is_moved_by_one_update ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/shared_verbs_people_follow.rs (target/debug/deps/shared_verbs_people_follow-108eebffb71ecab7)
+
+running 6 tests
+test a_record_gone_from_a_complete_read_trashes_an_untouched_person_and_forgets_an_edited_one ... ok
+test a_pass_makes_people_and_updates_only_what_the_member_left_alone ... ok
+test a_followed_person_is_edited_field_by_field_points_and_dates_item_by_item ... ok
+test a_purged_persons_source_is_a_tombstone_and_a_person_the_member_trashed_stays_trashed ... ok
+test a_record_with_no_name_is_counted_and_left_out_and_the_owner_is_nobodys_record ... ok
+test a_record_is_matched_to_a_person_the_member_already_has_before_one_is_added ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+
+     Running tests/stale_save.rs (target/debug/deps/stale_save-97d94851c4c4e651)
+
+running 1 test
+test a_retitle_checks_the_revision_it_replaces ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/store_health.rs (target/debug/deps/store_health-fb3fbdde3abed509)
+
+running 2 tests
+test a_sweep_lists_the_directory_once ... ok
+test a_sweep_collects_only_the_replaced_hash ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/stored_rules.rs (target/debug/deps/stored_rules-276b43cd9e47f097)
+
+running 7 tests
+test an_event_with_an_unreadable_rule_keeps_its_anchor_and_edits_and_trashes_cleanly ... ok
+test a_followed_series_with_an_unreadable_rule_survives_a_moved_start ... ok
+test the_unreadable_rules_are_unreadable_everywhere ... ok
+test a_task_with_an_unreadable_rule_can_be_reopened_edited_and_trashed ... ok
+test the_write_boundaries_still_refuse_a_rule_the_member_states ... ok
+test the_follow_merge_does_not_choke_on_a_followed_event_whose_rule_is_unreadable ... ok
+test a_repeating_task_with_an_unreadable_rule_completes_without_spawning_and_without_error ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/tasks.rs (target/debug/deps/tasks-deb94d27107ebc3c)
+
+running 20 tests
+test a_snooze_moves_the_alert_and_not_the_due_and_an_edit_of_the_due_ends_it ... ok
+test a_series_begins_when_the_rule_is_first_set_by_an_edit_and_a_cleared_rule_keeps_it ... ok
+test a_due_is_a_zoned_instant_a_floating_minute_or_a_day_and_its_timing_follows ... ok
+test a_repeating_task_names_its_series_when_the_rule_is_first_set_and_the_successor_carries_it ... ok
+test a_stale_save_of_a_task_is_refused_and_a_fresh_one_answers_the_next_revision ... ok
+test a_successor_is_one_step_on_in_the_form_its_due_has_and_a_series_that_ran_out_stops ... ok
+test a_task_is_made_edited_completed_reopened_and_cancelled ... ok
+test a_task_is_refused_what_a_sentence_says_and_the_database_holds_too ... ok
+test a_task_list_trashes_its_tasks_and_a_task_is_found_by_its_list_and_a_rename_reaches_it ... ok
+test a_task_alerts_only_while_it_is_open_and_live ... ok
+test a_task_is_made_in_a_task_list_or_under_a_task_and_moved_by_entity_move ... ok
+test a_tasks_words_are_searchable_now_and_in_earlier_versions_and_an_edit_makes_a_version ... ok
+test a_timed_due_alerts_at_its_time_by_default_and_a_day_or_no_due_alerts_nothing ... ok
+test each_read_and_count_is_a_bounded_walk_of_the_index_it_names ... ok
+test the_words_the_code_reads_are_the_checks_the_file_holds ... ok
+test the_planned_day_is_not_the_due_and_today_reads_both ... ok
+test an_edit_states_the_leads_or_leaves_them_and_a_due_moves_their_alerts ... ok
+test the_counts_are_true_at_any_size_and_count_what_the_board_draws ... ok
+test today_upcoming_overdue_and_done_read_each_form_of_a_due_as_what_it_is ... ok
+test trashing_a_task_takes_its_subtasks_and_a_restore_brings_them_back ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+
+     Running tests/tasks_portable.rs (target/debug/deps/tasks_portable-e9537757c417a9ec)
+
+running 3 tests
+test a_zoned_due_is_written_as_the_wall_clock_of_its_zone ... ok
+test a_reminder_carries_its_parent_tags_list_and_star ... ok
+test a_reminder_is_a_todo_with_its_due_status_priority_rule_and_alerts ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/time_corpus.rs (target/debug/deps/time_corpus-517c12b1b182e29c)
+
+running 14 tests
+test a_skip_keyed_on_the_resolved_instant_still_matches_nothing ... ok
+test every_override_lookup_agrees_with_v0 ... ok
+test every_floating_and_all_day_expansion_agrees_with_v0 ... ok
+test every_search_window_agrees_with_v0 ... ok
+test every_stored_exception_reads_as_v0_reads_it ... ok
+test every_temporal_classification_agrees_with_v0 ... ok
+test every_rrule_case_agrees_with_v0 ... ok
+test every_wall_clock_resolution_agrees_with_v0 ... ok
+test the_cautionary_case_is_still_refused_and_says_what_changed ... ok
+test the_exception_fold_agrees_with_v0_before_and_after ... ok
+test the_occurrence_column_is_spelled_once_and_v0_agrees ... ok
+test every_zoned_expansion_agrees_with_v0 ... ok
+test every_next_occurrence_agrees_with_v0 ... ok
+test every_missed_collapse_agrees_with_v0 ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/trash_and_bytes.rs (target/debug/deps/trash_and_bytes-5eb7102f2aabc0e1)
+
+running 5 tests
+test a_clock_far_ahead_purges_nothing ... ok
+test a_row_still_inside_its_window_is_not_taken_by_the_pass ... ok
+test an_overdue_row_is_restorable_until_the_pass_runs_and_gone_after_it ... ok
+test purging_a_calendar_or_a_folder_an_origin_fills_clears_the_origin ... ok
+test the_launch_pass_is_bounded_and_says_when_more_is_overdue ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+     Running tests/txn_portable.rs (target/debug/deps/txn_portable-93fc51a840bbe8ec)
+
+running 7 tests
+test commas_quotes_and_line_breaks_are_quoted_and_survive_a_round_trip ... ok
+test a_trashed_transaction_is_not_in_the_file_and_the_count_says_so ... ok
+test a_header_then_one_row_per_transaction_with_plain_decimal_amounts ... ok
+test a_hand_line_a_split_and_a_foreign_purchase_are_written_with_where_they_came_from ... ok
+test one_account_is_its_own_file_named_for_it ... ok
+test one_transaction_is_named_for_its_payee_and_day_and_writes_nothing ... ok
+test the_members_name_is_the_payee_and_the_banks_words_stay_and_a_category_is_named ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/unusual_input.rs (target/debug/deps/unusual_input-cc15d72ee7c82e5c)
+
+running 5 tests
+test calendar_and_reminders_export_unusual_text_as_text_that_reads_back ... ok
+test notes_with_unusual_text_survive_an_export_an_import_and_a_second_export_unchanged ... ok
+test money_and_health_export_unusual_text_as_csv_that_reads_back ... ok
+test documents_photos_and_the_whole_archive_name_unusual_titles_safely ... ok
+test people_with_unusual_names_survive_an_export_an_import_and_a_second_export_unchanged ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+     Running tests/vault_export.rs (target/debug/deps/vault_export-7b636759b277465d)
+
+running 7 tests
+test an_empty_vault_still_makes_an_archive_and_a_second_export_replaces_the_first ... ok
+test a_notes_image_whose_bytes_are_gone_is_named_not_dropped ... ok
+test a_notes_image_is_in_the_archive_beside_it_byte_for_byte ... ok
+test two_notes_with_one_title_keep_their_images_apart ... ok
+test every_app_has_its_folder_the_text_is_each_apps_own_export_and_the_originals_are_exact ... ok
+test nothing_of_lockers_is_anywhere_in_the_archive ... ok
+test the_export_reads_no_locker_table ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s
+
+   Doc-tests centraid_vault
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

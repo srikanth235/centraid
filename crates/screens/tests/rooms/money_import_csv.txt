@@ -1,0 +1,43 @@
+room pushed_page key="money/import-csv"
+  header title="Import CSV"
+    back "Money" #back
+  ready
+    choice menu "Account" #csv/account
+      option "Checking" id="01900000-0000-7000-8000-000000000101" selected
+      option "Savings" id="01900000-0000-7000-8000-000000000102"
+    choice menu "Date column" #csv/date_col
+      option "None"
+      option "Date" id="Date" selected
+      option "Description" id="Description"
+      option "Amount" id="Amount"
+    choice menu "Description column" #csv/desc_col
+      option "None"
+      option "Date" id="Date"
+      option "Description" id="Description" selected
+      option "Amount" id="Amount"
+    choice menu "Amount column" #csv/amount_col
+      option "None"
+      option "Date" id="Date"
+      option "Description" id="Description"
+      option "Amount" id="Amount" selected
+    choice menu "Memo column" #csv/memo_col
+      option "None" selected
+      option "Date" id="Date"
+      option "Description" id="Description"
+      option "Amount" id="Amount"
+    choice segmented "Date order" #csv/date_order
+      option "Month first" id="mdy"
+      option "Day first" id="dmy"
+      option "Year first" id="ymd" selected
+    choice segmented "Amounts" #csv/sign_mode
+      option "Signed" id="signed" selected
+      option "Debit & credit" id="dc"
+      option "Indicator" id="indicator"
+      option "Flip sign" id="flip"
+    section #section/preview "Preview"
+      row #preview/0 "Bakery" meta="2026-11-01" trailing="-$12.50"
+      row #preview/1 "Refund" meta="2026-11-02" trailing="+$5.00":net
+      row #preview/2 "Transit" meta="2026-11-03" trailing="-$3.25"
+    form
+      text #field/csv "CSV lines" "Date,Description,Amount\n2026-11-01,Bakery,-12.50\n2026-11-02,Refund,5.00\n2026-11-03,Transit,-3.25" rev=1
+      explicit save="Import"#form/save cancel="Cancel"#form/cancel dirty

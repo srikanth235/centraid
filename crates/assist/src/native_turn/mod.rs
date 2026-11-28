@@ -83,7 +83,7 @@ use crate::native::step::{StepOptions, decode_step};
 use crate::native::think::TraceMode;
 use crate::native::world::Key;
 use crate::native::{Flags, Session};
-use crate::prompt::{Budget, HISTORY_TURNS, Recorded, Turn, question};
+use crate::prompt::{Budget, HISTORY_TURNS, Turn, question};
 use crate::result::{CARD_CAP, Card};
 use crate::turn::{Answered, Event, Plane, Refusal};
 use log::Log;
@@ -490,7 +490,7 @@ impl NativeChat {
     fn remember(&mut self, message: &str, said: &str) {
         self.said.push(Turn {
             user: question(message),
-            record: Recorded::Answer(said.to_owned()),
+            said: said.to_owned(),
         });
         let surplus = self.said.len().saturating_sub(HISTORY_TURNS);
         self.said.drain(..surplus);
@@ -742,16 +742,19 @@ fn value_line(session: &Session, value: &Value, result: Option<usize>) -> String
 fn member_actions(session: &Session, effect: &Value) -> (Vec<Card>, String) {
     let mut cards = Vec::new();
     let mut line = String::new();
+    let Some(locker) = Kind::ALL
+        .into_iter()
+        .find(|kind| kind.spec().entity == "locker_item")
+    else {
+        return (cards, line);
+    };
     for action in effect["member_actions"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(MemberAction::of_json)
     {
-        let Some(row) = session
-            .world
-            .row(&(Kind::LockerItem, action.item_id.clone()))
-        else {
+        let Some(row) = session.world.row(&(locker, action.item_id.clone())) else {
             continue;
         };
         let Some(card) = cards::card_of(row, session.today()) else {

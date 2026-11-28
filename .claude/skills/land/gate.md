@@ -1,16 +1,17 @@
 # The gate
 
-`cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>` is the gate. `bun run check` covers TypeScript and is the `ts-static` step of `pr` and above. Run the profile that matches the change before calling it done. CI is in [ci](ci.md) and how tests are written is in [tests](tests.md).
+`cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>` is the gate. Run the profile that matches the change before calling it done. CI is in [ci](ci.md) and how tests are written is in [tests](tests.md).
 
 ## The profiles
 
 `local`, `pr`, `nightly` and `release` are built by concatenation, so each holds every step of the one before. The step lists are in `crates/xtask/src/gate.rs`.
 
-- **`local`**, the edit-run loop: `fmt`, `clippy`, `test`, `restore-drill`, `rules`, `doc-links`, `ledgers`.
+- **`local`**, the edit-run loop: `fmt`, `clippy`, `test`, `restore-drill`, `rules`, `registry`, `doc-links`, `ledgers`.
   - `test` runs only the crates the change touches and their dependents, as a nextest filter over `--workspace`. It prints `NARROWED to N of M crates`. A change that selects no crate is a loud `SKIP`, not a pass.
   - `cargo xtask test-plan` shows the selection. `CENTRAID_GATE_TESTS=all` widens it and `CENTRAID_GATE_BASE` names another base. Without nextest the whole workspace runs.
   - `restore-drill` runs every `restore_drill` integration test by name, so the narrowed `test` leaves those binaries out.
-- **`pr`** adds `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `design`, `lockfile`, `prompt-injection`, `model-record` and `fault-door`. Its `test` runs the whole workspace plus doctests. CI runs this profile.
+  - `registry` runs `crates/domain`'s `kind_action_registry` and `read_registry` tests by name: a kind missing a promise, an action with no inverse and no confirm class, a screen-only action, and a read with a full scan, a temp B-tree outside the allowlist, a sealed column, no cursor or a table it did not declare each fail there.
+- **`pr`** adds `buf`, `deny`, `ci-policy`, `release-build`, `sites` (runs when `docs/**`, `contracts/schema/**`, or `scripts/*-site/**` changed; always runs in `nightly` and `release`), `design`, `lockfile`, `prompt-injection`, `model-record` and `fault-door`. Its `test` runs the whole workspace plus doctests. CI runs this profile.
 - **`nightly`** adds `device-lanes`. They need a runner with devices (`CENTRAID_DEVICE_RUNNER=1`) and are a loud `SKIP` elsewhere.
 - **`release`** adds `artifact-identity` and `prebuilt-core-required`.
 - **`mobile-jvm`** is one step and is not a superset of anything: it builds `centraid-core-ffi`, runs `./gradlew mobileJvm`, then the `design` drift check. It does not compile Compose or touch a device; see [mobile](mobile.md).
@@ -32,7 +33,7 @@ It runs the structural rules alone (the `rules` step). Each rule prints one line
 - `FAIL <rule> — N finding(s) in M file(s) scanned`, then one indented line per finding, with the file and what to do;
 - `PENDING <rule> — <reason>` when the rule's subject is not in the tree yet. It is not a pass.
 
-Lines printed under an `ok` rule are known debt (the `promises` register lists what an app owes), not findings. The rules are file walks, not parse trees. `crates/xtask` is exempt from the two source-scanning rules because it holds their patterns. `crates/xtask/README.md` has the table of rules. When a rule is red, fix the code it names. Do not add a register row to dodge it.
+Lines printed under an `ok` rule are known debt, not findings. `registry` is the test of the kind registry, the action catalogue and the read registry (`crates/domain/tests`), and what an app owes a member is [promises](../product/promises.md). The rules are file walks, not parse trees. `crates/xtask` is exempt from the two source-scanning rules because it holds their patterns. `crates/xtask/README.md` has the table of rules. When a rule is red, fix the code it names. Do not add a register row to dodge it.
 
 ## Counts, not seconds
 
@@ -44,11 +45,10 @@ Lines printed under an `ok` rule are known debt (the `promises` register lists w
 
 All of them are counts or sizes, and all only fall.
 
-- **Copy ratchet**, `scripts/lint-copy.mjs`. Banned words, `·` joins and word-count caps in the Rust string catalogue (and the assistant's `copy/chat.json` strings), as a per-rule per-file count.
-- **Native-controls ratchet**, `scripts/lint-native-controls.mjs`. Platform controls used outside the kit in the iOS and Android sources, counted the same way.
-- Both run in `bun run lint:product`. A file over its count fails. A file under its count also fails, so the count must be lowered in the same change. `--print` emits the measured counts.
+- **Copy ratchet**, `cargo xtask rules copy` (ledger `crates/xtask/copy-budget.toml`). Banned words, `·` joins and word-count caps in the Rust string catalogue (and the assistant's `copy/chat.json` strings), as a per-rule per-file count.
+- It runs inside `cargo xtask rules` (and standalone via `cargo xtask rules copy`). A file over its count fails. A file under its count also fails, so the count must be lowered in the same change. `--print` emits the measured counts as TOML, and `--list` names every offending key.
 - **`contracts/ledgers/library-size.json`**: the prebuilt core's stripped size per ABI. A `null` gates nothing.
-- **`contracts/ledgers/query-plans.json`**: the statements allowed to scan a big table or sort a paged read. `crates/core/tests/query_plans.rs` reads it.
+- **`contracts/ledgers/query-plans.json`**: the statements allowed to scan a big table or sort a paged read. `crates/domain/tests/read_registry.rs` reads it.
 - The `ledgers` step compares each ledger with its copy at the merge base. A risen number is a finding, and so is a removed one. A gate run never writes a ledger.
 - **The backup staging area's byte budget**, in `crates/vault/src/backup/staging.rs`: 512 MiB or a tenth of the free space, whichever is smaller. It is code, and tests assert on its bytes.
 

@@ -18,7 +18,7 @@ use centraid_vault::time::FireZone;
 
 use super::line::{CLOCK_TOLERANCE_MS, STALE_MS};
 use super::reading::Reading;
-use crate::kit::schedule::rule_words::long_day;
+use crate::kit::civil::long_day;
 use crate::strings::{Locale, backup_check as words, fill};
 
 /// The Android channel: its own, so a member can silence it without silencing reminders.
@@ -301,12 +301,12 @@ mod tests {
         let n = notices(
             vec![
                 device("Mac mini", Some(T + 2 * DAY_MS)),
-                device("Office NAS", Some(T)),
+                device("Office Mac", Some(T)),
             ],
             T + DAY_MS,
         );
         assert_eq!(n[0].fire_at_ms, T + 3 * DAY_MS);
-        assert!(n[0].body.contains("Office NAS"));
+        assert!(n[0].body.contains("Office Mac"));
     }
 
     #[test]

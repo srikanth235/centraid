@@ -8,7 +8,6 @@ CENTRAID_IOS_DEPLOYMENT_TARGET="$(cat "$root/mobile/ios-deployment-target")"
 export CENTRAID_IOS_DEPLOYMENT_TARGET
 cd "$root/mobile/iosApp"
 xcodegen generate
-xcodegen generate --spec HealthSeeder/project.yml
 # Select a runtime supported by the selected SDK, rather than relying on the
 # runner's default simulator or a device name left over from a different Xcode.
 sdk_version="$(xcrun --sdk iphonesimulator --show-sdk-version)"
@@ -36,13 +35,21 @@ sys.exit("no simulator named " + want)
 ' "$CENTRAID_IOS_SIMULATOR")"
 else
   simulator="$(xcrun simctl create CentraidCI com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "$runtime")"
-  trap 'xcrun simctl delete "$simulator"' EXIT
 fi
 destination="platform=iOS Simulator,id=$simulator"
-xcodebuild -project HealthSeeder/HealthSeeder.xcodeproj -scheme HealthSeeder \
-  -destination "$destination" -derivedDataPath "$artifacts/seeder-derived-data" \
-  -resultBundlePath "$artifacts/HealthSeeder.xcresult" build \
-  2>&1 | tee "$artifacts/health-seeder.log"
+# WHAT THE APP LEFT IN ITS DOCUMENTS, for the log: the vaults the shelf adopted or founded.
+documents_listing() {
+  local container
+  if container="$(xcrun simctl get_app_container "$simulator" dev.centraid.Centraid data 2>/dev/null)"; then
+    echo "==> documents of dev.centraid.Centraid"
+    find "$container/Documents" -maxdepth 3 -not -name '*.sqlite3-*' | sed "s|$container/||" | head -60
+  fi
+}
+if [ -z "${CENTRAID_IOS_SIMULATOR:-}" ]; then
+  trap 'documents_listing; xcrun simctl delete "$simulator"' EXIT
+else
+  trap documents_listing EXIT
+fi
 # THE UNIT TESTS FIRST, ON AN APP WITH NO VAULT, THEN THE ACCESSIBILITY AUDIT
 # ON THE DEMO VAULT (#1202, S4). `UITests/` drives the real app through
 # `performAccessibilityAudit()`, and an audit of a Home with nothing on it proves
@@ -72,13 +79,35 @@ CENTRAID_SIMULATOR="$simulator" CENTRAID_DEMO_DIR="$artifacts/demo-vault" \
   bash "$root/mobile/scripts/demo-vault.sh" ios 2>&1 | tee "$seed_log"
 CENTRAID_DEV_SEED="$(sed -n 's/^CENTRAID_DEMO_SEED=//p' "$seed_log")"
 test -n "$CENTRAID_DEV_SEED"
+container="$(xcrun simctl get_app_container "$simulator" dev.centraid.Centraid data)"
+test -f "$container/Documents/demo-vault/vault.db" || { echo "error: demo vault was not placed in the app container" >&2; exit 1; }
 xcrun simctl terminate "$simulator" dev.centraid.Centraid || true
+documents_listing
+ui_status=0
+mkdir -p "$artifacts/screenshots/pages"
 TEST_RUNNER_CENTRAID_DEV_SEED="$CENTRAID_DEV_SEED" \
+TEST_RUNNER_CENTRAID_UI_PROOF_DIR="$artifacts/screenshots/pages" \
   xcodebuild -project Centraid.xcodeproj -scheme Centraid \
   -destination "$destination" -derivedDataPath "$artifacts/app-derived-data" \
   -resultBundlePath "$artifacts/CentraidUITests.xcresult" \
   -only-testing:CentraidUITests test \
-  2>&1 | tee "$artifacts/centraid-ui-tests.log"
+  2>&1 | tee "$artifacts/centraid-ui-tests.log" || ui_status=$?
+# Export the durable XCTAttachment screenshots from the result bundle. Fail the job if the
+# expected screenshot attachments were not actually written, rather than treating an empty
+# output directory as visual proof.
+mkdir -p "$artifacts/screenshots"
+export_status=0
+xcrun xcresulttool export attachments \
+  --path "$artifacts/CentraidUITests.xcresult" \
+  --output-path "$artifacts/screenshots" || export_status=$?
+if ! find "$artifacts/screenshots" -type f -name '*.png' -print -quit | grep -q .; then
+  echo "error: CentraidUITests produced no screenshot PNG attachments" >&2
+  if [ "$export_status" -eq 0 ]; then export_status=1; fi
+fi
+# Keep the dedicated Reduce Motion run below even when the normal UI audit or
+# screenshot export fails. Record export failure as part of the normal UI run's
+# status so the final status precedence remains UI run, then Reduce Motion.
+if [ "$ui_status" -eq 0 ] && [ "$export_status" -ne 0 ]; then ui_status=$export_status; fi
 # REDUCE MOTION HAS NO LAUNCH ARGUMENT (#1202, S4), nor does Bold Text: they are the
 # system's own settings, so they are written into this simulator's accessibility
 # preferences and it is restarted, and the one UI test that wants them says so by
@@ -98,10 +127,12 @@ xcrun simctl bootstatus "$simulator" -b >/dev/null
 status=0
 TEST_RUNNER_CENTRAID_DEV_SEED="$CENTRAID_DEV_SEED" \
 TEST_RUNNER_CENTRAID_UI_SYSTEM_SETTINGS=reduce-motion \
+TEST_RUNNER_CENTRAID_UI_PROOF_DIR="$artifacts/screenshots/pages" \
   xcodebuild -project Centraid.xcodeproj -scheme Centraid \
   -destination "$destination" -derivedDataPath "$artifacts/app-derived-data" \
   -resultBundlePath "$artifacts/CentraidSystemSettings.xcresult" \
   -only-testing:CentraidUITests/AccessibilityAuditTests/testRootsUnderReducedMotion test \
   2>&1 | tee "$artifacts/centraid-system-settings-tests.log" || status=$?
 restore_accessibility
+if [ "$ui_status" -ne 0 ]; then exit "$ui_status"; fi
 exit "$status"

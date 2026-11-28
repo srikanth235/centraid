@@ -25,8 +25,6 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
-import "centraid/core/v1/agenda_glance_screens.proto";
-import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/chat_screens.proto";
 import "centraid/core/v1/imports_screens.proto";
@@ -35,22 +33,11 @@ import "centraid/core/v1/custody_screens.proto";
 import "centraid/core/v1/pair_screens.proto";
 import "centraid/core/v1/passes_screens.proto";
 import "centraid/core/v1/plumbing_screens.proto";
-import "centraid/core/v1/docs_screens.proto";
-import "centraid/core/v1/health_glance_screens.proto";
-import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
-import "centraid/core/v1/photos_home_screens.proto";
-import "centraid/core/v1/photos_lightbox_screens.proto";
-import "centraid/core/v1/photos_shelf_screens.proto";
-import "centraid/core/v1/locker_screens.proto";
-import "centraid/core/v1/money_screens.proto";
-import "centraid/core/v1/notes_screens.proto";
 import "centraid/core/v1/notify_screens.proto";
-import "centraid/core/v1/people_screens.proto";
 import "centraid/core/v1/route.proto";
 import "centraid/core/v1/vault_screens.proto";
 import "centraid/core/v1/shell_home_screens.proto";
-import "centraid/core/v1/shell_search_screens.proto";
 import "centraid/core/v1/shell_settings_screens.proto";
 
 // ---------------------------------------------------------------------------
@@ -148,20 +135,6 @@ message ScreenUpdate {
   repeated uint64 closed = 4;
   // Small changes to views the shell already holds, applied in order after `views`. A delta whose
   // `base` is not the held view's revision is dropped: the next full view repairs it.
-  repeated ViewDelta deltas = 5;
-}
-
-// WHAT CHANGED IN A VIEW, when that is a few words: a streaming answer's next tokens are sent
-// alone, not with the whole chat (#1188 C14).
-message ViewDelta {
-  uint64 instance = 1;
-  // The revision of the view this applies to.
-  uint64 base = 2;
-  // The revision the view has once it is applied.
-  uint64 revision = 3;
-  oneof kind {
-    ChatAppend chat_append = 10;
-  }
 }
 
 message ScreenResponse {
@@ -287,64 +260,20 @@ message ScreenEvent {
     WordsEnterEvent words_enter = 1301;
     WordsShowEvent words_show = 1302;
     // ---- agenda (100-199) ----
-    AgendaHomeEvent agenda_home = 100;
-    AgendaEventEvent agenda_event = 101;
-    AgendaEditorEvent agenda_editor = 102;
-    TodoListEvent todo_list = 103;
-    TodoProjectEvent todo_project = 104;
-    TodoDetailEvent todo_detail = 105;
-    TodoCatchUpEvent todo_catch_up = 106;
     // ---- photos (800-899) ----
-    PhotosHomeEvent photos_home = 800;
-    PhotosShelfEvent photos_shelf = 801;
-    PhotosPickerEvent photos_picker = 802;
-    PhotosPlacesEvent photos_places = 803;
-    PhotosLightboxEvent photos_lightbox = 804;
-    PhotosEditorEvent photos_editor = 805;
     // ---- locker (400-499) ----
-    LockerWallEvent locker_wall = 400;
-    LockerHomeEvent locker_home = 401;
-    LockerItemEvent locker_item = 402;
-    LockerEditorEvent locker_editor = 403;
-    LockerExportEvent locker_export = 405;
-    LockerImportEvent locker_import = 406;
     // ---- money (500-599) ----
-    MoneyHomeEvent money_home = 500;
-    MoneyTransactionEvent money_transaction = 501;
-    MoneyTargetEvent money_target = 502;
-    MoneyRecurringEvent money_recurring = 504;
-    MoneyAccountsEvent money_accounts = 505;
-    MoneyCategoriesEvent money_categories = 506;
-    MoneyRulesEvent money_rules = 507;
-    MoneyImportEvent money_import = 508;
     // ---- docs (200-299) ----
-    DocsDriveEvent docs_drive = 200;
-    DocsDocumentEvent docs_document = 201;
-    DocsEditorEvent docs_editor = 202;
     // ---- notes (600-699) ----
-    HealthHomeEvent health_home = 300;
-    HealthMetricEvent health_metric = 301;
-    HealthWorkoutEvent health_workout = 302;
-    HealthConnectEvent health_connect = 303;
-    NotesHomeEvent notes_home = 600;
-    NotesEditorEvent notes_editor = 601;
     // ---- people (700-799) ----
-    PeopleHomeEvent people_home = 700;
-    PeoplePersonEvent people_person = 701;
-    PeopleEditorEvent people_editor = 702;
-    PeopleListsEvent people_lists = 703;
     // ---- pairing (1400-1449, lane H2) ----
     PairLaptopEvent pair_laptop = 1400;
     // ---- the kit (900-999) ----
-    TrashEvent trash = 900;
     TransferEvent transfer = 901;
     // The action under a "phone says" line, from any page that draws one (#1183).
-    PhoneSaysTaken phone_says_taken = 902;
     // The earlier-versions screen (#1185).
-    EarlierEvent earlier = 903;
     // The verb of any status line ("Undo"), from any screen; no per-screen arm is needed (#1185).
     StatusActed status_acted = 904;
-    EarlierPreviewEvent earlier_preview = 905;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeEvent backup_home = 1450;
     BackupCheckEvent backup_check = 1451;
@@ -355,7 +284,6 @@ message ScreenEvent {
     // conductor's wake, to the pass and vault services).
     Signalled signalled = 1501;
     // RUNTIME-ORIGINATED: the camera-roll service's report to the pass service.
-    RollReported roll_reported = 1502;
     // ---- the vault shelf (1560-1599, lane H2): vault_screens.proto ----
     // RUNTIME-ORIGINATED from `ScreenRequest.memory_warning`.
     MemoryWarning memory_warning = 1560;
@@ -365,14 +293,9 @@ message ScreenEvent {
     // RUNTIME-ORIGINATED, to services only: a screen was opened.
     ScreenOpened screen_opened = 1562;
     // ---- the shell (1000-1999): chat (1600-1699) ----
-    ChatEvent chat = 1600;
     // ---- the shell: phone imports (1700-1899) ----
-    ImportsCameraRollEvent imports_camera_roll = 1700;
-    ImportsFilesEvent imports_files = 1701;
-    ImportsMadeEvent imports_made = 1702;
     // ---- the shell (1000-1999): Home 1000-1299 ----
     HomeEvent home = 1000;
-    HomeSearchEvent home_search = 1001;
     SettingsEvent settings = 1010;
   }
 }
@@ -428,72 +351,22 @@ message ViewState {
     WordsEnterState words_enter = 1301;
     WordsShowState words_show = 1302;
     // ---- agenda (100-199) ----
-    AgendaHomeState agenda_home = 100;
-    AgendaEventState agenda_event = 101;
-    AgendaEditorState agenda_editor = 102;
-    TodoListState todo_list = 103;
-    TodoProjectState todo_project = 104;
-    TodoDetailState todo_detail = 105;
-    TodoCatchUpState todo_catch_up = 106;
     // ---- photos (800-899) ----
-    PhotosHomeState photos_home = 800;
-    PhotosShelfState photos_shelf = 801;
-    PhotosPickerState photos_picker = 802;
-    PhotosPlacesState photos_places = 803;
-    PhotosLightboxState photos_lightbox = 804;
-    PhotosEditorState photos_editor = 805;
     // ---- locker (400-499) ----
-    LockerHomeState locker_home = 400;
-    LockerItemState locker_item = 401;
-    LockerEditorState locker_editor = 402;
-    LockerExportState locker_export = 404;
-    LockerImportState locker_import = 405;
-    LockerLockState locker_lock = 406;
     // ---- money (500-599) ----
-    MoneyHomeState money_home = 500;
-    MoneyTransactionState money_transaction = 501;
-    MoneyTargetState money_target = 502;
-    MoneyRecurringState money_recurring = 504;
-    MoneyAccountsState money_accounts = 505;
-    MoneyCategoriesState money_categories = 506;
-    MoneyRulesState money_rules = 507;
-    MoneyImportState money_import = 508;
     // ---- docs (200-299) ----
-    DocsDriveState docs_drive = 200;
-    DocsDocumentState docs_document = 201;
-    DocsEditorState docs_editor = 202;
     // ---- notes (600-699) ----
-    HealthHomeState health_home = 300;
-    HealthMetricState health_metric = 301;
-    HealthWorkoutState health_workout = 302;
-    HealthConnectState health_connect = 303;
-    NotesHomeState notes_home = 600;
-    NotesEditorState notes_editor = 601;
     // ---- people (700-799) ----
-    PeopleHomeState people_home = 700;
-    PeoplePersonState people_person = 701;
-    PeopleEditorState people_editor = 702;
-    PeopleListsState people_lists = 703;
     // ---- pairing (1400-1449, lane H2) ----
     PairLaptopState pair_laptop = 1400;
     // ---- the kit (900-999) ----
-    TrashView trash = 900;
-    ReadsView reads = 905;
     TransferView transfer = 901;
-    EarlierView earlier = 903;
-    EarlierPreviewView earlier_preview = 904;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeState backup_home = 1450;
     BackupCheckState backup_check = 1451;
     // ---- the shell (1000-1999): chat (1600-1699) ----
-    ChatState chat = 1600;
     // ---- the shell: phone imports (1700-1899) ----
-    ImportsCameraRollState imports_camera_roll = 1700;
-    ImportsFilesState imports_files = 1701;
-    ImportsMadeState imports_made = 1702;
     // ---- the shell (1000-1999): Home 1000-1299 ----
-    HomeState home = 1000;
-    HomeSearchState home_search = 1001;
     SettingsState settings = 1010;
   }
 }
@@ -517,11 +390,8 @@ message Effect {
     Haptic haptic = 3;
     Share share = 4;
     OpenUrl open_url = 5;
-    HealthRead health_read = 8;
     KeychainOp keychain = 9;
     ScreenshotShield screenshot_shield = 10;
-    CalendarRead calendar_read = 12;
-    PhoneWatch phone_watch = 13;
     // The phone's own owner check: biometric, device passcode as fallback.
     OwnerCheck owner_check = 14;
     // Let the member choose a file and hand its bytes back.
@@ -536,10 +406,6 @@ message Effect {
     // Clear only a still-matching sensitive Locker copy owned by this vault.
     // The shell carries only a digest/owner lease across process restart.
     ClipboardClearOwned clipboard_clear_owned = 28;
-    RenderEdit render_edit = 25;
-    ReadCamera read_camera = 26;
-    LibraryDelete library_delete = 27;
-    ContactsRead contacts_read = 18;
     // Open the OS maps app at an address (People's address channel).
     OpenMap open_map = 19;
     // Open a page now, wherever the member is: the shell pushes `route` as a
@@ -555,17 +421,11 @@ message Effect {
     // Keep the widgets' snapshot: write the document to the shared container,
     // then reload the widgets (`agenda_glance_screens.proto`). 150 stays clear
     // of a parallel notifications branch.
-    AgendaGlance agenda_glance = 150;
     // ---- health (300-399): outside the app ----
     // Keep the Health widget's snapshot (`health_glance_screens.proto`).
-    HealthGlance health_glance = 350;
     PickFile pick_file = 200;
-    FollowFolder follow_folder = 201;
-    StopFollowing stop_following = 202;
     // Hand one document's file to the platform's share sheet.
-    ShareFile share_file = 203;
     // Hand one small item made in memory (a note, a vCard) to the platform's share sheet as a file.
-    ShareBytes share_bytes = 204;
     // Offer a file already on disk (a streamed export) to the OS save sheet, copied by streaming.
     SaveFilePath save_file_path = 205;
     // ---- pairing (1340-1349, lane H2): pair_screens.proto ----
@@ -583,17 +443,11 @@ message Effect {
     UploadsOp uploads = 1373;
     // ---- the shell (1000-1999): chat (1600-1699) ----
     ModelDownload model_download = 1600;
-    PickLibraryPhoto pick_library_photo = 1601;
     DeleteModelFile delete_model_file = 1602;
     // ---- the shell: phone imports (1700-1899) ----
-    LibraryPermission library_permission = 1700;
     RollPage roll_page = 1701;
-    LinkRead link_read = 1702;
     LibraryStage library_stage = 1703;
     LibraryDerivatives library_derivatives = 1704;
-    FoldersRead folders_read = 1705;
-    StageFolderFile stage_folder_file = 1706;
-    RemindersRead reminders_read = 1707;
     // ---- the shell (1000-1999) ----
     // Home asks the shell to act on the vaults the phone holds.
     VaultCommand vault_command = 1000;
@@ -666,33 +520,6 @@ message OpenUrl {
   string url = 1;
 }
 
-// READ THE PHONE'S HEALTH STORE (HealthKit on iOS, Health Connect on Android) over
-// the window Rust placed, for the types the member chose, and answer a
-// `HealthSnapshot`. Read only: nothing is ever written to the store (R-1129-7).
-// `ask_permission` is the member's Connect tap, the one place the OS is asked
-// (R-1127-15); a pass never asks, and answers `EffectFailed{denied}` when
-// nothing was ever granted.
-message HealthRead {
-  // The type keys the member chose: `steps`, `sleep_min`, `active_energy_kcal`,
-  // `exercise_min`, `resting_hr_bpm`, `weight_kg`, `workouts`.
-  repeated string chosen = 1;
-  bool ask_permission = 2;
-  // The day totals are read from this civil day (`YYYY-MM-DD`, the phone's
-  // zone) through `today`; a workout that started at or after `workouts_since_ms`
-  // is in the window.
-  string totals_from = 3;
-  string today = 4;
-  int64 workouts_since_ms = 5;
-  // With `ask_permission` on Health Connect: the same sheet also asks to read
-  // Health while Centraid is closed (D16). Asked only at the Connect tap, never
-  // by a pass. HealthKit needs no such ask and ignores it.
-  bool ask_background = 6;
-  // WHERE THE LAST READ GOT TO (#1183): an opaque string the vault keeps with the records it
-  // covers, which Rust hands back and never opens. On iOS a JSON map of sample type to HealthKit
-  // anchor; on Android the Health Connect changes token. Empty is a complete read.
-  string cursor = 7;
-}
-
 message KeychainOp {
   enum Op {
     OP_UNSPECIFIED = 0;
@@ -710,34 +537,9 @@ message ScreenshotShield {
   bool on = 1;
 }
 
-// Read the phone's calendars over a window around the shell's clock. A shell
-// that is denied (or has no calendar) answers `EffectFailed{denied}`.
-message CalendarRead {
-  // The member's Import tap lets the OS ask for permission; a following pass
-  // never does.
-  bool ask_permission = 1;
-  uint32 days_back = 2;
-  uint32 days_on = 3;
-}
-
-// Read the phone's address book. A shell that is denied (or has none) answers
-// `EffectFailed{denied}`; a pass that only follows never asks the OS for
-// permission (`ask_permission` false), the member's Import tap does.
-message ContactsRead {
-  bool ask_permission = 1;
-}
-
 message OpenMap {
   // An address, as the member wrote it.
   string query = 1;
-}
-
-// Start (`on`) or stop watching a phone store; while it is on, the shell
-// answers this effect with a `PhoneChanged` each time the store changes, under
-// the effect's one `effect_id`.
-message PhoneWatch {
-  ImportSource source = 1;
-  bool on = 2;
 }
 
 // ---------------------------------------------------------------------------
@@ -756,13 +558,9 @@ message PhoneWatch {
 message ExportOriginals {
   repeated string photo_ids = 1;
   Mode mode = 2;
-  bool keep_location = 3;
   // The share sheet's title ("Send a copy").
-  string chooser_title = 4;
   // The stems the copied files are named by, `<stem> <n>.<ext>`: a
   // photograph's ("Photo") and a video's ("Video").
-  string photo_stem = 5;
-  string video_stem = 6;
   // `MODE_ARCHIVE` supplies one OS original to a Rust-owned aggregate ZIP.
   // These are the immutable descriptor from `VaultExportResponse`, not a
   // request for the shell to re-read the current photo row.
@@ -830,84 +628,6 @@ message CameraRoll {
     ACTION_MANAGE_SELECTION = 3;
     // `ACTION_ASK_PERMISSION`, `ACTION_IMPORT_NOW`: the camera roll's.
     reserved 1, 4;
-  }
-}
-
-// DELETE ORIGINALS FROM THE PHONE'S PHOTO LIBRARY, behind the platform's own
-// confirmation (#1080 A19, A20): iOS `PHAssetChangeRequest.deleteAssets`,
-// Android `MediaStore.createDeleteRequest`. Rust chose the items: originals the
-// core's `releasable` named, each whole on a gateway. The shell deletes the
-// assets named by `os_ref` and answers `LibraryDeleted` with the hashes of the
-// items whose asset is gone; Rust tells the core (`released`). A dismissed
-// confirmation is `declined`; a refusal is the platform's own words in `error`.
-message LibraryDelete {
-  repeated LibraryDeleteItem items = 1;
-}
-
-message LibraryDeleteItem {
-  // The library's identifier (`Releasable.os_ref`).
-  string os_ref = 1;
-  // The bytes' hash as 64 hex characters, echoed in `LibraryDeleted`.
-  string content_hash = 2;
-  // What the vault reads the bytes as, so a shell picks the library's
-  // collection to delete from.
-  string media_type = 3;
-  // The bytes the core backed up (`Releasable.size`). A library item whose
-  // current size differs was edited in place since (Android), and is not
-  // deleted: the edit is not what the gateway holds.
-  uint64 size = 4;
-}
-
-message LibraryDeleted {
-  // The `content_hash` of every item whose asset the platform deleted.
-  repeated string deleted_hashes = 1;
-  // The member said no in the system's dialog, or the platform refused to delete: nothing went.
-  bool declined = 2;
-  // 3 was `error`, the platform's own words: they stay in the shell's log, and Rust words the
-  // sentence from `failed` (#1185).
-  reserved 3;
-  reserved "error";
-  // The platform could not delete, for any other reason. Nothing is reported deleted.
-  bool failed = 4;
-}
-
-// WHAT RUST KNOWS ABOUT FREEING SPACE, as `photos::free_up` assembles it from
-// the core's census and `releasable` and the platform's last `LibraryDeleted`.
-// Never on the wire between a shell and Rust: it is the record the row's
-// sentences are made from (`photos::keep_originals`).
-message FreeUpFacts {
-  // The platform can delete from its library behind the system's own
-  // confirmation. False draws no row at all.
-  bool offered = 1;
-  // The census of originals on this phone answered.
-  bool counted = 2;
-  uint32 on_phone_count = 3;
-  uint64 on_phone_bytes = 4;
-  // How many of them are in albums the member keeps on this phone.
-  uint32 kept_count = 5;
-  // The core named what is safe to free (`releasable`) and how much.
-  bool checked = 6;
-  uint32 releasable_count = 7;
-  uint64 releasable_bytes = 8;
-  // What the last free-up came to; unspecified before the first.
-  Outcome outcome = 9;
-  // For `OUTCOME_FREED`: the bytes that went.
-  uint64 freed_bytes = 10;
-  // 11 was `platform_error`, the platform's own words: they stay in the shell's log, and the
-  // row says its own sentence for `OUTCOME_PLATFORM_ERROR` (#1185).
-  reserved 11;
-  reserved "platform_error";
-
-  enum Outcome {
-    OUTCOME_UNSPECIFIED = 0;
-    OUTCOME_FREED = 1;
-    // The member said no in the system's dialog, or nothing could go.
-    OUTCOME_NOTHING_REMOVED = 2;
-    // The library let them go and the core did not record it.
-    OUTCOME_NOT_RECORDED = 3;
-    // The core could not say what is safe, so nothing was deleted.
-    OUTCOME_NOT_CHECKED = 4;
-    OUTCOME_PLATFORM_ERROR = 5;
   }
 }
 
@@ -1021,37 +741,19 @@ message EffectResult {
   oneof outcome {
     EffectDone done = 2;
     EffectFailed failed = 3;
-    HealthSnapshot health = 5;
     KeychainValue keychain = 6;
-    CalendarSnapshot calendar = 7;
-    PhoneChanged phone_changed = 8;
     BytesPicked bytes_picked = 9;
     OwnerChecked owner_checked = 10;
     // ---- photos (#1135, lane D) ----
     OriginalsExported originals_exported = 12;
-    EditRendered edit_rendered = 14;
-    CameraRead camera_read = 15;
-    ContactsSnapshot contacts = 16;
-    LibraryDeleted library_deleted = 17;
     // ---- agenda (100-199): notifications (#1173) ----
     NotificationsScheduled notifications_scheduled = 120;
     // ---- docs (200-299): files ----
-    FilePicked file_picked = 200;
-    FileProgress file_progress = 201;
-    FolderFollowed folder_followed = 202;
     // ---- pairing (1340-1349, lane H2) ----
     CodeScanned code_scanned = 1340;
     GatewaysSighted gateways_sighted = 1341;
     // ---- the shell (1000-1999): chat (1600-1699) ----
-    LibraryPhotoPicked library_photo_picked = 1600;
     // ---- the shell: phone imports (1700-1899) ----
-    LibraryPermissionRead library_permission_read = 1700;
-    RollPaged roll_paged = 1701;
-    LinkReading link_reading = 1702;
-    LibraryStaged library_staged = 1703;
-    FoldersListing folders_listing = 1705;
-    FolderFileStaged folder_file_staged = 1706;
-    RemindersSnapshot reminders_snapshot = 1707;
     // ---- vault plumbing (1300-1399, lane H2) ----
     SecretBatched secrets = 1300;
     SyncedSecretsStatus synced_status = 1302;
@@ -1090,203 +792,9 @@ message EffectFailed {
   bool limited = 5;
 }
 
-// WHAT THE SHELL READ OF THE HEALTH STORE. Nothing here is a decision: Rust diffs
-// the days against the vault's, maps a workout's kind, decides when a read is
-// complete and what is sent.
-message HealthSnapshot {
-  // Which store this phone has.
-  Store store = 1;
-  // False when the store is not on the phone at all (Health Connect
-  // uninstalled): nothing is read, and the store's origin is not touched.
-  bool store_present = 2;
-  // The chosen types the OS refused. Health Connect names them; HealthKit hides
-  // a refusal, so iOS leaves this empty.
-  repeated string refused = 3;
-  // Every day total the store has in the window, chosen metrics only; a day the
-  // store has nothing for is absent, never a zero. With `delta`, only the days the changes touched.
-  repeated HealthDayTotal days = 4;
-  repeated HealthPhoneWorkout workouts = 5;
-  // False when the workout read may have missed some (a query failed part-way).
-  bool workouts_complete = 6;
-  // This phone's id, which a followed workout carries.
-  string device_id = 7;
-  // With `store_present` false: Health Connect is not installed and Google Play
-  // can bring it, so Connect says where to get it.
-  bool installable = 8;
-  // Health Connect would not let Centraid read in the background (asked with
-  // `HealthRead.ask_background`): following still works while the app is open.
-  // Always false on iOS and when it was not asked.
-  bool background_refused = 9;
-  // TRUE when this answers `HealthRead.cursor`: `days` are then only the days the changes since
-  // touched (a sum day left with no samples is 0, never absent), `workouts` only those added or
-  // changed, and `deleted_workout_ids` the store's ids of those removed. FALSE is a complete read of
-  // the window: what an empty, expired or unusable cursor is answered with, never an error.
-  bool delta = 10;
-  // Where this read got to: the cursor of the next one, taken before the read began so a change
-  // that landed during it is seen again. Empty when the store would not say (the next read is complete).
-  string next_cursor = 11;
-  // With `delta`: the store's ids of workouts deleted since the cursor. The vault keeps each row
-  // and forgets its source.
-  repeated string deleted_workout_ids = 12;
-
-  enum Store {
-    STORE_UNSPECIFIED = 0;
-    STORE_APPLE_HEALTH = 1;
-    STORE_HEALTH_CONNECT = 2;
-  }
-}
-
-// One day's total as the store states it: `day` is the store's own day in the
-// phone's zone (a night of sleep is keyed to the day the member woke), `metric`
-// the metric's key, `value` in the metric's own unit.
-message HealthDayTotal {
-  string day = 1;
-  string metric = 2;
-  double value = 3;
-}
-
-// One workout as the store holds it.
-message HealthPhoneWorkout {
-  // The store's own id (HealthKit's uuid, Health Connect's record id): it means
-  // something on this phone only.
-  string id = 1;
-  // The store's word for the kind, whole (`running`, `EXERCISE_TYPE_RUNNING`).
-  string kind = 2;
-  // UTC instants, `YYYY-MM-DDTHH:MM:SS[.sss]Z`.
-  string started_at = 3;
-  string ended_at = 4;
-  optional int64 moving_sec = 5;
-  optional double distance_m = 6;
-  optional double energy_kcal = 7;
-  optional int64 avg_hr_bpm = 8;
-  optional double elevation_gain_m = 9;
-  optional string recorded_by = 10;
-}
-
 message KeychainValue {
   bool found = 1;
   bytes value = 2;
-}
-
-// The phone's calendars as the OS holds them, every occurrence in the window
-// its own event; Rust folds a series back into one and makes every record.
-message CalendarSnapshot {
-  // The shell's clock when it read, epoch milliseconds, and its zone.
-  int64 now_ms = 1;
-  string device_zone = 2;
-  // False when the read may have missed events: nothing is then trashed.
-  bool complete = 3;
-  // Every visible calendar the member writes to, an empty one included.
-  repeated PhoneCalendar calendars = 4;
-  repeated PhoneCalendarEvent events = 5;
-  // This install's id, minted once and kept off the vault: an id that means
-  // something on this phone only is followed under it (R-1127-10).
-  string device_id = 6;
-}
-
-message PhoneCalendar {
-  // The platform's own id for the calendar, not yet prefixed.
-  string key = 1;
-  string source_title = 2;
-  string title = 3;
-  // The colour the phone paints it with, `#RRGGBB`; empty when it has none.
-  string color = 4;
-  // 5 and 6 were `writable` and `allows_modifications`: the calendars are followed one way and
-  // nothing is written back to them (#1183).
-  reserved 5, 6;
-  reserved "writable", "allows_modifications";
-}
-
-// One occurrence. An all-day `start`/`end` is `YYYY-MM-DD` with `end` the LAST
-// day, inclusive; a timed one is `YYYY-MM-DDTHH:MM:SS` in `tz`, `end` exclusive.
-message PhoneCalendarEvent {
-  string title = 1;
-  string notes = 2;
-  bool all_day = 3;
-  string start = 4;
-  string end = 5;
-  // The event's IANA zone; empty is the device's.
-  string tz = 6;
-  // The calendar holds it as not blocking its time.
-  bool free = 7;
-  optional PhoneCalendarSeries series = 8;
-  // Where the series' rule puts this occurrence, when the member moved it.
-  string original_start = 9;
-  bool moved = 10;
-  // The phone's most durable id, kind-prefixed (`uid:`, `lookup:`, `local:`).
-  string phone_id = 11;
-  string calendar_key = 12;
-  // The event's link and where it is, as the phone holds them; empty when it has none.
-  string url = 13;
-  string location = 14;
-  // The guests the phone holds.
-  repeated PhoneAttendee attendees = 15;
-  // The alerts, each as whole minutes BEFORE the start (0 = at the start). An absolute alert is
-  // converted by the shell to minutes before this occurrence's start; one after the start (a
-  // negative offset) is left out. Order kept; duplicates removed by the core.
-  repeated uint32 alerts = 16;
-}
-
-// A guest of an event as the phone holds it.
-message PhoneAttendee {
-  string name = 1;
-  string email = 2;
-  // `accepted`, `declined`, `tentative` or `needs-action` (the shell maps EKParticipantStatus /
-  // `Attendees.ATTENDEE_STATUS`; unknown or pending is `needs-action`).
-  string status = 3;
-}
-
-// A repeating series as the phone holds it; `start`/`end` are the series' OWN
-// first occurrence, in the form of the occurrences'.
-message PhoneCalendarSeries {
-  string id = 1;
-  string rrule = 2;
-  string start = 3;
-  string end = 4;
-}
-
-// The phone's address book as the OS holds it. Rust makes every record: it
-// squashes the names, keeps one contact once, labels each account and decides
-// what to send (`follow-contacts`).
-message ContactsSnapshot {
-  // False when the read may have missed contacts (iOS limited access, a read
-  // that failed part-way): nothing is then trashed.
-  bool complete = 1;
-  // This install's id, minted once and kept off the vault: an id that means
-  // something on this phone only is followed under it (R-1127-10).
-  string device_id = 2;
-  // Every account or container present, an empty one included.
-  repeated PhoneContactContainer containers = 3;
-  repeated PhoneContact contacts = 4;
-}
-
-message PhoneContactContainer {
-  // The platform's own id for the account, not yet prefixed.
-  string key = 1;
-  // What the OS calls it ("iCloud", "Gmail"); empty is the phone's own.
-  string name = 2;
-}
-
-message PhoneContact {
-  // The display name; a contact with none is skipped.
-  string name = 1;
-  repeated string phones = 2;
-  repeated string emails = 3;
-  // `MM-DD`, or empty: the year is not asked for, because a People date is a
-  // day of the year.
-  string birthday = 4;
-  // The phone's most durable id, kind-prefixed (`lookup:` Android's
-  // `LOOKUP_KEY`, `local:` a device-scoped id). A contact with none is skipped,
-  // because nothing could find it again.
-  string phone_id = 5;
-  // The account the contact was read in (a `PhoneContactContainer.key`); empty
-  // is this phone.
-  string container_key = 6;
-}
-
-// A watched store changed.
-message PhoneChanged {
-  ImportSource source = 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -1317,68 +825,6 @@ message PickFile {
   }
 }
 
-// A file the shell picked and staged. `blob` is the hash the stage door named
-// and `byte_size` the bytes it counted; `name` is what the platform called the
-// file (empty for a scan) and `media_type` its type (empty: Rust reads it off
-// the name).
-message FilePicked {
-  string blob = 1;
-  uint64 byte_size = 2;
-  string name = 3;
-  string media_type = 4;
-}
-
-// Bytes streamed so far, of a file `total_bytes` long (0 is unknown). `name` is
-// what the platform called the file (empty for a scan), so the line can say what
-// is being added while it streams.
-message FileProgress {
-  uint64 staged_bytes = 1;
-  uint64 total_bytes = 2;
-  string name = 3;
-}
-
-// Follow a folder the member picks (#1127): the shell opens its folder picker,
-// keeps the access it is given (a security-scoped bookmark, a persisted tree
-// URI) under an origin it mints, and answers `FolderFollowed`. A closed picker
-// is `EffectDone`.
-message FollowFolder {}
-
-// The folder the shell is now following, and the name the phone gives it.
-message FolderFollowed {
-  // `folder:<uuid>`.
-  string origin = 1;
-  string name = 2;
-}
-
-// Stop following the folder whose origin is `origin`: the shell forgets its
-// access and tells the core to forget the folder's links; every document stays.
-// SHARE ONE FILE (Docs' Quick Look bar): copy `path` (a file in the app's
-// store, named by its digest) to a temporary file called `name` and open the
-// platform's share sheet on it. Answers done once the sheet is up, or
-// `EffectFailed` when the file cannot be read.
-message ShareFile {
-  string path = 1;
-  // The file's name as the receiver sees it: the title with its extension.
-  string name = 2;
-  string media_type = 3;
-  // The share sheet's title.
-  string chooser_title = 4;
-}
-
-// SHARE ONE SMALL ITEM AS A FILE (#1185, take out): write `content` to a temporary file called
-// `name` (the receiver sees it: "Plan.md", "Ada Lovelace.vcf") and open the platform's share
-// sheet on it, Android's `ACTION_SEND` through the app's `FileProvider`, iOS's
-// `UIActivityViewController`. The copy is plaintext outside the vault, so the shell removes it
-// when the sheet closes (iOS) or when the next share replaces it (Android). Answers done once the
-// sheet is up, or `EffectFailed` when the file cannot be written. Rust asks the owner check first.
-message ShareBytes {
-  string name = 1;
-  string media_type = 2;
-  bytes content = 3;
-  // The share sheet's title.
-  string chooser_title = 4;
-}
-
 // SAVE A FILE ALREADY ON DISK (#1185, take out; owner decision D17: a large export is written as
 // a streamed file, never built in memory): the core staged the export at `path` (a file under the
 // vault's staging folder, which holds plaintext, so Rust asks the owner check first) and the
@@ -1394,10 +840,6 @@ message SaveFilePath {
   // The file's name as the member sees it in the save sheet: "Documents.zip".
   string name = 2;
   string media_type = 3;
-}
-
-message StopFollowing {
-  string origin = 1;
 }
 
 // ---------------------------------------------------------------------------

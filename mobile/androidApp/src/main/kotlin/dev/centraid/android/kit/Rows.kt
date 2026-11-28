@@ -50,10 +50,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import centraid.core.v1.Autosave
-import centraid.core.v1.ListRow
-import centraid.core.v1.SearchContainer
-import centraid.core.v1.StatusChip
+import centraid.core.v1.RoomChip
+import centraid.core.v1.RoomTone
 import dev.centraid.android.theme.centraidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -79,8 +77,8 @@ public fun CentraidRow(
     meta: String = "",
     trailing: String = "",
     trailingNote: String = "",
-    trailingTone: StatusChip.Tone = StatusChip.Tone.TONE_UNSPECIFIED,
-    chips: List<StatusChip> = emptyList(),
+    trailingTone: RoomTone = RoomTone.ROOM_TONE_UNSPECIFIED,
+    chips: List<RoomChip> = emptyList(),
     hueKey: String = "",
     dimmed: Boolean = false,
     pending: Boolean = false,
@@ -261,39 +259,14 @@ public fun MetaLine(
     }
 }
 
-/** A kit `ListRow`, drawn as the one row. */
 @Composable
-public fun CentraidRow(row: ListRow, modifier: Modifier = Modifier, onTap: (() -> Unit)? = null) {
-    CentraidRow(
-        title = row.title,
-        modifier = modifier,
-        meta = row.meta,
-        trailing = row.trailing,
-        trailingTone = row.trailing_tone,
-        chips = row.chips,
-        hueKey = row.hue_key,
-        dimmed = row.dimmed,
-        pending = row.pending,
-        a11y = row.accessibility_label,
-        testTag = "kit-row-${row.id}",
-        onTap = onTap,
-    )
-}
-
-/**
- * THE ONE BADGE SHAPE (#1173): 11pt capitals on a pale tint. A tone that says a state wears
- * that state's colour (not yet and caution are amber, owe and leaves are red); a plain chip is
- * quiet ink on the fill.
- */
-@Composable
-public fun StatusChipView(chip: StatusChip, modifier: Modifier = Modifier) {
+public fun StatusChipView(chip: RoomChip, modifier: Modifier = Modifier) {
     if (chip.label.isEmpty()) return
     val tagged = modifier.testTag("kit-chip")
     when (chip.tone) {
-        StatusChip.Tone.TONE_SEAM, StatusChip.Tone.TONE_WARNING -> KitBadge(chip.label, StateColor.Amber, tagged)
-        StatusChip.Tone.TONE_NET -> KitBadge(chip.label, StateColor.Red, tagged)
-        // THE APP'S OWN GOOD NEWS: the accent's chip ground under the accent's text.
-        StatusChip.Tone.TONE_ACCENT -> {
+        RoomTone.ROOM_TONE_SEAM, RoomTone.ROOM_TONE_WARNING -> KitBadge(chip.label, StateColor.Amber, tagged)
+        RoomTone.ROOM_TONE_NET -> KitBadge(chip.label, StateColor.Green, tagged)
+        RoomTone.ROOM_TONE_ACCENT -> {
             val accent = appAccent()
             KitText(
                 chip.label,
@@ -319,11 +292,10 @@ public fun StatusChipView(chip: StatusChip, modifier: Modifier = Modifier) {
     }
 }
 
-/** A tone's ink: the state's colour for a state, otherwise the plain ink ([neutral] `text`) or meta. */
 @Composable
-public fun toneInk(tone: StatusChip.Tone, neutral: String): Color = when (tone) {
-    StatusChip.Tone.TONE_SEAM, StatusChip.Tone.TONE_WARNING -> StateColor.Amber.text
-    StatusChip.Tone.TONE_NET -> StateColor.Red.text
+public fun toneInk(tone: RoomTone, neutral: String): Color = when (tone) {
+    RoomTone.ROOM_TONE_SEAM, RoomTone.ROOM_TONE_WARNING -> StateColor.Amber.text
+    RoomTone.ROOM_TONE_NET -> StateColor.Green.text
     else -> if (neutral == "text") Surface.ink else Surface.meta
 }
 
@@ -571,48 +543,7 @@ public fun ChoiceFieldRow(
     }
 }
 
-/**
- * What an autosave says, in words: the status line an [EditorRoom] hosts. The
- * machine's own words (`Autosave.label`, the kit law's), never spelt here.
- */
-public fun autosaveLabel(autosave: Autosave?): String = autosave?.label.orEmpty()
-
-/**
- * THE AUTOSAVE STATUS LINE. A refusal is `net` ink and its sentence, over the
- * words and never instead of them; everything else is quiet.
- */
-@Composable
-public fun AutosaveStatus(autosave: Autosave?, modifier: Modifier = Modifier) {
-    val label = autosaveLabel(autosave)
-    if (label.isEmpty()) return
-    val refused = autosave?.refused == true
-    val reload = autosave?.reload_label.orEmpty()
-    val acted = LocalStatusActed.current
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            label,
-            style = centraidType("annotLabel"),
-            color = if (refused) centraidColor("net") else centraidColor("textSoft"),
-            maxLines = 2,
-            modifier = Modifier.testTag("kit-autosave"),
-        )
-        // A SAVE THE VAULT REFUSED BECAUSE THE RECORD CHANGED ELSEWHERE (#1185): the words stay,
-        // and Reload is the one verb. It is the kit's `StatusActed`, which Rust answers.
-        if (reload.isNotEmpty()) {
-            Text(
-                reload,
-                style = centraidType("annotLabel").copy(fontWeight = FontWeight.SemiBold),
-                color = centraidColor("text"),
-                modifier = Modifier
-                    .heightIn(min = KitGeometry.ROW_MIN)
-                    .clickable(onClick = acted)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-                    .testTag("kit-autosave-reload")
-                    .semantics { role = Role.Button },
-            )
-        }
-    }
-}
+// Party hues below.
 
 /**
  * A party hue to its colour. The state carries either the theme's colour role
@@ -637,81 +568,4 @@ private val PARTY_HUES: Set<String> =
 private val PARTY_ROLES: Set<String> = PARTY_HUES.mapTo(mutableSetOf()) { "c" + it.replaceFirstChar(Char::uppercaseChar) }
 
 
-/**
- * THE SAME ROW FROM THE SCREEN RUNTIME'S CONTAINER (#1135): a tap hands the
- * container's own [centraid.core.v1.Route] to the shell, which pushes it.
- */
-@Composable
-public fun SearchContainerRow(
-    container: centraid.core.v1.SearchContainer,
-    modifier: Modifier = Modifier,
-    onOpen: (centraid.core.v1.Route) -> Unit,
-) {
-    val route = container.route
-    SearchContainerLine(
-        container.entity,
-        container.id,
-        container.icon_key,
-        container.title,
-        container.kind_label,
-        container.accessibility_label,
-        modifier,
-        onTap = if (route != null) ({ onOpen(route) }) else null,
-    )
-}
 
-@Composable
-private fun SearchContainerLine(
-    entity: String,
-    id: String,
-    iconKey: String,
-    title: String,
-    kindLabel: String,
-    accessibilityLabel: String,
-    modifier: Modifier,
-    onTap: (() -> Unit)?,
-) {
-    // A matched container is one pill above the rows (#1173): its glyph in the app's colour, the
-    // kind in meta, then its name.
-    val shape = RoundedCornerShape(percent = 50)
-    // THE PRESS IS ON THE NODE THAT CARRIES THE ID AND THE SPOKEN LABEL (#1202): `clearAndSetSemantics`
-    // below drops every descendant's actions, so a click on the pill alone left the container
-    // unreachable by TalkBack and by a Maestro tap on its id, which lands in the row's middle.
-    // THE PILL KEEPS ITS OWN PRESS FEEDBACK: the row takes the press and no ripple of its own, and the
-    // pill draws the indication for the same interaction source, so it looks as it did.
-    val press = remember { MutableInteractionSource() }
-    Box(
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
-            .then(
-                if (onTap != null) {
-                    Modifier.clickable(interactionSource = press, indication = null, onClick = onTap)
-                } else {
-                    Modifier
-                },
-            )
-            .padding(horizontal = KitGeometry.GUTTER + 2.dp, vertical = 4.dp)
-            .testTag("search-container-$entity-$id")
-            .clearAndSetSemantics {
-                contentDescription = accessibilityLabel
-                role = Role.Button
-            },
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Row(
-            Modifier
-                .clip(shape)
-                .background(Surface.card)
-                .border(KitGeometry.HAIRLINE, Surface.border, shape)
-                .indication(press, LocalIndication.current)
-                .heightIn(min = KitGeometry.ROW_MIN)
-                .padding(start = 8.dp, end = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CentraidIcon(iconKey = iconKey, tint = appAccent().text, size = 16.dp)
-            KitText(kindLabel, KitType.Meta, Surface.meta, Modifier.padding(start = 6.dp), maxLines = 1)
-            KitText(title, KitType.Row, Surface.ink, Modifier.padding(start = 6.dp), maxLines = 1)
-        }
-    }
-}

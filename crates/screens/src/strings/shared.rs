@@ -5,6 +5,15 @@
 //! sentence adds it here in its own block.
 
 catalog! {
+    counted selected_count = ("1 selected", "{n} selected");
+    plain menu_select = ("Select", "Select");
+    plain organize = ("Move or tag", "Move or tag");
+    plain move_to = ("Move to", "Move to");
+    plain move_to_top = ("Top level", "Top level");
+    plain add_tag = ("Add a tag", "Add a tag");
+    plain new_tag = ("Create a tag…", "Create a tag…");
+    plain tag_name = ("Tag name", "Tag name");
+
     // How fetching one original back ended (`SharedCopy.FETCH_*`).
     plain fetch_unreachable = ("Can't reach your backup device. Try again later.", "Can't reach your backup device. Try again later.");
     plain fetch_not_in_backup = ("Your backup device doesn't hold this original.", "Your backup device doesn't hold this original.");
@@ -15,6 +24,14 @@ catalog! {
     plain download_original = ("Download original", "Download original");
     plain original_downloading = ("Downloading the original…", "Downloading the original…");
 
+    plain day_long = ("{weekday} {day} {month}", "{weekday} {day} {month}");
+    plain weekday_full_fri = ("Friday", "Friday");
+    plain weekday_full_mon = ("Monday", "Monday");
+    plain weekday_full_sat = ("Saturday", "Saturday");
+    plain weekday_full_sun = ("Sunday", "Sunday");
+    plain weekday_full_thu = ("Thursday", "Thursday");
+    plain weekday_full_tue = ("Tuesday", "Tuesday");
+    plain weekday_full_wed = ("Wednesday", "Wednesday");
     plain all_day = ("All day", "All day");
     plain autosave_changed_elsewhere = ("Changed on another device", "Changed on another device");
     plain stale_changed_note = ("This {noun} changed somewhere else.", "This {noun} changed somewhere else.");
@@ -50,6 +67,10 @@ catalog! {
     plain kit_refresh = ("Refresh", "Refresh");
     plain kit_retry = ("Try again", "Try again");
     plain kit_save = ("Save", "Save");
+    plain date_invalid = ("Enter a valid date.", "Enter a valid date.");
+    plain phone_says = ("Phone says", "Phone says");
+    plain take_phone_value = ("Use phone value", "Use phone value");
+    plain phone_value_none = ("Not set", "Not set");
     plain kit_search = ("Search", "Search");
     plain kit_unflag = ("Unflag", "Unflag");
     plain kit_select = ("Select", "Select");
@@ -139,6 +160,7 @@ catalog! {
     plain weekday_wed = ("Wed", "Wed");
     plain yesterday = ("Yesterday", "Yesterday");
     plain read_failed = ("Couldn't read this. Try again.", "Couldn't read this. Try again.");
+    plain core_request_failed = ("Couldn't reach your vault. Try again.", "Couldn't reach your vault. Try again.");
     plain read_refresh_failed = ("Couldn’t refresh; showing what was here.", "Couldn’t refresh; showing what was here.");
     plain read_more_failed = ("Couldn’t load the rest; showing what loaded.", "Couldn’t load the rest; showing what loaded.");
     plain read_incomplete = ("Part of this didn't arrive. Try again.", "Part of this didn't arrive. Try again.");
@@ -154,16 +176,45 @@ catalog! {
     plain owner_unprotected = ("This phone has no passcode, so nothing confirmed it's you.", "This phone has no passcode, so nothing confirmed it's you.");
     // TAKE OUT (#1185): the one export screen and the one Share entry, said the same in every app.
     plain export_done = ("Export saved", "Export saved");
+    plain export_done_unprotected = ("Export saved. This phone has no passcode, so nothing confirmed it's you.", "Export saved. This phone has no passcode, so nothing confirmed it's you.");
+    plain export_unverified = ("Export could not be verified on this phone.", "Export could not be verified on this phone.");
+    plain export_unavailable = ("This export is not available.", "This export is not available.");
+    plain export_missing_file = ("The export did not produce a file.", "The export did not produce a file.");
+    plain export_unreadable = ("The export file could not be read.", "The export file could not be read.");
+    plain export_prepare_failed = ("The export file could not be prepared.", "The export file could not be prepared.");
+    plain export_save_failed = ("The export could not be saved.", "The export could not be saved.");
+    plain original_downloaded = ("Original downloaded to this vault.", "Original downloaded to this vault.");
+    plain original_already_here = ("The original is already in this vault.", "The original is already in this vault.");
+    plain original_unreachable = ("The backup device is not reachable right now.", "The backup device is not reachable right now.");
+    plain original_not_in_backup = ("This backup does not contain the original.", "This backup does not contain the original.");
+    plain original_untrusted = ("The original could not be verified.", "The original could not be verified.");
+    plain original_damaged = ("The original could not be read safely.", "The original could not be read safely.");
+    plain original_unavailable = ("The original could not be downloaded.", "The original could not be downloaded.");
     counted export_saved_files = ("Export saved: {n} file", "Export saved: {n} files");
     counted export_missing = ("{n} original was left out", "{n} originals were left out");
     counted export_more = ("and {n} more", "and {n} more");
     plain export_entry = ("Export", "Export");
     plain export_failed = ("Could not export", "Could not export");
+    plain attachment_unavailable = ("The attachment could not be added.", "The attachment could not be added.");
+    plain link_picker_title = ("Add a link", "Add a link");
+    plain link_add = ("Add link", "Add link");
+    plain link_remove = ("Remove link", "Remove link");
+    plain link_search_label = ("Find an item", "Find an item");
+    plain link_results = ("Matching items", "Matching items");
+    plain link_no_results = ("No matching items", "No matching items");
+    plain link_unavailable = ("This link could not be added.", "This link could not be added.");
     plain export_headline = ("Choose what to export", "Choose what to export");
     plain share_entry = ("Share", "Share");
     plain share_failed = ("Could not share", "Could not share");
+    plain copy_failed = ("Could not copy.", "Could not copy.");
     plain share_title = ("Share a copy", "Share a copy");
     plain undo_label = ("Undo", "Undo");
+    plain versions_title = ("Earlier versions", "Earlier versions");
+    plain section_versions = ("Earlier versions", "Earlier versions");
+    plain empty_versions_title = ("No earlier versions", "No earlier versions");
+    plain empty_versions_body = ("Changes kept for this item will appear here.", "Changes kept for this item will appear here.");
+    plain restore_version = ("Restore", "Restore");
+    counted versions_summary = ("1 earlier version", "{n} earlier versions");
     counted undo_partial = ("{n} change was not undone", "{n} changes were not undone");
     plain undo_stale = ("This changed again, so it was not undone", "This changed again, so it was not undone");
     plain undone = ("Undone", "Undone");

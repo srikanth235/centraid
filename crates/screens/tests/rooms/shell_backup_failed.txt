@@ -1,0 +1,3 @@
+room system_place key="backup"
+  header title="Backup"
+  failed "The core could not be asked." retry="Try again" #retry

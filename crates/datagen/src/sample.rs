@@ -337,11 +337,6 @@ impl<'a> Sampler<'a> {
                     out.push(eq("type", t));
                 }
             }
-            "list" => {
-                if let Some(a) = row.text("area") {
-                    out.push(eq("area", a));
-                }
-            }
             _ => {}
         }
         // a budget's month is not a date `when` can read, so no period selects one
@@ -1159,23 +1154,11 @@ impl<'a> Sampler<'a> {
             value: Val::Text(self.fresh_name(kind, rng, &[&row.name])),
         };
         match kind {
-            "task" => match rng.below(3) {
+            "task" => match rng.below(2) {
                 0 => changes.push(Change {
                     field: "priority".into(),
                     value: Val::Num(rng.range(1, 9) as f64),
                 }),
-                1 => {
-                    changes.push(Change {
-                        field: "effort".into(),
-                        value: Val::Num((rng.range(1, 8) * 15) as f64),
-                    });
-                    if rng.chance(0.5) {
-                        changes.push(Change {
-                            field: "priority".into(),
-                            value: Val::Num(rng.range(1, 9) as f64),
-                        });
-                    }
-                }
                 _ => changes.push(rename(rng)),
             },
             "person" => match rng.below(3) {
@@ -1214,12 +1197,13 @@ impl<'a> Sampler<'a> {
                     value: Val::Num((rng.range(low, high) * step) as f64),
                 });
             }
+            "budget" => changes.push(Change {
+                field: "amount".into(),
+                value: Val::Num((rng.range(5, 80) * 10) as f64),
+            }),
             _ => changes.push(rename(rng)),
         }
-        // What a health store states is not written here: every seeded world follows one, so the
-        // runtime refuses the edit, names the store, and the turn ends on that refusal (the
-        // owner's ruling: refuse edits to synced rows and name the source).
-        let synced = matches!(kind, "workout" | "daily figure");
+        let synced = kind == "daily figure";
         let repair = !synced && roll >= REPAIR_FROM;
         Some(self.turn(
             Intent::Edit { target, changes },
@@ -1259,12 +1243,6 @@ impl<'a> Sampler<'a> {
                         value: Val::Num(rng.range(1, 9) as f64),
                     });
                 }
-                if rng.chance(0.4) {
-                    fields.push(Change {
-                        field: "effort".into(),
-                        value: Val::Num((rng.range(1, 8) * 15) as f64),
-                    });
-                }
             }
             "event" => {
                 let day = rng.range(1, 30);
@@ -1291,10 +1269,6 @@ impl<'a> Sampler<'a> {
             "note" => fields.push(Change {
                 field: "body".into(),
                 value: Val::Text("Remember to follow up on this.".into()),
-            }),
-            "list" => fields.push(Change {
-                field: "area".into(),
-                value: Val::Text("Household".into()),
             }),
             "locker item" => {
                 fields.push(Change {
@@ -1808,7 +1782,13 @@ impl<'a> Sampler<'a> {
                     vec![20, 21, 22, 22]
                 }
             }
-            Intent::Create { .. } if prev.outcome == Outcome::Done => vec![30],
+            Intent::Create { kind, .. } if prev.outcome == Outcome::Done => {
+                if kind == "category" {
+                    vec![30]
+                } else {
+                    vec![30, 20]
+                }
+            }
             _ => vec![],
         };
         // a seeded shuffle

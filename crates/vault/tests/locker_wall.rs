@@ -1,210 +1,244 @@
-//! THE LOCKER WALL, SWEPT (#1185, owner ruling D11): a Locker item may start a link and is seen
-//! only inside Locker. The page door is the one wall: a page over `entity` or `edge` is given
-//! without Locker's rows, and without the edges that touch one, unless the read is NAMED as one
-//! that may reach them (`page::reaches_locker`).
-//!
-//! The sweep reads every read name the repository's source declares (`name: "app.read"`), over
-//! the two tables a far-end card or a "what is joined to this" read goes through, and holds each
-//! one to the wall: a Locker item linked to other items shows nowhere but to a read named for
-//! Locker, for Home's count of its items, or for the assistant (the owner's ruling of 2026-10-22).
-//! A new read is swept the day it is written, so a missing filter in one query cannot reach a
-//! member's page by being added.
+//! LOCKER IS AN ORDINARY APP (#1214, K1, K2, K4, K6, K10): a Locker item is a link end, a
+//! `[[title]]` target, taggable, holds attachments and is listed on a person's page like any
+//! item; no Locker branch is in the links or the edges; the "hidden from every door that is not
+//! Locker's" rule is gone. What stays different is sealing, and take-out: an item has no share,
+//! "Export everything" leaves Locker out, and its contents leave only through Locker's own export,
+//! which refuses on a phone with no passcode. (The unlock wall in front of opening Locker is a
+//! screen's: the vault exposes the failed-unlock count and the stamps, proved in
+//! `locker_commands.rs`.)
 
 mod common;
 
-use std::fs;
-use std::path::Path;
-
-use centraid_vault::commands::Registry;
-use centraid_vault::page::{KeysetPage, reaches_locker};
-use centraid_vault::{Command, CommandStatus, Principal};
+use centraid_vault::links;
+use centraid_vault::model::Kind;
+use common::locker::{add, item_id, plain, secret, world};
 use serde_json::json;
 
-const TITLE: &str = "Zq Wall Bank 7";
-
-/// The reads the wall lets reach Locker's rows: Locker's own, Home's count, the assistant's.
-fn may_reach_locker(name: &str) -> bool {
-    name.starts_with("locker.") || name == "home.locker" || name.starts_with("assist.native.")
-}
-
-/// Every `name: "app.read"` in the repository's Rust source outside tests.
-fn declared_read_names() -> Vec<String> {
-    fn walk(dir: &Path, out: &mut Vec<String>) {
-        let Ok(entries) = fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let file = entry.file_name();
-            let file = file.to_string_lossy();
-            if path.is_dir() {
-                if file != "target" && file != "tests" && file != "node_modules" {
-                    walk(&path, out);
-                }
-            } else if file.ends_with(".rs") && !file.ends_with("_tests.rs") {
-                let Ok(text) = fs::read_to_string(&path) else {
-                    continue;
-                };
-                let mut rest = text.as_str();
-                while let Some(at) = rest.find("name: \"") {
-                    rest = &rest[at + "name: \"".len()..];
-                    let Some(end) = rest.find('"') else { break };
-                    let name = &rest[..end];
-                    let shaped = name.contains('.')
-                        && name.len() < 80
-                        && name.chars().all(|c| {
-                            c.is_ascii_lowercase() || c.is_ascii_digit() || "._-".contains(c)
-                        });
-                    if shaped {
-                        out.push(name.to_owned());
-                    }
-                }
-            }
-        }
-    }
-    let mut found = Vec::new();
-    walk(
-        &centraid_ontology::scratch::repo_root().join("crates"),
-        &mut found,
+#[test]
+fn an_item_is_linked_mentioned_tagged_attached_and_listed_on_a_persons_page_like_any_item() {
+    let w = world("locker_ordinary");
+    let item = item_id(&w);
+    add(
+        &w,
+        &item,
+        "login",
+        "Acme Bank",
+        vec![
+            plain("username", "me"),
+            secret(&w, &item, "password", "s3cret"),
+        ],
     );
-    found.sort();
-    found.dedup();
-    found
-}
-
-fn page(name: &str, from: &str, select: &[&str], sort: &str, pk: &str) -> KeysetPage {
-    KeysetPage {
-        name: name.to_owned(),
-        select: select.iter().map(|c| (*c).to_owned()).collect(),
-        from: from.to_owned(),
-        predicate: None,
-        binds: Vec::new(),
-        sort_column: sort.to_owned(),
-        pk_column: pk.to_owned(),
-        descending: false,
-        limit: 500,
-        after: None,
-        held_thumbnail: false,
-        document_size: false,
-    }
+    let ada = w.person("Ada");
+    let note = w.ok(
+        "note.create",
+        json!({ "title": "Money", "body": "Where I bank: [[Acme Bank]]" }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // A `[[title]]` resolves to the item, and the page of the item lists the note that says it.
+    assert_eq!(
+        w.one::<String>("SELECT to_id FROM mention WHERE note_id = ?1", &[&note]),
+        item
+    );
+    let linked = |id: &str| w.vault().read(|c| links::linked(c, id)).unwrap();
+    assert!(linked(&item).iter().any(|l| l.id == note && l.in_text));
+    // A hand link, from either end.
+    w.ok("link.add", json!({ "a": item, "b": ada }));
+    assert!(linked(&item).iter().any(|l| l.id == ada));
+    assert!(
+        linked(&ada).iter().any(|l| l.id == item),
+        "listed on the person's page"
+    );
+    w.ok("link.remove", json!({ "a": ada, "b": item }));
+    assert!(!linked(&item).iter().any(|l| l.id == ada));
+    // `with` a person and `about` anything, like a note or a task.
+    w.ok(
+        "edge.add",
+        json!({ "from": item, "rel": "with", "to": ada }),
+    );
+    w.ok(
+        "edge.add",
+        json!({ "from": item, "rel": "about", "to": note }),
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel IN ('with', 'about')",
+            &[&item]
+        ),
+        2
+    );
+    // Tagged, starred, archived and re-titled by the shared verbs.
+    w.ok("tag.add", json!({ "id": item, "label": "banking" }));
+    w.ok("flag.set", json!({ "id": item, "flag": "pinned" }));
+    w.ok(
+        "entity.retitle",
+        json!({ "id": item, "title": "Acme Savings" }),
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged'",
+            &[&item]
+        ),
+        1
+    );
+    // An attached document or photo is an ordinary item, never sealed.
+    let scan = w.made(Kind::Document, "Statement scan");
+    let photo = w.made(Kind::Photo, "Card photo");
+    w.ok(
+        "edge.add",
+        json!({ "from": item, "rel": "attached", "to": scan }),
+    );
+    w.ok(
+        "edge.add",
+        json!({ "from": item, "rel": "attached", "to": photo }),
+    );
+    assert_eq!(
+        w.strings(
+            "SELECT e.kind FROM edge a JOIN entity e ON e.id = a.to_id
+              WHERE a.from_id = ?1 AND a.rel = 'attached' ORDER BY e.kind",
+            &[&item]
+        ),
+        ["document", "photo"]
+    );
+    // A page over `entity` or `edge` serves the item like any other (no Locker exclusion)...
+    let page = |name: &str, from: &str, select: &[&str], sort: &str, pk: &str| {
+        w.vault()
+            .keyset_page(&centraid_vault::page::KeysetPage {
+                name: name.to_owned(),
+                select: select.iter().map(|c| (*c).to_owned()).collect(),
+                from: from.to_owned(),
+                predicate: None,
+                binds: Vec::new(),
+                sort_column: sort.to_owned(),
+                pk_column: pk.to_owned(),
+                descending: false,
+                limit: 200,
+                after: None,
+                held_thumbnail: false,
+                document_size: false,
+            })
+            .expect("served")
+    };
+    let entities = format!(
+        "{:?}",
+        page(
+            "generic.entities",
+            "entity",
+            &["id", "kind", "title"],
+            "id",
+            "id"
+        )
+        .rows
+    );
+    assert!(entities.contains("Acme Savings"));
+    let edges = format!(
+        "{:?}",
+        page(
+            "generic.edges",
+            "edge",
+            &["from_id", "to_id"],
+            "from_id",
+            "to_id"
+        )
+        .rows
+    );
+    assert!(edges.contains(&item));
+    // ...and a plain field is a plain column anyone may read, while a sealed column is named by
+    // its presence only.
+    let fields = page(
+        "generic.fields",
+        "locker_item_field",
+        &["id", "label", "value_sealed IS NOT NULL AS sealed"],
+        "id",
+        "id",
+    );
+    assert!(!format!("{:?}", fields.rows).contains("lk1:"));
 }
 
 #[test]
-fn no_read_but_lockers_homes_or_the_assistants_is_given_a_locker_item_or_an_edge_that_touches_one()
-{
-    let scratch = common::Scratch::founded("locker-wall").expect("a vault");
-    scratch
-        .vault
-        .commit(|tx| {
-            tx.set_producer("test.fixture");
-            tx.connection().execute(
-                "INSERT INTO locker_key (key_id, created_at) VALUES ('k1', '2026-01-01T00:00:00.000Z')",
-                [],
-            )?;
-            Ok(())
-        })
-        .expect("key");
-    let registry = Registry::with_system_commands().expect("registry");
-    let run = |name: &str, input: serde_json::Value| -> serde_json::Value {
-        let outcome = scratch
-            .vault
-            .execute(
-                &registry,
-                &Principal::owner("phone"),
-                &Command::new(name, input),
-            )
-            .expect("runs");
-        assert_eq!(
-            outcome.status,
-            CommandStatus::Executed,
-            "{name}: {:?}",
-            outcome.reason
-        );
-        outcome.output
-    };
-    let id = |o: serde_json::Value| o["id"].as_str().expect("id").to_owned();
-    let maya = id(run("person.add", json!({"title": "Maya"})));
-    let note = id(run("note.create", json!({"title": "Plan", "body": "x"})));
-    run(
-        "locker.add_item",
-        json!({"item_id": "lk1", "type": "login", "title": TITLE}),
-    );
-    // A Locker item starts links to a person, by `about`, and to a note, by `links`.
-    run(
-        "edge.add",
-        json!({"from": "lk1", "rel": "about", "to": maya}),
-    );
-    run(
-        "edge.add",
-        json!({"from": "lk1", "rel": "links", "to": note}),
-    );
-
-    let names = declared_read_names();
-    assert!(
-        names.len() > 50,
-        "the sweep read {} names; the scan is broken",
-        names.len()
-    );
-    let mut swept = 0;
-    for name in &names {
-        // THE WALL IS DECIDED BY THE NAME: only the three named kinds of read may reach Locker.
-        assert_eq!(
-            reaches_locker(name),
-            may_reach_locker(name),
-            "`{name}` is {} reach a Locker item, and only Locker's reads, Home's count and the \
-             assistant's may",
-            if reaches_locker(name) {
-                "allowed to"
-            } else {
-                "not allowed to"
-            }
-        );
-        if may_reach_locker(name) {
-            continue;
+fn links_and_edges_have_no_locker_branch() {
+    for file in ["src/links.rs", "src/commands/edge.rs"] {
+        let text =
+            std::fs::read_to_string(format!("{}/{file}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        for word in [
+            "locker_item",
+            "LockerItem",
+            "locker_exclusion",
+            "reaches_locker",
+        ] {
+            assert!(
+                !text.contains(word),
+                "{file} still branches on Locker: `{word}`"
+            );
         }
-        swept += 1;
-        let entities = scratch
-            .vault
-            .keyset_page(&page(name, "entity", &["id", "title", "kind"], "id", "id"))
-            .expect("a page over entity");
-        let seen = format!("{:?}", entities.rows);
-        assert!(
-            !seen.contains("lk1") && !seen.contains(TITLE) && !seen.contains("locker_item"),
-            "`{name}` was served a Locker item over `entity`: {seen}"
-        );
-        // The people and notes it links are still there: the wall did not empty the page.
-        assert!(
-            seen.contains(&maya) && seen.contains(&note),
-            "`{name}`: {seen}"
-        );
-        let edges = scratch
-            .vault
-            .keyset_page(&page(
-                name,
-                "edge",
-                &["from_id", "to_id", "rel"],
-                "from_id",
-                "to_id",
-            ))
-            .expect("a page over edge");
-        let seen = format!("{:?}", edges.rows);
-        assert!(
-            !seen.contains("lk1"),
-            "`{name}` was served an edge that touches a Locker item: {seen}"
-        );
     }
-    assert!(swept > 50, "only {swept} reads were held to the wall");
+    let page =
+        std::fs::read_to_string(format!("{}/src/page.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    assert!(!page.contains("locker_exclusion") && !page.contains("pub fn reaches_locker"));
+}
 
-    // And the reads the wall names DO reach it, so the sweep is not passing on an empty page.
-    let reaching = scratch
-        .vault
-        .keyset_page(&page(
-            "locker.sweep",
-            "entity",
-            &["id", "title"],
-            "id",
-            "id",
-        ))
-        .expect("Locker's own read");
-    assert!(format!("{:?}", reaching.rows).contains(TITLE));
+#[test]
+fn an_items_contents_leave_only_through_lockers_own_export_which_needs_a_passcode() {
+    let w = world("locker_takeout");
+    let item = item_id(&w);
+    add(
+        &w,
+        &item,
+        "login",
+        "Bank",
+        vec![
+            plain("username", "me"),
+            secret(&w, &item, "password", "s3cret"),
+        ],
+    );
+    // Confirmed, and refused on a phone with no passcode, in a sentence.
+    let sentence = w.refused(
+        "locker.export",
+        json!({ "confirm": true, "device_passcode": false }),
+    );
+    assert!(sentence.contains("passcode"), "{sentence}");
+    let out = w.ok(
+        "locker.export",
+        json!({ "confirm": true, "device_passcode": true }),
+    );
+    assert_eq!(out["item_count"], 1);
+    let first = &out["items"][0]["fields"];
+    assert!(
+        first.to_string().contains("lk1:"),
+        "a secret leaves as ciphertext for the core to open"
+    );
+    assert!(!out.to_string().contains("s3cret"));
+    // It stamps no item: a file is not a use.
+    assert!(
+        w.one::<Option<String>>(
+            "SELECT last_used_at FROM locker_item WHERE id = ?1",
+            &[&item]
+        )
+        .is_none()
+    );
+    // The commands' own schema requires the confirmation.
+    let unconfirmed = w.vault().execute(
+        &w.registry,
+        &centraid_vault::Principal::owner("phone"),
+        &centraid_vault::Command::new(
+            "locker.export",
+            json!({ "confirm": false, "device_passcode": true }),
+        ),
+    );
+    assert!(
+        unconfirmed.is_err()
+            || unconfirmed.unwrap().status != centraid_vault::CommandStatus::Executed
+    );
+    // "Export everything" leaves Locker out: nothing in it reads a Locker table, and an item is
+    // not handed to the share sheet (no command or read of the vault serves one for sharing).
+    let everything = std::fs::read_to_string(format!(
+        "{}/src/commands/vault_export.rs",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    assert!(
+        !everything.contains("FROM locker_") && !everything.contains("JOIN locker_"),
+        "the whole-vault export reads a Locker table"
+    );
 }

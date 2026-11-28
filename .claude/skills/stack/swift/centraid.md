@@ -26,6 +26,15 @@
 - Use stable element identity in dynamic collections. Keep controls accessible, support Dynamic Type and Reduce Motion, and localize visible text.
 - For detailed API and review guidance, follow the relevant [Swift](general/swift.md), [data flow](general/data.md), [view](general/views.md), [accessibility](general/accessibility.md), or [diagnostics](general/diagnostics.md) reference. Use [performance](general/performance.md) for performance work.
 
+## Keychain
+
+`errSecMissingEntitlement` or `errSecInteractionNotAllowed` means the app lacks the right access group, or the item's accessibility class does not allow the read (a background pass reads with `AfterFirstUnlock`; a share extension shares the app's group). Fix the entitlement or the class, not the call. The share extension and the app group need both to be set.
+
+## Views and async work
+
+- A view's `body` runs often and on the main thread: no formatting, sorting, parsing or I/O in it. Rust computes; the view draws the value it was given.
+- Async work a view starts uses `.task` or `.task(id:)`, which cancels when the view leaves. Check `Task.isCancelled` in long loops, and never write a result to a model after cancellation.
+
 ## Common diagnostics
 
 - `Main actor-isolated … from a nonisolated context`: isolate the caller or explicitly hop to the actor.

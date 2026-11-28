@@ -1,0 +1,4 @@
+room sheet key="photos/album/01900000-0000-7000-8000-000000003040/trash-confirm"
+  header title="Move album to trash?"
+  ready
+    confirm outlined "Move album to trash?" body="“Coastline” moves to trash. Its photos stay in your library." yes="Move to trash"#confirm/yes no="Cancel"#confirm/no

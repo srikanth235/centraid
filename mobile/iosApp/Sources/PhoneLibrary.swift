@@ -8,50 +8,54 @@ import UniformTypeIdentifiers
 
 /// THE CAMERA ROLL'S PHOTOKIT HALF (#1025 S6; #1080, the walker; #1135).
 ///
-/// `imports.camera_roll` decides everything (the grant's words, the cursor the vault keeps, what
-/// may cross which link, an edit beside its original, what to render); this file only performs
-/// what it asks, as effects, and answers them:
+/// The core decides everything (the cursor the vault keeps, what may cross which link, an edit
+/// beside its original, what to render); this file only performs what it asks, as effects:
 ///
-/// - `LibraryPermission` reads or asks the grant ([permission], [requestPermission]);
 /// - `RollPage` lists the assets after a cursor this file minted ([page]);
 /// - `LibraryStage` streams one resource straight out of Photos into the stage door, with no
 ///   second copy ([stage]);
 /// - `LibraryDerivatives` renders the tiers the core lacks from the CURRENT edit and stages them
 ///   against the original ([derivatives]).
-///
-/// A library change while the app is on screen is told to the roll as `LibraryChanged`
-/// ([LibraryWatcher]).
+struct RollResourceRecord {
+    enum Role { case cameraOriginal, original, pairedVideo }
+    let ref: String
+    let role: Role
+}
+
+struct RollAssetRecord {
+    var localIdentifier = ""
+    var after = ""
+    var video = false
+    var capturedAt = ""
+    var offsetMinutes = 0
+    var captureGroup = ""
+    var width = 0
+    var height = 0
+    var durationSeconds = 0.0
+    var latitude: Double?
+    var longitude: Double?
+    var resources: [RollResourceRecord] = []
+}
+
+struct RollPageResult {
+    var assets: [RollAssetRecord] = []
+    var exhausted = false
+    var nextCursor = ""
+}
+
+struct LibraryStageOutcome {
+    enum Outcome { case ready, gone, inCloud, failed }
+    var outcome = Outcome.failed
+    var mediaType = ""
+    var contentHash = ""
+    var byteSize: UInt64 = 0
+    var alreadyHeld = false
+    var derivativesHeld: [String] = []
+    var handle: Centraid_Core_V1_StageHandle?
+}
+
 enum PhoneLibrary {
     enum ArchiveStageResult { case unavailable, staged(String), unreadable }
-
-    // MARK: The grant
-
-    /// The grant as it stands; never prompts.
-    static func permission() -> Centraid_Core_V1_PhotosMediaPermission {
-        permission(of: PHPhotoLibrary.authorizationStatus(for: .readWrite))
-    }
-
-    /// ASK, AND WAIT FOR THE ANSWER. `.readWrite` and nothing narrower: `.addOnly`
-    /// cannot enumerate at all, so an app granted it would find an empty roll.
-    static func requestPermission() async -> Centraid_Core_V1_PhotosMediaPermission {
-        let status = await withCheckedContinuation { continuation in
-            PHPhotoLibrary.requestAuthorization(for: .readWrite) { continuation.resume(returning: $0) }
-        }
-        await LibraryWatcher.shared.registerIfAllowed()
-        return permission(of: status)
-    }
-
-    private static func permission(of status: PHAuthorizationStatus) -> Centraid_Core_V1_PhotosMediaPermission {
-        switch status {
-        case .authorized: return .granted
-        // A FIRST-CLASS STATE, not a denial with fewer photos.
-        case .limited: return .limited
-        case .denied: return .denied
-        case .restricted: return .restricted
-        case .notDetermined: return .notAsked
-        @unknown default: return .unspecified
-        }
-    }
 
     // MARK: One page
 
@@ -64,7 +68,7 @@ enum PhoneLibrary {
     /// member edited the asset. A token Photos no longer answers for starts the first walk again,
     /// which the core's `already_held` makes cheap. No cursor, and one this build did not write, is
     /// that first walk: the cursor lives in the vault and is trusted for the install that wrote it.
-    static func page(cursor: String, limit: Int) async -> Centraid_Core_V1_RollPaged {
+    static func page(cursor: String, limit: Int) async -> RollPageResult {
         let fields = cursor.components(separatedBy: field)
         if fields.first == tokenWalk, fields.count == 3 {
             let offered = Int(fields[2]) ?? 0
@@ -81,7 +85,7 @@ enum PhoneLibrary {
     /// The first walk: `creationDate` keyset. **The predicate is `>=`, and the overlap is skipped
     /// here**, because `localIdentifier` is no key `NSPredicate` over `PHAsset` accepts; an asset
     /// with NO `creationDate` reads as the floor, where Photos' ascending sort puts it too.
-    private static func keysetPage(from: KeysetCursor?, token: String?, limit: Int) async -> Centraid_Core_V1_RollPaged {
+    private static func keysetPage(from: KeysetCursor?, token: String?, limit: Int) async -> RollPageResult {
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
         if let from {
@@ -92,7 +96,7 @@ enum PhoneLibrary {
         }
         // A LAZY, SNAPSHOT-BACKED FETCH: reading `limit` of them costs `limit` reads.
         let fetched = PHAsset.fetchAssets(with: options)
-        var assets: [Centraid_Core_V1_RollAsset] = []
+        var assets: [RollAssetRecord] = []
         var index = 0
         var passed = from == nil
         while index < fetched.count, assets.count < limit {
@@ -107,7 +111,7 @@ enum PhoneLibrary {
             let after = token.map { "\(keysetWalk)\(field)\($0)\(field)\(cursor.encoded)" } ?? cursor.encoded
             assets.append(await describe(asset, cursor: cursor, after: after))
         }
-        var paged = Centraid_Core_V1_RollPaged()
+        var paged = RollPageResult()
         paged.assets = assets
         paged.exhausted = index >= fetched.count
         // THE END OF THE FIRST WALK HANDS OVER TO ITS TOKEN, taken when it started, so nothing
@@ -122,13 +126,13 @@ enum PhoneLibrary {
 
     /// Every walk after the first: the assets added or edited since `token`, `offered` of them
     /// already offered. Nil when Photos will not answer for the token.
-    private static func changedPage(token: String, offered: Int, limit: Int) async -> Centraid_Core_V1_RollPaged? {
+    private static func changedPage(token: String, offered: Int, limit: Int) async -> RollPageResult? {
         guard let changes = ChangeTokens.changed(since: token) else { return nil }
         let window = Array(changes.identifiers.dropFirst(offered).prefix(limit))
         let found = PHAsset.fetchAssets(withLocalIdentifiers: window, options: nil)
         var byID: [String: PHAsset] = [:]
         found.enumerateObjects { asset, _, _ in byID[asset.localIdentifier] = asset }
-        var assets: [Centraid_Core_V1_RollAsset] = []
+        var assets: [RollAssetRecord] = []
         for (at, id) in window.enumerated() {
             // ADDED OR EDITED, THEN DELETED inside the window: nothing to offer. A deletion is
             // never mirrored (R-1127-4): the vault is the backup.
@@ -138,7 +142,7 @@ enum PhoneLibrary {
             let after = "\(tokenWalk)\(field)\(token)\(field)\(offered + at + 1)"
             assets.append(await describe(asset, cursor: KeysetCursor(epochMillis: epochMillis(of: asset), localID: id), after: after))
         }
-        var paged = Centraid_Core_V1_RollPaged()
+        var paged = RollPageResult()
         paged.assets = assets
         paged.exhausted = offered + window.count >= changes.identifiers.count
         // CAUGHT UP: the next walk is from the newest change seen.
@@ -152,7 +156,7 @@ enum PhoneLibrary {
     /// movie; an edit is a render beside what the camera wrote (A20), its ref naming the
     /// `modificationDate` it is read at. Burst members and RAW pairs get no group: grouping on
     /// `burstIdentifier` would invent a relationship the owner never made.
-    private static func describe(_ asset: PHAsset, cursor: KeysetCursor, after: String) async -> Centraid_Core_V1_RollAsset {
+    private static func describe(_ asset: PHAsset, cursor: KeysetCursor, after: String) async -> RollAssetRecord {
         let live = asset.mediaSubtypes.contains(.photoLive)
         let identifier = asset.localIdentifier
         let resources = PHAssetResource.assetResources(for: asset)
@@ -160,17 +164,18 @@ enum PhoneLibrary {
         // Photos never rendered leaves the camera's file as the only one, and it is then both.
         let edited = asset.hasAdjustments
         let camera = edited && resources.contains(where: isRender) && cameraOf(resources) != nil
-        var rolled = Centraid_Core_V1_RollAsset()
+        var rolled = RollAssetRecord()
+        rolled.localIdentifier = identifier
         rolled.after = after
-        rolled.kind = asset.mediaType == .video ? .video : .photo
+        rolled.video = asset.mediaType == .video
         rolled.capturedAt = iso(epochMillis: cursor.epochMillis)
-        rolled.capturedUtcOffsetMinutes = Int32(await captureOffset(of: asset))
+        rolled.offsetMinutes = await captureOffset(of: asset)
         rolled.captureGroup = live || edited ? identifier : ""
         // WHAT THE LIBRARY KNOWS (#1146 D5): the pixel box, a movie's length and where it was taken,
         // each only when Photos has it (a coordinate pair or nothing).
-        rolled.width = Int32(clamping: max(asset.pixelWidth, 0))
-        rolled.height = Int32(clamping: max(asset.pixelHeight, 0))
-        if asset.mediaType == .video { rolled.durationS = max(asset.duration, 0) }
+        rolled.width = max(asset.pixelWidth, 0)
+        rolled.height = max(asset.pixelHeight, 0)
+        if asset.mediaType == .video { rolled.durationSeconds = max(asset.duration, 0) }
         if let coordinate = asset.location?.coordinate, CLLocationCoordinate2DIsValid(coordinate) {
             rolled.latitude = coordinate.latitude
             rolled.longitude = coordinate.longitude
@@ -188,11 +193,8 @@ enum PhoneLibrary {
         return rolled
     }
 
-    private static func resource(_ ref: String, _ role: Centraid_Core_V1_RollResource.Role) -> Centraid_Core_V1_RollResource {
-        var resource = Centraid_Core_V1_RollResource()
-        resource.ref = ref
-        resource.role = role
-        return resource
+    private static func resource(_ ref: String, _ role: RollResourceRecord.Role) -> RollResourceRecord {
+        RollResourceRecord(ref: ref, role: role)
     }
 
     // MARK: One resource, into the stage door
@@ -200,8 +202,8 @@ enum PhoneLibrary {
     /// OPEN ONE RESOURCE AND STREAM IT THROUGH THE STAGE DOOR (#1080 ruling 6): `source =
     /// OS_LIBRARY` with the ref as `os_ref`, and nothing copied. An original only in iCloud is
     /// downloaded only when Rust allowed it (`allow_network`).
-    static func stage(_ asked: Centraid_Core_V1_LibraryStage, core: any ScreenCore) async -> Centraid_Core_V1_LibraryStaged {
-        var staged = Centraid_Core_V1_LibraryStaged()
+    static func stage(_ asked: Centraid_Core_V1_LibraryStage, core: any ScreenCore) async -> LibraryStageOutcome {
+        var staged = LibraryStageOutcome()
         guard let resource = resource(for: asked.ref) else {
             staged.outcome = .gone
             return staged
@@ -242,6 +244,7 @@ enum PhoneLibrary {
             staged.byteSize = handle.byteSize
             staged.alreadyHeld = handle.alreadyHeld
             staged.derivativesHeld = handle.derivativesHeld
+            staged.handle = handle
         case .refused:
             // The sentence is Rust's to word.
             staged.outcome = .failed
@@ -753,34 +756,6 @@ final class LibraryStream: @unchecked Sendable {
         let shouldCancel = !wasClosed && !ended
         condition.unlock()
         if shouldCancel { cancel() }
-    }
-}
-
-/// THE LIBRARY CHANGED WHILE THE APP IS ON SCREEN: a nudge to walk, told to the camera roll
-/// (`ImportsCameraRollEvent.LibraryChanged`). It reports THAT the library changed and never what:
-/// the cursor is the durable answer.
-///
-/// **REGISTERING IS AN ACCESS, NOT A SUBSCRIPTION.** With the grant still `notDetermined`,
-/// `register` presents the system's photo prompt itself, which is how a phone with no vault once
-/// asked for the camera roll at first launch. So the observer waits for an answer that lets the
-/// app read: it is registered when one is held, and again after the member grants one.
-@MainActor
-final class LibraryWatcher: NSObject, PHPhotoLibraryChangeObserver {
-    static let shared = LibraryWatcher()
-
-    /// What a change is told to; set by the session.
-    var onChange: (() -> Void)?
-    private var registered = false
-
-    func registerIfAllowed() {
-        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        guard !registered, status == .authorized || status == .limited else { return }
-        registered = true
-        PHPhotoLibrary.shared().register(self)
-    }
-
-    nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
-        DispatchQueue.main.async { self.onChange?() }
     }
 }
 #endif

@@ -1,0 +1,19 @@
+room app_place key="people/lists"
+  header title="Lists"
+    key add sym="Plus" "New list" #key/add
+  band home=#band/home search=#band/search more=#band/more
+    tab "People" sym="Users" #tab/people
+    tab "Lists" sym="List" selected #tab/lists
+    menu #band/more/menu
+      section
+        item "Follow Contacts" #more/follow-contacts
+        item "Import vCard or CSV" #more/import
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    section #section/lists "Lists"
+      row #row/01900000-0000-7000-8000-000000000040 "Studio" meta="1 person" swipe="Move to trash" #row/01900000-0000-7000-8000-000000000040/trash
+        menu #list/01900000-0000-7000-8000-000000000040/menu
+          section
+            item "Open" #list/01900000-0000-7000-8000-000000000040/open
+            item "Move to trash" destructive #list/01900000-0000-7000-8000-000000000040/trash

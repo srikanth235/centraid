@@ -1,0 +1,7 @@
+The iOS GitHub Actions job builds both llama-enabled Rust targets, runs Swift compilation and XCTest through `verify-ios.sh`, then builds the unsigned generic iPhone app whenever the Rust-core step succeeded and the job was not cancelled. The screenshot/log artifact steps run with `always()` so evidence is retained when simulator tests fail. `verify-ios.sh` collects normal UI failures and still runs its separate Reduce Motion pass before returning failure; this behavior is verified in run `46084049333` and was absent in the earlier `096e04cb` run.
+
+Hosted run `46071464163` confirms the independent unsigned iPhone build still succeeds after the simulator/UI step fails. In that older source revision, the separate Reduce Motion pass did not run after UI failure. This verifies device-target compilation only; no physical iPhone installation or behavior is established.
+
+Validation after the current edits: `actionlint 1.7.12 .github/workflows/gate.yml` passed; `bash -n mobile/scripts/verify-ios.sh` passed. ShellCheck was not run.
+
+Run `46084049333` at source `be6c4d0` completed: both Rust targets, Swift compilation, 175 unit tests and the unsigned generic-device build passed. The normal UI suite had 53 failures and Reduce Motion had 26; artifact uploads passed and the overall workflow failed on these checks. The 20,491,866-byte review artifact was hash-verified; physical-device behavior remains untested.

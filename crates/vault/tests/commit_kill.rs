@@ -45,9 +45,9 @@ fn child_commits_and_stops() {
             tx.connection().execute_batch(&format!(
                 "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < {ROWS})
                  INSERT INTO entity (id, kind, title, created_at, updated_at)
-                 SELECT 'big-' || i, 'note', 'T' || i, '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z' FROM n;
+                 SELECT printf('%08x-0000-7000-8000-%012x', 25165824, i), 'note', 'T' || i, '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z' FROM n;
                  INSERT INTO note (id, body)
-                 SELECT id, printf('%02000d', rowid) FROM entity WHERE id LIKE 'big-%';"
+                 SELECT id, printf('%02000d', rowid) FROM entity WHERE kind = 'note';"
             ))?;
             Ok(())
         })
@@ -89,11 +89,11 @@ fn notes(dir: &std::path::Path) -> i64 {
     let vault = Vault::open(dir.join("vault.db")).expect("a killed commit opens clean");
     let count = vault
         .read(|c| {
-            Ok(c.query_row(
-                "SELECT COUNT(*) FROM entity WHERE id LIKE 'big-%'",
-                [],
-                |r| r.get(0),
-            )?)
+            Ok(
+                c.query_row("SELECT COUNT(*) FROM entity WHERE kind = 'note'", [], |r| {
+                    r.get(0)
+                })?,
+            )
         })
         .expect("counts");
     vault.finish().expect("closes");

@@ -7,49 +7,46 @@ import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PersistableBundle
 import android.provider.Settings
-import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import centraid.core.v1.BackgroundStatus
-import centraid.core.v1.CameraRead
 import centraid.core.v1.CameraRoll
-import centraid.core.v1.Effect
 import centraid.core.v1.EffectDone
 import centraid.core.v1.EffectFailed
 import centraid.core.v1.EffectRequest
 import centraid.core.v1.EffectResult
+import centraid.core.v1.DeviceDelete
+import centraid.core.v1.DeviceGet
+import centraid.core.v1.DevicePut
+import centraid.core.v1.DeviceRequest
+import centraid.core.v1.Envelope
 import centraid.core.v1.HomeStatus
-import centraid.core.v1.ImportSource
 import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
-import centraid.core.v1.LibraryPermissionRead
-import centraid.core.v1.LinkReading
 import centraid.core.v1.PassNoted
-import centraid.core.v1.PhoneChanged
+import centraid.core.v1.ShellEffect
+import centraid.core.v1.ShellEffectResult
+import centraid.core.v1.Request
+import centraid.core.v1.ShellDone
+import centraid.core.v1.ShellFailed
+import centraid.core.v1.ShellGrant
+import centraid.core.v1.FollowGrant
+import centraid.core.v1.FollowRequest
+import centraid.core.v1.FollowVerb
 import dev.centraid.android.backup.BackupNow
-import dev.centraid.android.backup.LinkFacts
 import dev.centraid.android.backup.PassWork
-import dev.centraid.android.glance.GlanceSnapshot
-import dev.centraid.android.glance.GlanceWidgets
-import dev.centraid.android.glance.HealthSnapshot
-import dev.centraid.android.glance.HealthWidget
-import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.kit.EffectReason
 import dev.centraid.android.kit.SecretStores
-import dev.centraid.android.kit.StoreRefusal
+import dev.centraid.android.kit.ModelFileTransfer
 import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.notify.Notify
-import dev.centraid.android.screens.PhotoHandOff
-import dev.centraid.android.screens.agenda.readCalendarSnapshot
-import dev.centraid.android.screens.docs.FolderReader
-import dev.centraid.android.screens.people.readContactsSnapshot
-import dev.centraid.android.screens.photos.PhotosEditRender
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -62,24 +59,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okio.ByteString.Companion.encodeUtf8
 
-/**
- * WHAT THE ACTIVITY ALONE CAN DO: a prompt, a picker, a sheet, a haptic. Set by the composition
- * that hosts the screens (`kit/ScreenEffects.kt`) for as long as it lives; with none up (a window
- * WorkManager granted with the app closed) such an effect is answered `cancelled`.
- */
 internal interface UiHost {
-    /** Perform an effect only an activity can. Null: it answers itself later, through [answer]. */
     suspend fun perform(request: EffectRequest, answer: (EffectResult) -> Unit): EffectResult?
-
-    /** Show the system's photo prompt and wait until it is answered. */
+    suspend fun performShell(effect: ShellEffect): ShellEffectResult
+    suspend fun followCameraRoll(askPermission: Boolean): FollowGrant
+    suspend fun pickFollowFolder(): FollowFolderPick
+    suspend fun askHealthPermissions(permissions: Set<String>): Set<String>
+    suspend fun askStorePermission(system: String, askPermission: Boolean): Boolean
     suspend fun askMedia()
-
-    /** Ask for one runtime permission; whether it was granted. */
     suspend fun ask(permission: String): Boolean
-
 }
 
-/** A present host may answer asynchronously; only an absent host is a cancelled window. */
+internal data class FollowFolderPick(val grant: FollowGrant, val uri: String = "")
+
 internal suspend fun performUiEffect(
     host: UiHost?,
     request: EffectRequest,
@@ -89,22 +81,6 @@ internal suspend fun performUiEffect(
     return host.perform(request, answer)
 }
 
-/**
- * THE PLATFORM WORK THE SCREEN RUNTIME ASKS FOR, PERFORMED ONCE (#1135).
- *
- * Every effect of the one runtime comes here: what needs only a context is performed here (the
- * secret stores, the keychain, the pass service's windows and long run, the phone imports' library,
- * folders and link, the stage door, the phone stores' reads and watches, the LAN browse for a gateway, the clipboard, a link
- * opened), and what needs the activity goes to [ui]. Each is answered under its `effect_id`.
- *
- * **IN THE ORDER ASKED, PER SCREEN, EXCEPT THE CLIPBOARD.** A service tells its effects apart by
- * what they answer (the pass service attributes an answer to its oldest outstanding effect of that
- * kind, the camera roll keeps a cursor write apart from a wait), so one screen's effects are
- * performed one after another. Clipboard writes and clears share one app-wide queue because a
- * Locker screen can be popped before its copy reaches Android, while Lock comes from another
- * screen. Only an effect that answers more than once and for long (a model download) runs beside
- * them.
- */
 internal class ShellEffects(
     context: Context,
     private val core: CentraidCore,
@@ -113,20 +89,15 @@ internal class ShellEffects(
 ) {
     private val context: Context = context.applicationContext
 
-    /** The activity's half, while one is up. */
     @Volatile var ui: UiHost? = null
+    private val watches = ConcurrentHashMap<String, List<android.database.ContentObserver>>()
+    private val pendingWatchTriggers = ConcurrentHashMap.newKeySet<String>()
+    private val roomShellEffectPerformer = RoomShellEffectPerformer(::performShellVariant)
 
-    val watchers = PhoneWatchers(context)
-
-    /** The LAN browse for a moved gateway (`BrowseGateways`): one per screen instance that asked. */
     private val browsing = GatewayBrowsing(this.context, scope)
-
     private val queues = EffectRequestQueues(scope) { request -> run(request) }
 
     fun start() {
-        // A BROWSE LASTS AS LONG AS THE SCREEN THAT ASKED FOR IT: `Screens` drops an instance Rust
-        // closed from its views, and the browse of one that is gone ends. Read against the views as
-        // they are now, so a browse just begun for a screen the emission predates is not ended.
         scope.launch {
             screens.views.collect { browsing.retain(screens.views.value.keys) }
         }
@@ -137,44 +108,361 @@ internal class ShellEffects(
         }
     }
 
+    suspend fun performShell(effect: ShellEffect): ShellEffectResult = roomShellEffectPerformer.perform(effect)
+
+    suspend fun performFollow(effect: ShellEffect): FollowRequest {
+        val read = requireNotNull(effect.store_read)
+        var healthGranted: Set<String>? = null
+        var healthRefused = emptyList<String>()
+        var healthBackgroundRefused = false
+        var folderRefs = read.folder_refs
+        val pickedFolder = if (read.system == "files" && read.ask_permission) ui?.pickFollowFolder()
+            ?: FollowFolderPick(FollowGrant.FOLLOW_GRANT_UNAVAILABLE) else null
+        val grant = when (read.system) {
+            "camera_roll" -> ui?.followCameraRoll(read.ask_permission) ?: FollowGrant.FOLLOW_GRANT_UNAVAILABLE
+            "contacts" -> {
+                val allowed = ui?.askStorePermission("contacts", read.ask_permission) ?: false
+                if (!allowed) FollowGrant.FOLLOW_GRANT_REFUSED else FollowGrant.FOLLOW_GRANT_GRANTED
+            }
+            "calendar" -> {
+                val allowed = ui?.askStorePermission("calendar", read.ask_permission) ?: false
+                if (!allowed) FollowGrant.FOLLOW_GRANT_REFUSED else FollowGrant.FOLLOW_GRANT_GRANTED
+            }
+            "files" -> when {
+                read.ask_permission && pickedFolder?.grant != FollowGrant.FOLLOW_GRANT_GRANTED ->
+                    pickedFolder?.grant ?: FollowGrant.FOLLOW_GRANT_UNAVAILABLE
+                read.ask_permission -> {
+                    val pickedUri = pickedFolder!!.uri.takeIf(String::isNotBlank)?.let(Uri::parse)
+                    val ref = pickedUri?.let { FollowFolderGrants.create(context, core, it) }
+                    if (ref == null) FollowGrant.FOLLOW_GRANT_UNAVAILABLE else {
+                        folderRefs = listOf(ref)
+                        FollowGrant.FOLLOW_GRANT_GRANTED
+                    }
+                }
+                else -> FollowGrant.FOLLOW_GRANT_GRANTED
+            }
+            "health" -> {
+                if (!HealthFollowReader.available(context)) {
+                    FollowGrant.FOLLOW_GRANT_UNAVAILABLE
+                } else {
+                    val requested = HealthFollowReader.permissions(read)
+                    healthGranted = if (read.ask_permission) {
+                        ui?.askHealthPermissions(requested)
+                    } else {
+                        HealthFollowReader.granted(context)
+                    }
+                    val permissionsGranted = healthGranted
+                    if (permissionsGranted != null) {
+                        healthRefused = HealthFollowReader.refusedTypes(read, permissionsGranted)
+                        healthBackgroundRefused = HealthFollowReader.backgroundRefused(read, permissionsGranted)
+                    }
+                    when {
+                        permissionsGranted == null -> FollowGrant.FOLLOW_GRANT_UNAVAILABLE
+                        permissionsGranted.intersect(requested).none {
+                            it != androidx.health.connect.client.permission.HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
+                        } ->
+                            FollowGrant.FOLLOW_GRANT_REFUSED
+                        permissionsGranted.containsAll(requested) -> FollowGrant.FOLLOW_GRANT_GRANTED
+                        else -> FollowGrant.FOLLOW_GRANT_LIMITED
+                    }
+                }
+            }
+            "reminders" -> FollowGrant.FOLLOW_GRANT_UNAVAILABLE
+            else -> FollowGrant.FOLLOW_GRANT_UNAVAILABLE
+        }
+        var answerGrant = grant
+        val snapshot = try {
+            when {
+                !grantAllowsSnapshot(read.system, grant) -> ""
+                read.system == "contacts" -> withContext(Dispatchers.IO) { FollowReaders.contacts(context) }
+                read.system == "calendar" -> withContext(Dispatchers.IO) {
+                    FollowReaders.calendar(context, read, java.time.ZoneId.systemDefault())
+                }
+                read.system == "files" -> withContext(Dispatchers.IO) { FollowReaders.files(context, core, folderRefs) }
+                read.system == "camera_roll" -> withContext(Dispatchers.IO) {
+                    CameraRollFollowReader.read(context, core, read.cursor)
+                }
+                read.system == "health" -> withContext(Dispatchers.IO) {
+                    HealthFollowReader.read(context, read, requireNotNull(healthGranted)).also { answerGrant = it.grant }.inputJson
+                }
+                else -> ""
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // A provider failure is not an empty snapshot. Tell core this pass
+            // could not be read so it cannot retire rows based on missing data.
+            answerGrant = FollowGrant.FOLLOW_GRANT_UNAVAILABLE
+            ""
+        }
+        return dev.centraid.core.ShellEffectAnswers.coreAnswer(
+            effect,
+            FollowRequest(
+                verb = FollowVerb.FOLLOW_VERB_PASS,
+                system = read.system,
+                ask_id = effect.effect_id,
+                grant = answerGrant,
+                input_json = snapshot,
+                refused = healthRefused,
+                background_refused = healthBackgroundRefused,
+            ),
+        )
+    }
+
+    private suspend fun performShellVariant(effect: ShellEffect): ShellEffectResult {
+        val outcome = when {
+            effect.open_settings != null -> {
+                val system = effect.open_settings!!.system
+                val intent = if (system == "notifications") {
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                } else {
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                }
+                asShell(start(intent))
+            }
+            effect.clipboard_copy != null -> copyToClipboard(effect.clipboard_copy!!)
+            effect.permission_status != null -> permissionStatus(effect.permission_status!!.kind)
+            effect.phone_watch != null -> phoneWatch(
+                effect.phone_watch!!.system,
+                effect.phone_watch!!.on,
+                effect.phone_watch!!.folder_refs,
+            )
+            effect.release_grant != null -> releaseGrant(effect.release_grant!!.ref)
+            effect.share != null -> share(effect.share!!)
+            effect.model_download != null -> {
+                val transfer = effect.model_download!!.transfer
+                if (transfer == null) {
+                    ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNAVAILABLE))
+                } else if (ModelFileTransfer.download(context, transfer)) {
+                    ShellEffectResult(done = ShellDone())
+                } else {
+                    ShellEffectResult(failed = ShellFailed(reason = EffectReason.FAILED))
+                }
+            }
+            else -> ui?.performShell(effect) ?: ShellEffectResult(failed = ShellFailed(reason = EffectReason.NO_WINDOW))
+        }
+        return outcome.copy(effect_id = effect.effect_id)
+    }
+
+    private fun asShell(result: EffectResult) = when {
+        result.done != null -> ShellEffectResult(done = ShellDone())
+        else -> ShellEffectResult(failed = ShellFailed(reason = result.failed?.reason ?: EffectReason.FAILED))
+    }
+
+    private suspend fun copyToClipboard(copy: centraid.core.v1.ShellClipboardCopy): ShellEffectResult {
+        if (copy.clear_owned) {
+            withContext(Dispatchers.Main) { ClipboardDeadline.clearOwned(context, copy.owner_vault_id) }
+            return ShellEffectResult(done = ShellDone())
+        }
+        val manager = clipboard()
+        val leaseId = ClipboardDeadline.newLeaseId(copy.owner_vault_id, copy.lease_s * 1000L)
+        val clip = ClipData.newPlainText("", copy.text)
+        ClipboardDeadline.markOwnedClip(clip, leaseId)
+        if (copy.sealed_ && Build.VERSION.SDK_INT >= 33) {
+            clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+        }
+        val issuedAt = try {
+            withContext(Dispatchers.Main) {
+                val now = System.currentTimeMillis()
+                manager.setPrimaryClip(clip)
+                now
+            }
+        } catch (cancelled: CancellationException) {
+            if (leaseId.isNotBlank()) withContext(NonCancellable + Dispatchers.Main) {
+                ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId)
+            }
+            throw cancelled
+        } catch (_: Exception) {
+            return ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNWRITABLE))
+        }
+        val persisted = try {
+            withContext(Dispatchers.IO) {
+                ClipboardDeadline.persist(
+                    context,
+                    copy.text,
+                    copy.lease_s * 1000L,
+                    copy.owner_vault_id,
+                    leaseId,
+                    issuedAt,
+                )
+            }
+        } catch (cancelled: CancellationException) {
+            if (leaseId.isNotBlank()) withContext(NonCancellable + Dispatchers.Main) {
+                ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId)
+            }
+            throw cancelled
+        } catch (_: Exception) {
+            false
+        }
+        if (!persisted) {
+            if (leaseId.isNotBlank()) withContext(Dispatchers.Main) {
+                ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId)
+            }
+            return ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNWRITABLE))
+        }
+        val activated = withContext(Dispatchers.Main) {
+            if (leaseId.isBlank()) {
+                ClipboardDeadline.activate(context)
+                true
+            } else {
+                ClipboardDeadline.activate(context, copy.owner_vault_id, leaseId)
+            }
+        }
+        if (!activated) {
+            withContext(Dispatchers.Main) { ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId) }
+            return ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNWRITABLE))
+        }
+        return ShellEffectResult(done = ShellDone())
+    }
+
+    private fun permissionStatus(kind: String): ShellEffectResult {
+        val permission = when (kind) {
+            "contacts" -> Manifest.permission.READ_CONTACTS
+            "calendar" -> Manifest.permission.READ_CALENDAR
+            "camera" -> Manifest.permission.CAMERA
+            "photos", "camera_roll" -> if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+            "notifications" -> if (Build.VERSION.SDK_INT >= 33) Manifest.permission.POST_NOTIFICATIONS else null
+            else -> null
+        }
+        val grant = when {
+            kind == "reminders" || permission == null -> FollowGrant.FOLLOW_GRANT_UNAVAILABLE
+            context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED -> FollowGrant.FOLLOW_GRANT_GRANTED
+            (kind == "photos" || kind == "camera_roll") && Build.VERSION.SDK_INT >= 34 &&
+                context.checkSelfPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == android.content.pm.PackageManager.PERMISSION_GRANTED ->
+                FollowGrant.FOLLOW_GRANT_LIMITED
+            else -> FollowGrant.FOLLOW_GRANT_REFUSED
+        }
+        return ShellEffectResult(grant = ShellGrant(grant = grant))
+    }
+
+    private suspend fun phoneWatch(system: String, on: Boolean, folderRefs: List<String>): ShellEffectResult {
+        watches.remove(system).orEmpty().forEach(context.contentResolver::unregisterContentObserver)
+        if (on) {
+            val uris = when (system) {
+                "contacts" -> listOf(android.provider.ContactsContract.Contacts.CONTENT_URI)
+                "calendar" -> listOf(android.provider.CalendarContract.Events.CONTENT_URI)
+                "camera_roll" -> listOf(
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                )
+                "files" -> folderRefs.map { ref ->
+                    FollowFolderGrants.resolve(core, ref)
+                        ?: return ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNAVAILABLE))
+                }
+                // Health Connect 1.1 has no shell notification registration API; the core still
+                // requests a fresh read whenever the app comes forward.
+                else -> return ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNAVAILABLE))
+            }
+            if (uris.isEmpty()) return ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNAVAILABLE))
+            val observers = uris.map { uri ->
+                object : android.database.ContentObserver(null) {
+                    override fun onChange(selfChange: Boolean) {
+                        if (!pendingWatchTriggers.add(system)) return
+                        scope.launch {
+                            try {
+                                core.call(
+                                    centraid.core.v1.Envelope(
+                                        request_id = 0,
+                                        request = centraid.core.v1.Request(
+                                            follow = centraid.core.v1.FollowRequest(
+                                                verb = centraid.core.v1.FollowVerb.FOLLOW_VERB_TRIGGER,
+                                                system = system,
+                                            ),
+                                        ),
+                                    ),
+                                )
+                            } finally {
+                                pendingWatchTriggers.remove(system)
+                            }
+                        }
+                    }
+                }
+            }
+            uris.zip(observers).forEach { (uri, observer) ->
+                context.contentResolver.registerContentObserver(uri, true, observer)
+            }
+            watches[system] = observers
+        }
+        return ShellEffectResult(done = ShellDone())
+    }
+
+    private suspend fun releaseGrant(ref: String): ShellEffectResult = try {
+        if (!FollowFolderGrants.release(context, core, ref)) return ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNAVAILABLE))
+        ShellEffectResult(done = ShellDone())
+    } catch (_: Exception) {
+        ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNAVAILABLE))
+    }
+
+    private suspend fun share(share: centraid.core.v1.ShellShare): ShellEffectResult {
+        val text = share.items.map { it.text }.filter(String::isNotEmpty).joinToString("\n\n")
+        val staged = try {
+            withContext(Dispatchers.IO) {
+                share.items.filter { it.path.isNotEmpty() }.map { item ->
+                    val source = File(item.path)
+                    if (!source.isFile) error("missing share file")
+                    val directory = File(context.cacheDir, "shared-copies").apply { mkdirs() }
+                    val name = File(item.name.ifBlank { source.name }).name
+                    val target = File(directory, "${java.util.UUID.randomUUID()}-$name")
+                    source.inputStream().use { input -> target.outputStream().use { output -> input.copyTo(output, 64 * 1024) } }
+                    target
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNREADABLE))
+        }
+        if (text.isEmpty() && staged.isEmpty()) return ShellEffectResult(failed = ShellFailed(reason = EffectReason.UNAVAILABLE))
+        val uris = ArrayList(staged.map { file ->
+            FileProvider.getUriForFile(context, context.packageName + ".photocopies", file)
+        })
+        val types = share.items.filter { it.path.isNotEmpty() }.map { it.media_type }.distinct()
+        val send = if (staged.size > 1) Intent(Intent.ACTION_SEND_MULTIPLE) else Intent(Intent.ACTION_SEND)
+        send.type = when {
+            staged.isEmpty() -> "text/plain"
+            types.size == 1 -> types.single().ifEmpty { "*/*" }
+            else -> "*/*"
+        }
+        if (text.isNotEmpty()) send.putExtra(Intent.EXTRA_TEXT, text)
+        if (staged.isNotEmpty()) {
+            if (staged.size == 1) send.putExtra(Intent.EXTRA_STREAM, uris.single())
+            else send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        if (share.subject.isNotEmpty()) send.putExtra(Intent.EXTRA_SUBJECT, share.subject)
+        return asShell(start(Intent.createChooser(send, share.subject.ifEmpty { null })))
+    }
+
     private suspend fun run(request: EffectRequest) {
         val answer: (EffectResult) -> Unit = { result -> scope.launch { screens.answer(request, result) } }
         val result = try {
             effectAttempt { perform(request, answer) }
                 .getOrElse { failed(EffectReason.FAILED) }
         } catch (cancelled: CancellationException) {
-            // A replaced system prompt cancels its deferred answer, not the session.
-            // Only that local dismissal is an effect answer; session cancellation escapes.
             currentCoroutineContext().ensureActive()
             EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
         }
         if (result != null) screens.answer(request, result)
     }
 
-    /** The answer to [request], or null when it answers itself later through [answer]. */
     private suspend fun perform(request: EffectRequest, answer: (EffectResult) -> Unit): EffectResult? {
         val effect = request.effect ?: return failed(EffectReason.UNSUPPORTED)
         val done = EffectResult(done = EffectDone())
         return when {
-            // ---- the vault's secrets (lane H2) -------------------------------------------------
             effect.secrets != null -> EffectResult(secrets = withContext(Dispatchers.IO) { SecretStores.run(context, effect.secrets!!) })
             effect.synced_probe != null -> EffectResult(synced_status = SecretStores.probe(context))
             effect.keychain != null -> withContext(Dispatchers.IO) { keychain(effect.keychain!!) }
-            // ---- the pass service (`crates/screens/src/passes`) --------------------------------
             effect.schedule_windows != null ->
                 EffectResult(windows_scheduled = PassWork.schedule(context, effect.schedule_windows!!.windows))
             effect.pass_window_done != null -> {
                 PassWork.windowDone(effect.pass_window_done!!.window, effect.pass_window_done!!.drained)
                 EffectResult(pass_noted = PassNoted())
             }
-            // ---- notifications (`crates/screens/src/agenda/notify`) ----------------------------
-            // THE PROMPT IS THE ACTIVITY'S (`UiHost.ask`); with none up nothing is asked and Rust hears NOT_ASKED.
             effect.schedule_notifications != null -> EffectResult(
                 notifications_scheduled = withContext(Dispatchers.IO) {
                     Notify.schedule(context, effect.schedule_notifications!!) { ui?.ask(Manifest.permission.POST_NOTIFICATIONS) }
                 },
             )
-            // THE APP'S NOTIFICATION PAGE, where the channels and the exact-alarm switch are.
             effect.open_notification_settings != null -> start(
                 Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
             )
@@ -185,114 +473,26 @@ internal class ShellEffects(
             effect.background_probe != null -> PassWork.registered?.let {
                 EffectResult(background_status = BackgroundStatus(registered = it))
             } ?: failed(EffectReason.NO_WINDOW)
-            // Android moves a pass's parts inside the pass; only iOS's session carries them suspended.
             effect.uploads != null -> failed(EffectReason.UNAVAILABLE)
-            // ---- the phone imports (`crates/screens/src/imports`) ------------------------------
             effect.camera_roll != null -> cameraRoll(effect.camera_roll!!)
-            effect.library_permission != null -> {
-                if (effect.library_permission!!.ask) {
-                    ui?.let { host ->
-                        LibraryRoll.notePermissionRequest(context)
-                        host.askMedia()
-                    }
-                }
-                EffectResult(library_permission_read = LibraryPermissionRead(permission = LibraryRoll.permission(context), device_id = InstallId.of(context)))
+            effect.roll_page != null -> {
+                withContext(Dispatchers.IO) { LibraryRoll.page(context, effect.roll_page!!) }
+                done
             }
-            effect.roll_page != null -> withContext(Dispatchers.IO) {
-                EffectResult(roll_paged = LibraryRoll.page(context, effect.roll_page!!.cursor, effect.roll_page!!.limit))
+            effect.library_stage != null -> {
+                withContext(Dispatchers.IO) { LibraryRoll.stage(context, core, effect.library_stage!!) }
+                done
             }
-            effect.link_read != null -> EffectResult(link_reading = linkReading())
-            effect.library_stage != null ->
-                EffectResult(library_staged = withContext(Dispatchers.IO) { LibraryRoll.stage(context, core, effect.library_stage!!) })
             effect.library_derivatives != null -> {
                 withContext(Dispatchers.IO) { LibraryRoll.derivatives(context, core, effect.library_derivatives!!) }
                 done
             }
-            effect.folders_read != null -> withContext(Dispatchers.IO) {
-                EffectResult(folders_listing = FolderReader.list(context, effect.folders_read!!.origins, InstallId.of(context)))
-            }
-            effect.stage_folder_file != null -> withContext(Dispatchers.IO) {
-                val stage = effect.stage_folder_file!!
-                EffectResult(folder_file_staged = FolderReader.stage(context, core, stage.origin, stage.path, stage.media_type))
-            }
-            // Android has no system reminders: a made vault never asks (`Made{reminders: false}`).
-            effect.reminders_read != null -> failed(EffectReason.UNAVAILABLE)
-            // ---- the phone's stores ------------------------------------------------------------
-            effect.calendar_read != null -> {
-                val read = effect.calendar_read!!
-                if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission)) {
-                    EffectResult(failed = StoreRefusal.failure(StoreRefusal.asked(context, Manifest.permission.READ_CALENDAR)))
-                } else {
-                    effectAttempt {
-                        withContext(Dispatchers.IO) { readCalendarSnapshot(context, read.days_back, read.days_on, InstallId.of(context)) }
-                    }.fold({ EffectResult(calendar = it) }, { failed(EffectReason.UNREADABLE) })
-                }
-            }
-            effect.contacts_read != null -> {
-                val read = effect.contacts_read!!
-                if (!allowed(Manifest.permission.READ_CONTACTS, read.ask_permission)) {
-                    EffectResult(failed = StoreRefusal.failure(StoreRefusal.asked(context, Manifest.permission.READ_CONTACTS)))
-                } else {
-                    effectAttempt {
-                        withContext(Dispatchers.IO) { readContactsSnapshot(context, InstallId.of(context)) }
-                    }.fold({ EffectResult(contacts = it) }, { failed(EffectReason.UNREADABLE) })
-                }
-            }
-            effect.phone_watch != null -> {
-                val watch = effect.phone_watch!!
-                when {
-                    !watchers.watches(watch.source) -> failed(EffectReason.NOT_WATCHED)
-                    watch.on -> {
-                        // ANSWERED EACH TIME THE STORE CHANGES, under this one effect id.
-                        watchers.watch(watch.source) { answer(EffectResult(phone_changed = PhoneChanged(source = watch.source))) }
-                        null
-                    }
-                    else -> {
-                        watchers.stop(watch.source)
-                        done
-                    }
-                }
-            }
-            // ---- the local network ---------------------------------------------------------------
             effect.browse_gateways != null ->
-                // ANSWERED EACH WINDOW, under this one effect id, until `on: false` or the screen closes.
-                // An instance no longer in the views was closed while this waited its turn: no browse.
                 if (request.instance !in screens.views.value) {
                     done
                 } else {
                     browsing.perform(request.instance, effect.browse_gateways!!, answer)
                 }
-            // ---- photos' device doors ------------------------------------------------------------
-            effect.read_camera != null -> {
-                val camera = withContext(Dispatchers.IO) { PhotoHandOff.cameraOf(effect.read_camera!!.path) }
-                EffectResult(camera_read = CameraRead(camera = camera.orEmpty()))
-            }
-            effect.render_edit != null -> PhotosEditRender.perform(context, core, effect.render_edit!!)
-            // ---- Agenda's widgets (#1173) --------------------------------------------------------
-            // The snapshot Rust composed, kept as the one file the widgets draw, then redrawn. A
-            // version this shell does not draw is refused, so a newer core never paints a half read.
-            effect.agenda_glance != null -> {
-                val glance = effect.agenda_glance!!
-                if (glance.version != GlanceSnapshot.VERSION) {
-                    failed(EffectReason.UNSUPPORTED)
-                } else {
-                    effectAttempt { withContext(Dispatchers.IO) { GlanceWidgets.keep(context, glance.document.toByteArray()) } }
-                        .fold({ done }, { failed(EffectReason.UNWRITABLE) })
-                }
-            }
-            // ---- Health's widget (#1185) ---------------------------------------------------------
-            // The same path as Agenda's: the document Rust composed, kept under the file name Rust
-            // chose, then the Health widgets redrawn. Another version is refused.
-            effect.health_glance != null -> {
-                val glance = effect.health_glance!!
-                if (glance.version != HealthSnapshot.VERSION) {
-                    failed(EffectReason.UNSUPPORTED)
-                } else {
-                    effectAttempt { withContext(Dispatchers.IO) { HealthWidget.keep(context, glance.file_, glance.document.toByteArray()) } }
-                        .fold({ done }, { failed(EffectReason.UNWRITABLE) })
-                }
-            }
-            // ---- generic platform work -----------------------------------------------------------
             effect.clipboard_set != null -> {
                 val set = effect.clipboard_set!!
                 val clip = ClipData.newPlainText("", set.text)
@@ -320,8 +520,6 @@ internal class ShellEffects(
                     return failed(EffectReason.UNWRITABLE)
                 }
 
-                // EffectDone is the completed-copy boundary: durably publish only the digest,
-                // owner, lease token, and original expiry before acknowledging the OS write.
                 val persisted = try {
                     withContext(Dispatchers.IO) {
                         ClipboardDeadline.persist(
@@ -351,7 +549,6 @@ internal class ShellEffects(
                     return failed(EffectReason.UNWRITABLE)
                 }
                 if (!persisted && leaseId.isNotBlank()) {
-                    // No EffectDone for an owned/timed copy whose owner/deadline lease was not durable.
                     withContext(Dispatchers.Main) {
                         ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId)
                         ClipboardDeadline.activate(context)
@@ -387,10 +584,6 @@ internal class ShellEffects(
             effect.open_url != null -> start(Intent(Intent.ACTION_VIEW, Uri.parse(effect.open_url!!.url)))
             effect.open_map != null ->
                 start(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(effect.open_map!!.query))))
-            // THIS SHEET CARRIES THE RECOVERY WORDS (#1202). Android's chooser owns its Copy button and
-            // offers no way to remove it or to mark what it copies sensitive (`EXTRA_EXCLUDE_COMPONENTS`
-            // drops apps, not the chooser's own actions); the clip this shell sets itself is marked
-            // sensitive above, and the words are never put on the clipboard by the core.
             effect.share != null -> {
                 val share = effect.share!!
                 val send = Intent(Intent.ACTION_SEND).apply {
@@ -400,26 +593,14 @@ internal class ShellEffects(
                 }
                 start(Intent.createChooser(send, share.subject.ifEmpty { null }))
             }
-            // An announce's shell half is nothing on Android: `custody.filing` files the key in Rust.
             effect.announce != null -> done
-            // The runtime moves its own selection; nothing is performed on the platform.
             effect.select_tab != null -> done
             effect.vault_command?.open_ != null -> settingsDoor(effect.vault_command!!.open_!!)
             effect.vault_command != null -> failed(EffectReason.UNSUPPORTED)
-            // A BACKGROUND WINDOW HAS NO SCREEN (D16): a pass reads Health Connect itself, with the
-            // background permission the member allowed at Connect; without it the store answers
-            // `denied` and Health follows at the next foreground. A pass never shows the sheet.
-            effect.health_read != null && ui == null && !effect.health_read!!.ask_permission ->
-                AndroidHealth(context).snapshot(effect.health_read!!) { error("a pass never asks") }
             else -> performUiEffect(ui, request, answer)
         }
     }
 
-    /**
-     * THE PLATFORM'S OWN PHOTO PAGES (D-1025-S7-75): this app's page in Settings, and Android 14's
-     * selected-photos grant, edited by asking again. Which one, and its words, are Rust's; the prompt
-     * and a walk are the camera roll's own (`LibraryPermission`).
-     */
     private suspend fun cameraRoll(roll: CameraRoll): EffectResult = when (roll.action) {
         CameraRoll.Action.ACTION_OPEN_SETTINGS -> start(
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
@@ -431,13 +612,6 @@ internal class ShellEffects(
         else -> failed(EffectReason.UNSUPPORTED)
     }
 
-    /** The link as the platform gives it now; the member's rule is Rust's to read. */
-    private fun linkReading(): LinkReading {
-        val link = LinkFacts.read(context)
-        return LinkReading(online = link.online, metered = link.metered, platform_refused = !link.metered_known)
-    }
-
-    /** THE KEYCHAIN IS THE DEVICE STORE. A value is UTF-8 text; an empty set, like a delete, removes it. */
     private fun keychain(op: KeychainOp): EffectResult = when (op.op) {
         KeychainOp.Op.OP_GET -> {
             val value = SecretStores.read(context, op.key)
@@ -454,19 +628,6 @@ internal class ShellEffects(
         else -> failed(EffectReason.UNSUPPORTED)
     }
 
-    /** Granted now, or asked at the member's own tap when [ask] and an activity is up. */
-    private suspend fun allowed(permission: String, ask: Boolean): Boolean {
-        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) return true
-        if (!ask || ui == null) return false
-        // "ASKED" IS RECORDED ONLY ONCE THE SYSTEM PROMPT HAS ANSWERED: an ask that is cancelled or
-        // interrupted (the activity went away) throws out of `ask` before this line, and a later read
-        // is then "never asked", not "refused".
-        val granted = ui?.ask(permission) == true
-        StoreRefusal.noteAsked(context, permission)
-        return granted
-    }
-
-    /** The ribbon's doors into the system's settings (the backup's is a tab Rust selects itself). */
     private fun settingsDoor(door: HomeStatus.Destination): EffectResult = when (door) {
         HomeStatus.Destination.DESTINATION_NOTIFICATIONS -> start(
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
@@ -487,10 +648,12 @@ internal class ShellEffects(
     private fun clipboard(): ClipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     private fun failed(reason: String) = EffectResult(failed = EffectFailed(reason = reason))
-
 }
 
-/** Routes normal work by screen, and clipboard mutations through one cross-screen FIFO. */
+internal fun grantAllowsSnapshot(system: String, grant: FollowGrant): Boolean =
+    grant == FollowGrant.FOLLOW_GRANT_GRANTED ||
+        ((system == "health" || system == "camera_roll") && grant == FollowGrant.FOLLOW_GRANT_LIMITED)
+
 internal class EffectRequestQueues(
     private val scope: CoroutineScope,
     private val perform: suspend (EffectRequest) -> Unit,
@@ -504,7 +667,6 @@ internal class EffectRequestQueues(
 
     suspend fun submit(request: EffectRequest) {
         val effect = request.effect
-        // A withdrawn prompt jumps its screen queue so it can end the owner check waiting there.
         if (effect?.model_download != null || effect?.owner_check?.cancel == true) {
             scope.launch { perform(request) }
         } else if (

@@ -34,9 +34,8 @@ if [ "${1:-}" = "--demo" ]; then
   shift
   set -- agenda-day search-photos "$@"
 elif [ "$#" -eq 0 ]; then
-  # The assistant flows and the iOS-only ones (HealthKit's seeder and sheet, the Chat tab Android
-  # does not have) have no Android run.
-  set -- first-launch onboarding home home-search agenda-todo agenda-task-from-search \
+  # Chat's unavailable fallback and navigation are covered; model-backed replies and iOS Health are not.
+  set -- first-launch onboarding home chat-android home-search agenda-todo agenda-task-from-search \
     app-root-edge-swipe search-containers search-correction
 fi
 

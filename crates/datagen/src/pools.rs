@@ -869,6 +869,7 @@ pub fn new_names(kind: &str) -> Option<Vec<&'static str>> {
         "category" => plain(NEW_CATEGORIES),
         "photo" => plain(NEW_PHOTOS),
         "transaction" => plain(NEW_TRANSACTIONS),
+        "rule" => plain(NEW_TRANSACTIONS),
         "locker item" => Some(NEW_LOCKER.iter().map(|(n, _)| *n).collect()),
         "account" => Some(NEW_ACCOUNTS.iter().map(|(n, _)| *n).collect()),
         _ => None,

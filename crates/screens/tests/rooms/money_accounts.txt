@@ -1,0 +1,8 @@
+room pushed_page key="money/accounts"
+  header title="Accounts"
+    back "Money" #back
+    key add sym="Plus" "Add account" #key/add
+  ready
+    section #section/active "Active"
+      row #account/01900000-0000-7000-8000-000000000101 "Checking" meta="Checking · USD" trailing="$6,055.50"
+      row #account/01900000-0000-7000-8000-000000000102 "Savings" meta="Savings · USD" trailing="$5,500.00"

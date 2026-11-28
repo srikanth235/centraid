@@ -1,9 +1,8 @@
-//! A member's vault holding the Tahoe scenario behind a real handle, and the
+//! A member's vault holding a few tasks and a document behind a real handle, and the
 //! chat's calls over the wire.
 //!
 //! Shared by the chat's integration files. The vault is founded through the
-//! door a phone uses (`FoundRequest`, no content) and then seeded with the
-//! example scenario (`centraid_core::example::seed`) through the command plane,
+//! door a phone uses (`FoundRequest`, no content) and then seeded through the command plane,
 //! so what these tests read is the rows a phone holds — and the vault stays
 //! WRITABLE, because these tests write through the chat.
 
@@ -65,8 +64,8 @@ pub fn read_tasks() -> [[String; 2]; 2] {
     ]
 }
 
-/// What a read of the tasks says on the scenario.
-pub const FOUND_TASKS: &str = "Found 12 tasks. Showing 6.";
+/// What a read of the tasks says.
+pub const FOUND_TASKS: &str = "Found 3 tasks.";
 
 /// The one step of a turn the model declines.
 pub fn decline(reason: &str) -> [String; 2] {
@@ -111,18 +110,35 @@ pub fn seed_scenario(handle: &Handle) {
     let Some(wire::response::Kind::Found(_)) = answer.kind else {
         panic!("a found answered {:?}", answer.kind);
     };
-    let report = handle
-        .with_vault(|vault| {
-            centraid_core::example::seed(
-                vault,
-                handle.registry(),
-                &handle.owner(),
-                &|_| true,
-                centraid_core::example::now_ms(),
+    for (n, title) in ["Pay the rates", "Call the plumber", "Book the dentist"]
+        .iter()
+        .enumerate()
+    {
+        let ran = handle
+            .command(
+                "task.add",
+                &serde_json::json!({ "title": title }),
+                &format!("seed-task-{n}"),
             )
-        })
-        .expect("the scenario seeds");
-    assert!(report.is_whole(), "the scenario seeds whole: {report:?}");
+            .expect("a task is added");
+        assert_eq!(
+            ran.status,
+            centraid_core::CommandStatus::Executed,
+            "{ran:?}"
+        );
+    }
+    let ran = handle
+        .command(
+            "document.create_text",
+            &serde_json::json!({ "title": "Trip notes", "body_text": "We are going to Tahoe in June." }),
+            "seed-doc",
+        )
+        .expect("a document is made");
+    assert_eq!(
+        ran.status,
+        centraid_core::CommandStatus::Executed,
+        "{ran:?}"
+    );
 }
 
 impl Sample {
@@ -195,63 +211,4 @@ impl Sample {
         }
         out
     }
-}
-
-/// The plaintexts planted in the Locker item [`with_a_locker_item`] files: its sealed password
-/// and its sealed one-time-code seed. The vault holds only their ciphertext.
-pub const PLANTED_SECRETS: [&str; 2] = [
-    "PLANTED-PASSWORD-zq7xk4-not-in-any-payload",
-    "PLANTED-OTPSEED-mv9wr2-not-in-any-payload",
-];
-
-/// File a Locker item, `Vaultbank login` (username `ada.vault`), whose password and code seed are
-/// sealed under a key written nowhere, through the owner's own door. Returns its id.
-pub fn with_a_locker_item(sample: &Sample) -> String {
-    use centraid_vault::custody::locker_key::encrypt_under_locker_key;
-    let owner = sample.handle.owner();
-    let key = sample
-        .handle
-        .with_vault(|vault| {
-            vault
-                .locker_generation()
-                .map_err(|error| centraid_core::CoreError::InvalidRequest {
-                    detail: error.to_string(),
-                })
-        })
-        .expect("the key plane lands");
-    let seal = |field_key: &str, plaintext: &str| {
-        let field_id =
-            centraid_vault::commands::locker::built_in_field_id("lk-vaultbank", field_key);
-        encrypt_under_locker_key(&[0x5a_u8; 32], &key, &field_id, plaintext)
-            .expect("the cell seals")
-    };
-    let ran = sample
-        .handle
-        .with_vault(|vault| {
-            vault
-                .execute(
-                    sample.handle.registry(),
-                    &owner,
-                    &centraid_vault::commands::Command::new(
-                        "locker.add_item",
-                        serde_json::json!({
-                            "item_id": "lk-vaultbank", "type": "login",
-                            "title": "Vaultbank login", "username": "ada.vault",
-                            "url": "https://vaultbank.example",
-                            "password": seal("password", PLANTED_SECRETS[0]),
-                            "otp_seed": seal("otp_seed", PLANTED_SECRETS[1]),
-                            "password_rotated": true, "key_id": key
-                        }),
-                    ),
-                )
-                .map_err(centraid_core::CoreError::from)
-        })
-        .expect("the owner's command answers");
-    assert_eq!(
-        ran.status,
-        centraid_vault::CommandStatus::Executed,
-        "{:?}",
-        ran.reason
-    );
-    "lk-vaultbank".to_owned()
 }

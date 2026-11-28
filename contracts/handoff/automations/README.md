@@ -1,3 +1,5 @@
+Historical: archived handoff notes; implementation paths in this snapshot may no longer exist.
+
 # Hand-offs — lane automations (#1020, wave 4)
 
 Two files this lane needs and does not own.

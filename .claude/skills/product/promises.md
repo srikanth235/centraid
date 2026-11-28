@@ -1,31 +1,23 @@
 # The promises
 
-What every app owes a member, and the one rule each follows. A promise kept in some apps and broken in others is a broken promise: the same behaviour and words in every app, on both platforms. Where an app is an exception, it is named and held to that.
+What every app owes a member. Eleven promises: P1–P8 look after the member's data, P9–P11 are daily speed and connection. A promise kept in some apps and broken in others is broken: the same behaviour and words in every app, on both platforms. An exception is named and held to that.
 
-`cargo xtask rules` prints the register in [`crates/xtask/src/promises.rs`](../../../crates/xtask/src/promises.rs): which app keeps which promise, the file that proves it, and what is still missing. Read it there; this file states the rules only.
+**Enforced** says where a promise can no longer be skipped. The kind registry, the registry tests, the census, the room contract, the units formatter, the draft service and the notification scheduler are built: `crates/domain` declares every kind's promises, `crates/domain/tests/kind_action_registry.rs`, `read_registry.rs` and `census.rs` hold them to the vault's own tables (the `registry` step of every gate profile), and enforce those promises directly through typed registries and tests.
 
-| Promise | The rule every app follows |
-| --- | --- |
-| **Keep** | Everything is one kind of record, offline, the member's. |
-| **Arrive** | Every item that was imported or followed from the phone records how it arrived, and its detail screen says so in one quiet line; a typed item has no arrival and shows no line (owner, 2026-11-18). |
-| **Change safely** | Every item can go to trash, be restored and be deleted forever; every trash can be emptied. Every action is undoable from the status line, or is confirmed first because it cannot be. Every record keeps its earlier values, listed on one screen with Restore. A save checks what it is replacing and says when it was stale. |
-| **Connect** | Every item can be linked to any other kind of item but a Locker item, through one picker. |
-| **When** | One timeline, with repeats from one engine. |
-| **How much** | Every number is a quantity with its unit, worded through the member's one units choice. |
-| **Attach** | Every item can hold a file or a photograph. A Locker item holds none. |
-| **Find** | Every field a member typed is searchable. |
-| **See truthfully** | Every screen uses one set of states: loading, empty, failed, refused, partial, not checked. |
-| **Protect** | Sealed values stay out of search, links and Ask. |
-| **Confirm it's me** | One rule: the owner check is asked before anything leaves the phone in the clear and before a restore; not on open, and not on an import. |
-| **Back up** | The gateway copy keeps catching up; "backed up" says only what a gateway acknowledged. |
-| **Recover** | The 24 words bring everything back. |
-| **Pair** | The member connects their own machine. |
-| **Take out** | Every app exports its data to an open format; every primary item can be handed to the OS as a copy; one "Export everything" covers the vault. |
-| **Be told** | Every dated thing follows one notification rule, identically on both platforms, through the one notification service. |
-| **Glance** | Widgets and shortcuts are the same set on both platforms. |
-| **Start** | Every permission is asked the same way at the moment of need, and a refusal reads the same way. |
-| **Home** | Nine apps, one product. |
+| # | Promise | The rule every app follows | Enforced |
+| --- | --- | --- | --- |
+| P1 | **Yours to change** | Any live fact is editable, imported and followed data included. What the source said stays underneath, shown as "Phone says" or "Statement says", and earlier versions are kept and restorable | Kind registry: every kind declares its earlier-versions formatter (`Versions`); follower merge tests |
+| P2 | **Truthful** | A screen is `Loading`, `Ready` or `Failed`, never emptiness for a failure or 0 for unknown. Units and currencies are explicit, in the member's one units choice. "Backed up" says only what a gateway acknowledged | Room state type; the units formatter (`crates/screens/src/kit/quantity.rs`, `settings.units`) |
+| P3 | **Follows, never writes back** | Phone stores are read one way. A record the member trashed stays trashed | Follower tests |
+| P4 | **In, out and back** | Open-format import and export in every app. One item can be handed to the OS share sheet with no owner check, except a Locker item. Other apps can share into Centraid. Originals can be fetched back, and the 24 words recover everything | Registry: every kind declares an export (`Export`) and a share (`Share`, never for a Locker item); `arrived_via` is checked by the schema |
+| P5 | **Captured in seconds, right here** | `+` opens with the primary input focused. `+` inside a place (notebook, folder, album, list, account, day, person) files there. A new-item editor keeps a draft across a kill, except Locker | Action here-scope; draft service tests (`crates/core/src/device/draft.rs`) |
+| P6 | **Keeps your place** | Back restores the scroll, the search term and the filter. An app root remembers its view. A cold start anchors time views to Today | Room contract (`crates/screens/src/room/rooms.rs`, `crates/screens/tests/rooms.rs`) |
+| P7 | **One or a hundred** | Long-press menu, trailing swipe to trash with no confirm, and Select mode. A bulk action is one commit and one Undo | Catalogue target sets (`Target::Set`, one commit); Undo groups (`crates/screens/src/room/rooms.rs`, `crates/core/src/act.rs`) |
+| P8 | **Connected both ways, and tidy** | Every item links to any other, Locker items included, through one picker. Links, mentions, guests, people in photos and places show on both records. A receipt captured in an item is filed with it. Duplicates merge cleanly | Footer blocks; the home rule in the schema |
+| P9 | **Change without fear** | Prose autosaves; a form has Cancel and Save. A stale save is refused. Every action is undoable from the status line, or confirmed first because it cannot be. Trash lasts 30 days. A delete takes only what the item holds, and says how many | Kind registry: trash noun, trash read and holder count; the catalogue: every action's inverse, or its confirm class |
+| P10 | **Guarded where it matters, calm everywhere** | The owner check is asked only for Locker, export, the recovery key and restore. Sealed values stay out of search, prompts and notifications. One status line, no badges or streaks. Every alert offers Snooze and a task's also Done. A trashed item's notifications are cleared. Imported dates are silent until asked | Catalogue confirm classes (`Confirm`: exports `owner`, purge, merge and a currency change `outlined`); the notification scheduler (`crates/core/src/notify/`) |
+| P11 | **Grounded assistant** | Answers cite live cards. Writes preview or can be undone, and are marked `actor='assistant'`. A purge leaves none of the item's words in a chat. A Locker secret never enters a prompt | Assistant tests; the census (`contracts/assist/catalog-census.csv`, `crates/domain/tests/census.rs`); `locker_plaintext_gate`; the registry's chat rule: every action is `Direct` or `Handoff`, none screen-only |
 
-Both platforms: the same behaviour, words and conditions on iOS and Android.
+Where the promises meet the member: the 24 words, pairing and "Back up" are the backup skill's ([backup/product.md](../backup/product.md)); permissions are asked once, at the moment of need, and a refusal reads the same way everywhere ([rulings/see-truthfully.md](rulings/see-truthfully.md)).
 
-Rulings behind these are in [rulings/](rulings/). To make an app keep one, see [keep a promise](../change/keep-a-promise.md).
+Rulings behind these are in [rulings/](rulings/). To make an app keep one, see [the kind registry](../change/app-plane.md#8-the-kind-registry-and-the-promise-charter).

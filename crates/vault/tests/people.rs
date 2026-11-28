@@ -1,713 +1,1092 @@
-//! A person's own verbs, against a vault the product founds: the person and its
-//! columns, the contact points, the touch, the words kept about someone, the
-//! dates, the relationships, the list, what the trash and the purge do with what
-//! was written about one person, and the contacts follower's points.
+//! People's own verbs, against a vault the product founds (#1214): a person and its columns, the
+//! avatar, contact points, dates, touches, lists and relationships, what the trash does, search and
+//! earlier versions, and "In your vault". The merge is `tests/people_merge.rs`; the follower is
+//! `tests/shared_verbs_people_follow.rs`.
 
 mod common;
 
-use centraid_vault::commands::Registry;
-use centraid_vault::{Command, CommandStatus, Principal};
-use serde_json::json;
+use centraid_vault::commands::person_date;
+use centraid_vault::commands::{contact_point, touch};
+use centraid_vault::history;
+use common::world::World;
+use serde_json::{Value as Json, json};
 
-struct World {
-    scratch: common::Scratch,
-    registry: Registry,
+fn id_of(output: &Json, key: &str) -> String {
+    output[key].as_str().expect("an id").to_owned()
 }
 
-impl World {
-    fn new() -> Self {
-        Self {
-            scratch: common::Scratch::founded("people").expect("a vault"),
-            registry: Registry::with_system_commands().expect("a registry"),
-        }
-    }
+fn add(w: &World, title: &str) -> String {
+    id_of(&w.ok("person.add", json!({ "title": title })), "id")
+}
 
-    fn run(&self, name: &str, input: serde_json::Value) -> centraid_vault::CommandOutcome {
-        self.scratch
-            .vault
-            .execute(
-                &self.registry,
-                &Principal::owner("phone"),
-                &Command::new(name, input),
-            )
-            .unwrap_or_else(|error| panic!("`{name}`: {error}"))
-    }
+fn found_by(w: &World, term: &str, id: &str) -> bool {
+    w.one::<i64>(
+        "SELECT COUNT(*) FROM search s JOIN entity e ON e.n = s.rowid
+          WHERE search MATCH ?1 AND e.id = ?2",
+        &[&format!("\"{term}\""), id],
+    ) == 1
+}
 
-    fn ok(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
-        let outcome = self.run(name, input);
-        assert_eq!(
-            outcome.status,
-            CommandStatus::Executed,
-            "{name}: {:?}",
-            outcome.reason
-        );
-        outcome.output
-    }
-
-    fn refused(&self, name: &str, input: serde_json::Value) -> String {
-        let outcome = self.run(name, input);
-        assert_eq!(
-            outcome.status,
-            CommandStatus::Failed,
-            "{name} was not refused"
-        );
-        outcome.reason.expect("a sentence")
-    }
-
-    fn person(&self, title: &str) -> String {
-        self.ok("person.add", json!({ "title": title }))["id"]
-            .as_str()
-            .expect("an id")
-            .to_owned()
-    }
-
-    fn query<T: rusqlite::types::FromSql>(&self, sql: &str, params: &[&str]) -> T {
-        self.scratch
-            .vault
-            .read(|c| Ok(c.query_row(sql, rusqlite::params_from_iter(params), |r| r.get(0))?))
-            .expect("a row")
-    }
-
-    fn count(&self, sql: &str, params: &[&str]) -> i64 {
-        self.query(sql, params)
-    }
-
-    fn found_by(&self, term: &str, id: &str) -> bool {
-        self.count(
-            "SELECT COUNT(*) FROM search s JOIN entity e ON e.n = s.rowid
-              WHERE search MATCH ?1 AND e.id = ?2",
-            &[term, id],
-        ) == 1
+fn with_blobs(seed: &str) -> World {
+    World {
+        scratch: common::Scratch::founded_with_blobs(seed).expect("a vault"),
+        registry: centraid_vault::commands::Registry::with_system_commands().expect("a registry"),
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// 1. A person
+// ---------------------------------------------------------------------------------------------
 
 #[test]
 fn a_person_is_added_edited_and_found_by_what_is_known_of_them() {
-    let w = World::new();
-    let id = w.ok(
-        "person.add",
-        json!({ "title": "Ada Lovelace", "role": "Mathematician", "birthday": "12-10", "cadence_days": 30 }),
-    )["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert_eq!(
-        w.query::<String>("SELECT form FROM person WHERE id = ?1", &[&id]),
-        "person"
+    let w = World::new("people_basics");
+    let id = id_of(
+        &w.ok(
+            "person.add",
+            json!({
+                "title": "Ada Lovelace", "given": "Ada", "family": "Lovelace", "phonetic": "AY-da",
+                "org": "Analytical Engines", "role": "Mathematician", "cadence_days": 30
+            }),
+        ),
+        "id",
     );
-    assert!(w.found_by("mathematician", &id));
-    w.ok("person.edit", json!({ "id": id, "nickname": "Countess", "met": "at a salon", "cadence_days": 0, "role": null }));
-    assert!(w.found_by("countess", &id) && w.found_by("salon", &id));
-    assert!(
-        !w.found_by("mathematician", &id),
-        "a cleared role leaves the index"
-    );
+    // The raw rows: the entity and its kind row say what was asked, the form is the column's own.
     assert_eq!(
-        w.count(
-            "SELECT cadence_days IS NULL FROM person WHERE id = ?1",
+        w.one::<String>(
+            "SELECT p.form || '|' || p.given || '|' || p.family || '|' || p.phonetic || '|' || p.org || '|' || p.role || '|' || p.cadence_days
+               FROM person p WHERE p.id = ?1",
             &[&id]
         ),
-        1,
-        "0 is no cadence"
+        "person|Ada|Lovelace|AY-da|Analytical Engines|Mathematician|30"
     );
-    w.ok("person.edit", json!({ "id": id, "title": "Ada King" }));
     assert_eq!(
-        w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
-        "Ada King"
+        w.one::<String>(
+            "SELECT kind || '|' || title FROM entity WHERE id = ?1",
+            &[&id]
+        ),
+        "person|Ada Lovelace"
+    );
+    for word in ["mathematician", "engines", "lovelace", "ada", "ay"] {
+        assert!(found_by(&w, word, &id), "{word}");
+    }
+
+    w.ok(
+        "person.edit",
+        json!({ "id": id, "nickname": "Countess", "met": "at a salon", "cadence_days": 0,
+                "role": null, "org": "Babbage & Co", "given": null }),
     );
     assert!(
-        w.refused("person.edit", json!({ "id": id, "birthday": "02-30" }))
-            .contains("not a day")
+        found_by(&w, "countess", &id) && found_by(&w, "salon", &id) && found_by(&w, "babbage", &id)
     );
+    assert!(
+        !found_by(&w, "mathematician", &id),
+        "a cleared role leaves the index"
+    );
+    assert!(
+        !found_by(&w, "analytical", &id),
+        "a replaced org leaves the index"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT (cadence_days IS NULL) + (role IS NULL) + (given IS NULL) FROM person WHERE id = ?1",
+            &[&id]
+        ),
+        3,
+        "0 is no cadence; null clears a field"
+    );
+    w.ok(
+        "person.edit",
+        json!({ "id": id, "title": "Ada King", "form": "org" }),
+    );
+    assert_eq!(
+        w.one::<String>("SELECT e.title || '|' || p.form FROM entity e JOIN person p ON p.id = e.id WHERE e.id = ?1", &[&id]),
+        "Ada King|org"
+    );
+
+    // The sentences, each also the database's (tests/schema_rules.rs).
     assert!(
         w.refused("person.add", json!({ "title": "  " }))
+            .contains("needs a name")
+    );
+    assert!(
+        w.refused("person.edit", json!({ "id": id, "title": " " }))
             .contains("needs a name")
     );
     assert!(
         w.refused("person.add", json!({ "id": id, "title": "Again" }))
             .contains("already holds")
     );
-}
-
-#[test]
-fn a_person_is_in_one_list_at_a_time() {
-    let w = World::new();
-    let list = |name: &str| {
-        w.ok("container.create", json!({ "kind": "list", "title": name }))["id"]
-            .as_str()
-            .unwrap()
-            .to_owned()
-    };
-    let (family, work) = (list("Family"), list("Work"));
-    let id = w.ok("person.add", json!({ "title": "Mum", "list_id": family }))["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let held = |list: &str| {
-        w.count(
-            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'contains' AND to_id = ?2",
-            &[list, &id],
-        )
-    };
-    assert_eq!((held(&family), held(&work)), (1, 0));
-    w.ok("person.move", json!({ "id": id, "list_id": work }));
-    assert_eq!((held(&family), held(&work)), (0, 1));
-    w.ok("person.move", json!({ "id": id }));
-    assert_eq!((held(&family), held(&work)), (0, 0));
-    let note = w.ok("note.create", json!({ "title": "x" }))["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
     assert!(
-        w.refused("person.move", json!({ "id": id, "list_id": note }))
-            .contains("not a list")
+        w.refused("person.add", json!({ "title": "Rex", "form": "robot" }))
+            .contains("not a kind of person")
+    );
+    assert!(
+        w.refused("person.edit", json!({ "id": id, "form": "robot" }))
+            .contains("not a kind of person")
+    );
+    let note = w.note("Not a person");
+    assert!(
+        w.refused("person.edit", json!({ "id": note, "title": "x" }))
+            .contains("not a person")
     );
 }
 
 #[test]
-fn contact_points_are_one_per_spelling_and_one_preferred_per_kind() {
-    let w = World::new();
-    let id = w.person("Grace");
-    let save = |kind: &str, value: &str, preferred: bool| {
-        w.ok(
-            "person.save_contact_point",
-            json!({ "id": id, "kind": kind, "value": value, "preferred": preferred }),
-        )["point_id"]
-            .as_str()
-            .unwrap()
-            .to_owned()
-    };
-    let first = save("phone", "+1 (555) 010-0100", true);
-    let second = save("phone", "+1 555 010 0200", true);
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM contact_point WHERE person_id = ?1 AND preferred = 1",
-            &[&id]
-        ),
-        1,
-        "the second preference replaced the first"
+fn a_person_is_trashed_and_restored_and_the_owner_never_is() {
+    let w = World::new("people_trash");
+    let id = add(&w, "Bea");
+    w.ok("entity.trash", json!({ "id": id }));
+    assert!(w.one::<bool>(
+        "SELECT deleted_at IS NOT NULL FROM entity WHERE id = ?1",
+        &[&id]
+    ));
+    assert!(
+        w.refused("person.edit", json!({ "id": id, "nickname": "B" }))
+            .contains("trash"),
+        "a trashed person is not edited"
     );
+    w.ok("entity.restore", json!({ "id": id }));
+    w.ok("person.edit", json!({ "id": id, "nickname": "B" }));
+    // The owner is a person nothing trashes, purges or merges away.
+    let owner = common::self_person(w.vault()).expect("the owner");
+    assert!(
+        w.refused("entity.trash", json!({ "id": owner }))
+            .contains("you")
+    );
+    assert!(
+        w.refused("entity.purge", json!({ "id": owner }))
+            .contains("you")
+    );
+    assert!(
+        w.refused("person.merge", json!({ "from": owner, "into": id }))
+            .contains("you")
+    );
+}
+
+#[test]
+fn an_avatar_is_set_replaced_and_taken_off_and_the_picture_it_replaced_is_in_the_earlier_version() {
+    let w = with_blobs("people_avatar");
+    let id = add(&w, "Cy");
+    let put = |bytes: &[u8]| {
+        w.vault()
+            .blobs()
+            .expect("a store")
+            .put(bytes)
+            .expect("stored")
+    };
+    let (one, two) = (put(b"first"), put(b"second"));
+    w.ok("person.set_avatar", json!({ "id": id, "blob": one }));
     assert_eq!(
-        w.query::<i64>(
-            "SELECT preferred FROM contact_point WHERE id = ?1",
-            &[&second]
+        w.one::<String>("SELECT avatar FROM person WHERE id = ?1", &[&id]),
+        one
+    );
+    w.ok("person.set_avatar", json!({ "id": id, "blob": two }));
+    // The version the replacement kept names the first picture in the slot the history owns.
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM revision_blob WHERE entity_id = ?1 AND slot = 'avatar' AND blob = ?2",
+            &[&id, &one]
         ),
         1
     );
-    // The same number spelled another way is the same point.
+    w.ok("person.set_avatar", json!({ "id": id, "blob": null }));
+    assert_eq!(
+        w.one::<i64>("SELECT avatar IS NULL FROM person WHERE id = ?1", &[&id]),
+        1
+    );
+    // Restoring that version puts the picture back.
+    let seq = w.one::<i64>(
+        "SELECT seq FROM revision_blob WHERE entity_id = ?1 AND slot = 'avatar' AND blob = ?2",
+        &[&id, &one],
+    );
+    w.ok("history.restore_version", json!({ "id": id, "seq": seq }));
+    assert_eq!(
+        w.one::<String>("SELECT avatar FROM person WHERE id = ?1", &[&id]),
+        one
+    );
+    assert!(
+        w.refused(
+            "person.set_avatar",
+            json!({ "id": id, "blob": "0".repeat(64) })
+        )
+        .contains("not in this vault's store")
+    );
+    // A vault with no store keeps no picture.
+    let bare = World::new("people_avatar_bare");
+    let nobody = add(&bare, "Di");
+    assert!(
+        bare.refused("person.set_avatar", json!({ "id": nobody, "blob": one }))
+            .contains("nowhere")
+    );
+}
+
+#[test]
+fn earlier_versions_of_a_person_name_what_changed_and_are_searchable() {
+    let w = World::new("people_versions");
+    let id = add(&w, "Eve");
+    w.ok("person.edit", json!({ "id": id, "org": "Quokka Labs" }));
+    w.ok(
+        "person.edit",
+        json!({ "id": id, "org": "Numbat Labs", "role": "Chief" }),
+    );
+    let earlier = w
+        .vault()
+        .read(|c| history::earlier_versions(c, &id, None, 10))
+        .expect("versions");
+    assert_eq!(earlier.versions.len(), 2);
+    let newest = &earlier.versions[0];
+    assert!(
+        newest
+            .changes
+            .iter()
+            .any(|change| change.field == "person.org"
+                && change.before == json!("Quokka Labs")
+                && change.after == json!("Numbat Labs")),
+        "{:?}",
+        newest.changes
+    );
+    // What was said is found in the version that said it, and not in the present.
+    assert!(found_by(&w, "numbat", &id) && !found_by(&w, "quokka", &id));
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT count(DISTINCT e.id) FROM search_past t JOIN entity e ON e.n = (t.rowid >> 24)
+              WHERE search_past MATCH '\"quokka\"' AND e.id = ?1",
+            &[&id]
+        ),
+        1
+    );
+    // A restore puts the earlier words back.
+    let seq = newest.seq;
+    w.ok("history.restore_version", json!({ "id": id, "seq": seq }));
+    assert_eq!(
+        w.one::<String>("SELECT org FROM person WHERE id = ?1", &[&id]),
+        "Quokka Labs"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// 2. Contact points
+// ---------------------------------------------------------------------------------------------
+
+fn points(w: &World, person: &str) -> Vec<String> {
+    w.strings(
+        "SELECT kind || ':' || value || (CASE WHEN preferred = 1 THEN '*' ELSE '' END)
+           FROM contact_point WHERE person_id = ?1 ORDER BY position, id",
+        &[person],
+    )
+}
+
+#[test]
+fn contact_points_are_one_per_spelling_and_one_preferred_per_kind_and_found_by_the_key() {
+    let w = World::new("people_points");
+    let ada = add(&w, "Ada");
+    let bob = add(&w, "Bob");
+    let first = id_of(
+        &w.ok(
+            "person.save_contact_point",
+            json!({ "id": ada, "kind": "phone", "value": "+1 (555) 010-0100", "label": "cell", "preferred": true }),
+        ),
+        "point_id",
+    );
+    let second = id_of(
+        &w.ok(
+            "person.save_contact_point",
+            json!({ "id": ada, "kind": "phone", "value": "+44 20 7946 0000" }),
+        ),
+        "point_id",
+    );
+    w.ok(
+        "person.save_contact_point",
+        json!({ "id": ada, "kind": "email", "value": "Ada@Example.com" }),
+    );
+    // The same number spelled another way is the same point; so is an address in another case.
     assert!(
         w.refused(
             "person.save_contact_point",
-            json!({ "id": id, "kind": "phone", "value": "+15550100100" })
+            json!({ "id": ada, "kind": "phone", "value": "+1 555 010 0100" })
         )
         .contains("already saved")
     );
     assert!(
         w.refused(
             "person.save_contact_point",
-            json!({ "id": id, "kind": "email", "value": "nope" })
+            json!({ "id": ada, "kind": "email", "value": "ada@example.COM" })
+        )
+        .contains("already saved")
+    );
+    assert_eq!(points(&w, &ada).len(), 3);
+
+    // One preferred per kind: preferring the second takes the preference from the first.
+    w.ok("person.prefer_contact_point", json!({ "point_id": second }));
+    assert_eq!(
+        points(&w, &ada)[..2],
+        ["phone:+1 (555) 010-0100", "phone:+44 20 7946 0000*"]
+    );
+    w.ok(
+        "person.prefer_contact_point",
+        json!({ "point_id": second, "preferred": false }),
+    );
+    assert!(points(&w, &ada).iter().all(|point| !point.ends_with('*')));
+    // An edit that does not say keeps the preference it had.
+    w.ok("person.prefer_contact_point", json!({ "point_id": first }));
+    w.ok(
+        "person.save_contact_point",
+        json!({ "id": ada, "point_id": first, "kind": "phone", "value": "+1 555 010 0199", "label": "work" }),
+    );
+    assert_eq!(points(&w, &ada)[0], "phone:+1 555 010 0199*");
+    assert_eq!(
+        w.one::<String>("SELECT label FROM contact_point WHERE id = ?1", &[&first]),
+        "work"
+    );
+
+    // The database holds the same rule.
+    assert!(
+        w.vault()
+            .commit(|tx| {
+                tx.connection().execute(
+                    "UPDATE contact_point SET preferred = 1 WHERE id = ?1",
+                    [&second],
+                )?;
+                Ok(())
+            })
+            .is_err(),
+        "two preferred points of a kind are refused by the index"
+    );
+
+    // Reorder: each point once.
+    let email = w.one::<String>(
+        "SELECT id FROM contact_point WHERE person_id = ?1 AND kind = 'email'",
+        &[&ada],
+    );
+    w.ok(
+        "person.reorder_contact_points",
+        json!({ "id": ada, "order": [&email, &second, &first] }),
+    );
+    assert_eq!(
+        points(&w, &ada),
+        [
+            "email:Ada@Example.com",
+            "phone:+44 20 7946 0000",
+            "phone:+1 555 010 0199*"
+        ]
+    );
+    assert!(
+        w.refused(
+            "person.reorder_contact_points",
+            json!({ "id": ada, "order": [&email, &second] })
+        )
+        .contains("each")
+    );
+
+    // Found by the key two spellings share, whoever holds it; the trashed are not.
+    w.ok(
+        "person.save_contact_point",
+        json!({ "id": bob, "kind": "email", "value": " ADA@example.com " }),
+    );
+    let found = |kind: &str, value: &str| {
+        w.vault()
+            .read(|c| contact_point::people_with(c, kind, value))
+            .expect("a read")
+    };
+    assert_eq!(
+        found("email", "ada@EXAMPLE.com"),
+        [ada.clone(), bob.clone()]
+    );
+    assert_eq!(found("phone", "+1-555-010-0199"), [ada.as_str()]);
+    assert_eq!(
+        w.vault()
+            .read(|c| contact_point::person_of_email(c, "ADA@example.com"))
+            .unwrap(),
+        Some(ada.clone())
+    );
+    w.ok("entity.trash", json!({ "id": bob }));
+    assert_eq!(found("email", "ada@example.com"), [ada.as_str()]);
+
+    // The sentences.
+    assert!(
+        w.refused(
+            "person.save_contact_point",
+            json!({ "id": ada, "kind": "email", "value": "nope" })
         )
         .contains("valid email")
     );
     assert!(
         w.refused(
             "person.save_contact_point",
-            json!({ "id": id, "kind": "phone", "value": "123" })
+            json!({ "id": ada, "kind": "fax", "value": "12345678" })
         )
-        .contains("7 to 15")
-    );
-    // An edit changes the point it names, keeps the one preference, and is searchable.
-    w.ok("person.save_contact_point", json!({ "id": id, "point_id": first, "kind": "phone", "value": "+44 20 7946 0958", "label": "London" }));
-    assert!(w.found_by("london", &id));
-    w.ok("person.remove_contact_point", json!({ "point_id": first }));
-    assert!(
-        !w.found_by("london", &id),
-        "a removed point leaves the index"
+        .contains("not a way to reach")
     );
     assert!(
-        w.refused("person.remove_contact_point", json!({ "point_id": first }))
+        w.refused(
+            "person.save_contact_point",
+            json!({ "id": ada, "point_id": "nope", "kind": "phone", "value": "+1 555 010 0100" })
+        )
+        .contains("no contact point")
+    );
+    w.ok("person.remove_contact_point", json!({ "point_id": second }));
+    assert_eq!(points(&w, &ada).len(), 2);
+    assert!(
+        w.refused("person.remove_contact_point", json!({ "point_id": second }))
             .contains("no contact point")
     );
 }
 
 #[test]
-fn a_touch_is_an_activity_with_the_person_and_its_words_a_note_about_it() {
-    let w = World::new();
-    let id = w.person("Alan");
-    let touch = w.ok(
-        "person.log_interaction",
-        json!({ "id": id, "kind": "call", "text": "about the engine" }),
-    )["interaction_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert_eq!(
-        w.query::<String>("SELECT type_id FROM activity WHERE id = ?1", &[&touch]),
-        "activity_kind:call"
-    );
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'with' AND to_id = ?2",
-            &[&touch, &id]
+fn the_contact_point_lookup_plan_names_its_index() {
+    let w = World::new("people_points_plan");
+    let detail = w
+        .vault()
+        .read(|c| {
+            let mut statement = c.prepare(
+                "EXPLAIN QUERY PLAN SELECT c.person_id FROM contact_point c JOIN entity e ON e.id = c.person_id
+                  WHERE c.kind = 'email' AND c.normalized = 'a@b.c' AND e.deleted_at IS NULL",
+            )?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(3))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows.join("\n"))
+        })
+        .expect("a plan");
+    assert!(detail.contains("contact_point_by_value"), "{detail}");
+    assert!(!detail.contains("SCAN contact_point"), "{detail}");
+}
+
+// ---------------------------------------------------------------------------------------------
+// 3. Dates
+// ---------------------------------------------------------------------------------------------
+
+fn dates(w: &World, person: &str) -> Vec<String> {
+    w.strings(
+        "SELECT kind || ':' || date || ':' || ifnull(label, '') FROM person_date
+          WHERE person_id = ?1 ORDER BY position, id",
+        &[person],
+    )
+}
+
+#[test]
+fn a_person_has_one_birthday_and_any_number_of_other_dates_with_or_without_a_year() {
+    let w = World::new("people_dates");
+    let ada = add(&w, "Ada");
+    let birthday = id_of(
+        &w.ok(
+            "person.add_date",
+            json!({ "id": ada, "kind": "birthday", "date": "03-14" }),
         ),
-        1
+        "date_id",
     );
+    // A yearless date is kept in vCard's own form, whichever way it was written.
+    assert_eq!(dates(&w, &ada), ["birthday:--03-14:"]);
+    w.ok(
+        "person.add_date",
+        json!({ "id": ada, "kind": "anniversary", "date": "2010-06-01", "label": "wedding" }),
+    );
+    w.ok("person.add_date", json!({ "id": ada, "date": "--12-25" }));
     assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM edge e JOIN note n ON n.id = e.from_id
-              WHERE e.rel = 'about' AND e.to_id = ?1 AND n.body = 'about the engine'",
-            &[&touch]
-        ),
-        1
+        dates(&w, &ada),
+        [
+            "birthday:--03-14:",
+            "anniversary:2010-06-01:wedding",
+            "other:--12-25:"
+        ],
+        "a date with no kind is `other`"
     );
-    // What was written about the touch finds the person it was with, and a slip
-    // of the note afterwards moves the index with it.
-    assert!(w.found_by("engine", &id));
-    let note = w.query::<String>(
-        "SELECT from_id FROM edge WHERE rel = 'about' AND to_id = ?1",
-        &[&touch],
+    // Two birthdays are refused in a sentence and by the database.
+    assert!(
+        w.refused(
+            "person.add_date",
+            json!({ "id": ada, "kind": "birthday", "date": "1990-03-14" })
+        )
+        .contains("one date of this kind")
     );
+    assert!(
+        w.vault()
+            .commit(|tx| {
+                tx.connection().execute(
+                    "INSERT INTO person_date (id, person_id, kind, single, date) VALUES ('x', ?1, 'birthday', 1, '1990-01-01')",
+                    [&ada],
+                )?;
+                Ok(())
+            })
+            .is_err()
+    );
+    // Edit: the year arrives, the label goes; a date cannot become a second birthday.
     w.ok(
-        "note.edit",
-        json!({ "id": note, "body": "about the lathe" }),
+        "person.edit_date",
+        json!({ "date_id": birthday, "date": "1815-03-14" }),
     );
-    assert!(w.found_by("lathe", &id) && !w.found_by("engine", &id));
-    // A kind the vault has not met is minted, folded; one it has is reused.
-    w.ok(
-        "person.log_interaction",
-        json!({ "id": id, "kind": "Video  Chat" }),
-    );
-    w.ok(
-        "person.log_interaction",
-        json!({ "id": id, "kind": "video chat" }),
-    );
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM concept WHERE kind = 'activity_kind' AND key = 'video chat'",
-            &[]
-        ),
-        1
+    assert_eq!(dates(&w, &ada)[0], "birthday:1815-03-14:");
+    let other = w.one::<String>(
+        "SELECT id FROM person_date WHERE person_id = ?1 AND kind = 'other'",
+        &[&ada],
     );
     assert!(
         w.refused(
-            "person.log_interaction",
-            json!({ "id": touch, "kind": "call" })
+            "person.edit_date",
+            json!({ "date_id": other, "kind": "birthday" })
         )
-        .contains("not a person")
+        .contains("one date of this kind")
+    );
+    w.ok(
+        "person.edit_date",
+        json!({ "date_id": other, "label": "Christmas", "kind": "anniversary" }),
+    );
+    assert_eq!(dates(&w, &ada)[2], "anniversary:--12-25:Christmas");
+    // The sentences.
+    for bad in ["soon", "02-30", "2023-02-29", "13-01", "--02-30"] {
+        assert!(
+            w.refused(
+                "person.add_date",
+                json!({ "id": ada, "kind": "other", "date": bad })
+            )
+            .contains("not a day"),
+            "{bad}"
+        );
+    }
+    assert!(
+        w.refused(
+            "person.add_date",
+            json!({ "id": ada, "kind": "feast", "date": "01-01" })
+        )
+        .contains("not a kind of date")
+    );
+    // A leap day is a day, with no year or in a leap year.
+    w.ok("person.add_date", json!({ "id": ada, "date": "02-29" }));
+    w.ok(
+        "person.add_date",
+        json!({ "id": ada, "date": "2024-02-29" }),
+    );
+    // Remove.
+    w.ok("person.remove_date", json!({ "date_id": other }));
+    assert!(
+        w.refused("person.remove_date", json!({ "date_id": other }))
+            .contains("no date")
+    );
+    assert_eq!(dates(&w, &ada).len(), 4);
+}
+
+#[test]
+fn a_reminder_on_two_dates_with_the_same_lead_is_two_reminders_and_a_date_goes_with_them() {
+    let w = World::new("people_date_reminders");
+    let ada = add(&w, "Ada");
+    let d1 = id_of(
+        &w.ok(
+            "person.add_date",
+            json!({ "id": ada, "kind": "birthday", "date": "03-14", "reminders": [1440, 60] }),
+        ),
+        "date_id",
+    );
+    let d2 = id_of(
+        &w.ok(
+            "person.add_date",
+            json!({ "id": ada, "kind": "anniversary", "date": "06-01", "reminders": [1440] }),
+        ),
+        "date_id",
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM reminder WHERE entity_id = ?1",
+            &[&ada]
+        ),
+        3
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(DISTINCT id) FROM reminder WHERE offset_min = 1440 AND date_id IN (?1, ?2)",
+            &[&d1, &d2]
+        ),
+        2
+    );
+    // A reminder can be added on a date later, by the shared verb; the same lead twice is refused.
+    let late = w.ok(
+        "reminder.add",
+        json!({ "entity_id": ada, "date_id": d2, "offset_min": 10 }),
+    );
+    assert!(late["id"].is_string());
+    assert!(
+        w.refused(
+            "reminder.add",
+            json!({ "entity_id": ada, "date_id": d2, "offset_min": 10 })
+        )
+        .contains("already")
+    );
+    // A person has no moment of their own: a reminder names one of their dates.
+    assert!(
+        w.refused(
+            "reminder.add",
+            json!({ "entity_id": ada, "offset_min": 10 })
+        )
+        .contains("names one of")
+    );
+    // Removing a date takes its reminders.
+    w.ok("person.remove_date", json!({ "date_id": d1 }));
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM reminder WHERE entity_id = ?1",
+            &[&ada]
+        ),
+        2
     );
 }
 
 #[test]
-fn what_is_written_about_a_person_is_a_note_a_task_a_date_or_a_journal_entry() {
-    let w = World::new();
-    let id = w.person("Hedy");
-    let note = w.ok(
-        "person.add_note",
-        json!({ "id": id, "text": "Loves frequency hopping\nand film" }),
-    )["note_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert_eq!(
-        w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&note]),
-        "Loves frequency hopping"
-    );
-    assert!(
-        w.found_by("hopping", &id),
-        "a note about them is part of what finds them"
-    );
-    let gift = w.ok(
-        "person.add_gift",
-        json!({ "id": id, "text": "a book on radios" }),
-    )["task_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let task = w.ok("person.add_task", json!({ "id": id, "text": "write back" }))["task_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let tagged = |t: &str| {
-        w.count("SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged' AND to_id = 'tag:gift'", &[t])
-    };
-    assert_eq!(
-        (tagged(&gift), tagged(&task)),
-        (1, 0),
-        "only the gift carries the gift tag"
-    );
-    // The birthday is a column; any other date is a yearly all-day event about them.
+fn calendar_reads_whose_dates_fall_on_a_day_or_in_a_month_whatever_the_year() {
+    let w = World::new("people_dates_read");
+    let ada = add(&w, "Ada");
+    let bob = add(&w, "Bob");
+    let cy = add(&w, "Cy");
     w.ok(
         "person.add_date",
-        json!({ "id": id, "label": "Birthday", "month_day": "11-09" }),
+        json!({ "id": ada, "kind": "birthday", "date": "1815-03-14" }),
     );
-    assert_eq!(
-        w.query::<String>("SELECT birthday FROM person WHERE id = ?1", &[&id]),
-        "11-09"
-    );
-    let date = w.ok(
+    w.ok(
         "person.add_date",
-        json!({ "id": id, "label": "Anniversary", "month_day": "02-29", "reminder_on": true }),
-    )["date_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+        json!({ "id": bob, "kind": "birthday", "date": "03-14" }),
+    );
+    w.ok(
+        "person.add_date",
+        json!({ "id": bob, "kind": "anniversary", "date": "2001-03-20", "label": "wedding" }),
+    );
+    w.ok(
+        "person.add_date",
+        json!({ "id": cy, "kind": "birthday", "date": "04-01" }),
+    );
+    let on = |day: &str| {
+        w.vault()
+            .read(|c| person_date::on_day(c, day))
+            .expect("a read")
+            .into_iter()
+            .map(|d| (d.person, d.kind, d.year))
+            .collect::<Vec<_>>()
+    };
     assert_eq!(
-        w.query::<String>("SELECT rule FROM event WHERE id = ?1", &[&date]),
-        "FREQ=YEARLY"
+        on("03-14"),
+        [
+            ("Ada".to_owned(), "birthday".to_owned(), Some(1815)),
+            ("Bob".to_owned(), "birthday".to_owned(), None)
+        ]
+    );
+    assert!(on("03-15").is_empty());
+    let march = w
+        .vault()
+        .read(|c| person_date::in_month(c, "03"))
+        .expect("a month");
+    assert_eq!(march.len(), 3);
+    assert_eq!(march[2].label.as_deref(), Some("wedding"));
+    assert_eq!(march[2].date, "2001-03-20");
+    // A trashed person's dates are not on the calendar.
+    w.ok("entity.trash", json!({ "id": bob }));
+    assert_eq!(on("03-14").len(), 1);
+    assert_eq!(
+        w.vault()
+            .read(|c| person_date::in_month(c, "03"))
+            .unwrap()
+            .len(),
+        1
+    );
+    // The plan is the index built for it.
+    let detail = w
+        .vault()
+        .read(|c| {
+            let mut statement = c.prepare(
+                "EXPLAIN QUERY PLAN SELECT d.id FROM person_date d CROSS JOIN entity e ON e.id = d.person_id
+                  WHERE substr(d.date, -5) BETWEEN '03-01' AND '03-31' AND e.deleted_at IS NULL",
+            )?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(3))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows.join("\n"))
+        })
+        .expect("a plan");
+    assert!(detail.contains("person_date_by_day"), "{detail}");
+    assert!(
+        !detail.contains("SCAN d") && !detail.contains("SCAN person_date"),
+        "{detail}"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// 4. Touches
+// ---------------------------------------------------------------------------------------------
+
+fn place(w: &World, name: &str) -> String {
+    let id = w.mint();
+    w.commit(|tx| {
+        tx.insert_entity_in(
+            &id,
+            centraid_vault::model::Kind::Place,
+            name,
+            None,
+            common::world::AT,
+        )?;
+        tx.connection()
+            .execute("INSERT INTO place (id) VALUES (?1)", [&id])?;
+        Ok(())
+    });
+    id
+}
+
+#[test]
+fn a_touch_is_logged_with_several_people_edited_and_trashed_and_spawns_no_note() {
+    let w = World::new("people_touch");
+    let (ada, bob) = (add(&w, "Ada"), add(&w, "Bob"));
+    let notes_before = w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'note'", &[]);
+    let out = w.ok(
+        "touch.log",
+        json!({ "people": [ada, bob], "kind": "Met up", "starts": "2026-02-01T10:00:00Z",
+                "ends": "2026-02-01T11:30:00Z", "notes": "coffee" }),
+    );
+    let id = id_of(&out, "id");
+    // A touch is an entity of its own kind with a touch kind concept, linked `with` each person.
+    assert_eq!(
+        w.one::<String>(
+            "SELECT e.kind || '|' || e.title || '|' || t.starts || '|' || t.ends || '|' || t.notes || '|' || k.key
+               FROM touch t JOIN entity e ON e.id = t.id JOIN concept k ON k.id = t.type_id WHERE t.id = ?1",
+            &[&id]
+        ),
+        "touch|Met up|2026-02-01T10:00:00.000Z|2026-02-01T11:30:00.000Z|coffee|met-up",
+        "the seeded kind is found by its word"
     );
     assert_eq!(
-        w.query::<String>("SELECT timing FROM event WHERE id = ?1", &[&date]),
-        "all-day"
+        w.strings(
+            "SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'with' ORDER BY to_id",
+            &[&id]
+        )
+        .len(),
+        2
     );
     assert_eq!(
-        w.query::<String>("SELECT group_concat(offset_min) FROM (SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min)", &[&date]),
-        "0"
+        w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'note'", &[]),
+        notes_before,
+        "no note is spawned"
+    );
+    // A word that is new is a touch kind of the member's own.
+    let own = id_of(
+        &w.ok("touch.log", json!({ "people": [ada], "kind": "Postcard" })),
+        "id",
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT c.kind FROM touch t JOIN concept c ON c.id = t.type_id WHERE t.id = ?1",
+            &[&own]
+        ),
+        "touch_kind"
+    );
+    // The history of one person is two touches, newest first; the other is in one.
+    let seen = |person: &str| {
+        w.vault()
+            .read(|c| touch::touches_of(c, person, 10))
+            .expect("touches")
+            .into_iter()
+            .map(|row| row.kind)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(seen(&ada), ["Met up", "Postcard"]);
+    assert_eq!(seen(&bob), ["Met up"]);
+
+    // Edit: the kind, the people, the end, the place.
+    let cafe = place(&w, "Café");
+    w.ok(
+        "touch.edit",
+        json!({ "id": id, "kind": "Call", "people": [bob], "ends": null, "place_id": cafe, "notes": null }),
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT e.title || '|' || (t.ends IS NULL) || '|' || t.place_id || '|' || (t.notes IS NULL) FROM touch t JOIN entity e ON e.id = t.id WHERE t.id = ?1",
+            &[&id]
+        ),
+        format!("Call|1|{cafe}|1")
+    );
+    assert_eq!(seen(&ada), ["Postcard"]);
+    assert_eq!(seen(&bob), ["Call"]);
+    // The sentences.
+    assert!(
+        w.refused("touch.log", json!({ "people": [ada], "kind": " " }))
+            .contains("what kind")
     );
     assert!(
-        w.query::<String>("SELECT starts FROM event WHERE id = ?1", &[&date])
-            .ends_with("-02-29")
+        w.refused("touch.log", json!({ "people": ["nobody"], "kind": "Call" }))
+            .contains("nothing with the id")
     );
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'about' AND to_id = ?2",
-            &[&date, &id]
-        ),
-        1
+    assert!(
+        w.refused("touch.log", json!({ "people": [ada], "kind": "Call", "starts": "2026-02-01T10:00:00Z", "ends": "2026-02-01T09:00:00Z" }))
+            .contains("before it starts")
     );
     assert!(
         w.refused(
-            "person.add_date",
-            json!({ "id": id, "label": "Never", "month_day": "02-30" })
+            "touch.log",
+            json!({ "people": [ada], "kind": "Call", "starts": "tuesday" })
         )
-        .contains("not a day")
+        .contains("not a time")
     );
-    // A journal entry is a note about the owner, titled by its mood, filed on its own day.
-    let owner = common::self_person(&w.scratch.vault).unwrap();
-    let entry = w.ok("person.add_journal_entry", json!({ "mood": "Grateful", "text": "a good day", "entry_date": "2026-03-04", "tz": "Asia/Kolkata" }))["entry_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert_eq!(
-        w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&entry]),
-        "Grateful"
+    assert!(
+        w.refused(
+            "touch.log",
+            json!({ "people": [ada], "kind": "Call", "place_id": ada })
+        )
+        .contains("not a place")
     );
-    assert_eq!(
-        w.query::<String>("SELECT created_at FROM entity WHERE id = ?1", &[&entry]),
-        "2026-03-04T06:30:00.000Z"
+    assert!(
+        w.refused("touch.edit", json!({ "id": ada, "kind": "Call" }))
+            .contains("not a touch")
     );
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'about' AND to_id = ?2",
-            &[&entry, &owner]
+    assert!(
+        w.refused("touch.edit", json!({ "id": id, "people": [] }))
+            .contains("with someone")
+    );
+    // Trash and restore are the shared verbs; a trashed touch is nobody's last contact.
+    w.ok("entity.trash", json!({ "id": id }));
+    assert!(seen(&bob).is_empty());
+    w.ok("entity.restore", json!({ "id": id }));
+    assert_eq!(seen(&bob), ["Call"]);
+    // A touch kind in use is not purged out from under it.
+    let kind = w.one::<String>("SELECT type_id FROM touch WHERE id = ?1", &[&id]);
+    assert!(
+        w.refused("entity.purge", json!({ "id": kind }))
+            .contains("change them first")
+    );
+}
+
+#[test]
+fn last_contacted_is_computed_at_read_and_a_cadence_says_who_is_due() {
+    let w = World::new("people_cadence");
+    let (ada, bob, cy) = (add(&w, "Ada"), add(&w, "Bob"), add(&w, "Cy"));
+    w.ok("person.edit", json!({ "id": ada, "cadence_days": 7 }));
+    w.ok("person.edit", json!({ "id": bob, "cadence_days": 30 }));
+    let last = |person: &str, now: &str| {
+        w.vault()
+            .read(|c| touch::last_contacted(c, person, now))
+            .expect("a read")
+    };
+    assert_eq!(last(&ada, "2030-01-01T00:00:00.000Z"), None);
+    let early = id_of(
+        &w.ok(
+            "touch.log",
+            json!({ "people": [ada], "kind": "Call", "starts": "2029-12-20T10:00:00Z" }),
         ),
-        1
+        "id",
+    );
+    w.ok(
+        "touch.log",
+        json!({ "people": [ada, bob], "kind": "Message", "starts": "2029-12-28T10:00:00Z" }),
+    );
+    // A touch in the future is not contact yet.
+    w.ok(
+        "touch.log",
+        json!({ "people": [ada], "kind": "Met up", "starts": "2031-01-01T10:00:00Z" }),
+    );
+    assert_eq!(
+        last(&ada, "2030-01-01T00:00:00.000Z").as_deref(),
+        Some("2029-12-28T10:00:00.000Z")
+    );
+    assert_eq!(
+        last(&cy, "2030-01-01T00:00:00.000Z"),
+        None,
+        "nothing is stored on the person"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM pragma_table_info('person') WHERE name LIKE '%contact%'",
+            &[]
+        ),
+        0
+    );
+    // Trashing the latest moves it back.
+    w.ok("entity.trash", json!({ "id": early }));
+    let due = |now: &str| {
+        w.vault()
+            .read(|c| touch::due(c, now))
+            .expect("due")
+            .into_iter()
+            .map(|d| (d.person, d.due_at))
+            .collect::<Vec<_>>()
+    };
+    // Ada: last 12-28 + 7 days = 01-04. Bob: last 12-28 + 30 days = 01-27. Cy has no cadence.
+    assert!(due("2030-01-03T00:00:00.000Z").is_empty());
+    assert_eq!(
+        due("2030-01-05T00:00:00.000Z"),
+        [("Ada".to_owned(), "2030-01-04T10:00:00.000Z".to_owned())]
+    );
+    assert_eq!(due("2030-02-01T00:00:00.000Z").len(), 2);
+    assert_eq!(
+        due("2030-02-01T00:00:00.000Z")[0].0,
+        "Ada",
+        "the most overdue first"
+    );
+    // Someone never contacted is due a cadence after they were added.
+    w.ok("person.edit", json!({ "id": cy, "cadence_days": 1 }));
+    assert!(
+        due("2030-02-01T00:00:00.000Z")
+            .iter()
+            .any(|(person, _)| person == "Cy")
+    );
+    // The owner is never asked about; a trashed person neither.
+    let owner = common::self_person(w.vault()).expect("owner");
+    w.ok("person.edit", json!({ "id": owner, "cadence_days": 1 }));
+    w.ok("entity.trash", json!({ "id": cy }));
+    assert!(
+        due("2030-02-01T00:00:00.000Z")
+            .iter()
+            .all(|(person, _)| person != "Cy" && person != "Test Owner")
+    );
+    // The reads use the indexes made for them.
+    let detail = w
+        .vault()
+        .read(|c| {
+            let mut statement = c.prepare(
+                "EXPLAIN QUERY PLAN SELECT max(t.starts) FROM edge w JOIN touch t ON t.id = w.from_id
+                   JOIN entity te ON te.id = t.id AND te.deleted_at IS NULL
+                  WHERE w.to_id = 'p' AND w.rel = 'with' AND t.starts <= 'x'",
+            )?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(3))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows.join("\n"))
+        })
+        .expect("a plan");
+    assert!(detail.contains("edge_to"), "{detail}");
+    assert!(
+        !detail.contains("SCAN edge") && !detail.contains("TEMP B-TREE"),
+        "{detail}"
+    );
+    let detail = w
+        .vault()
+        .read(|c| {
+            let mut statement = c.prepare(
+                "EXPLAIN QUERY PLAN SELECT p.id FROM person p WHERE p.cadence_days IS NOT NULL",
+            )?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(3))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows.join("\n"))
+        })
+        .expect("a plan");
+    assert!(detail.contains("person_by_cadence"), "{detail}");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Lists, relationships, words, "In your vault"
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_person_is_in_one_list_at_a_time() {
+    let w = World::new("people_lists");
+    let (family, work) = (w.container("list", "Family"), w.container("list", "Work"));
+    let ada = id_of(
+        &w.ok("person.add", json!({ "title": "Ada", "list_id": family })),
+        "id",
+    );
+    let members = |list: &str| {
+        w.strings(
+            "SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'",
+            &[list],
+        )
+    };
+    assert_eq!(members(&family), [ada.as_str()]);
+    let moved = w.ok("person.move", json!({ "id": ada, "list_id": work }));
+    assert_eq!(moved["replaced"]["list_id"], json!(family));
+    assert_eq!((members(&family).len(), members(&work).len()), (0, 1));
+    w.ok("person.move", json!({ "id": ada, "list_id": null }));
+    assert!(members(&work).is_empty());
+    let note = w.note("n");
+    assert!(
+        w.refused("person.move", json!({ "id": ada, "list_id": note }))
+            .contains("not a list")
     );
 }
 
 #[test]
 fn a_relationship_is_a_labelled_edge_to_a_person_the_vault_may_already_know() {
-    let w = World::new();
-    let (me, mum) = (w.person("Ada"), w.person("Mum"));
-    let related = w.ok(
+    let w = World::new("people_relations");
+    let ada = add(&w, "Ada");
+    let mum = add(&w, "Mum");
+    let out = w.ok(
         "person.add_relationship",
-        json!({ "id": me, "name": "mum", "kind": "Mother" }),
-    )["related_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert_eq!(
-        related, mum,
-        "a person of that name is reused, not duplicated"
-    );
-    assert_eq!(w.count("SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'related' AND to_id = ?2 AND label_id = 'relation:mother'", &[&me, &mum]), 1);
-    let pet = w.ok(
-        "person.add_relationship",
-        json!({ "id": me, "name": "Rex", "kind": "Pet", "pet": "dog" }),
-    )["related_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert_eq!(
-        w.query::<String>("SELECT form FROM person WHERE id = ?1", &[&pet]),
-        "pet"
+        json!({ "id": ada, "name": "mum", "kind": "mother" }),
     );
     assert_eq!(
-        w.query::<String>("SELECT role FROM person WHERE id = ?1", &[&pet]),
-        "dog"
+        out["related_id"],
+        json!(mum),
+        "an existing person of that name is the relative"
+    );
+    let rex = w.ok(
+        "person.add_relationship",
+        json!({ "id": ada, "name": "Rex", "kind": "dog", "pet": "Labrador" }),
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT form || '|' || role FROM person WHERE id = ?1",
+            &[rex["related_id"].as_str().unwrap()]
+        ),
+        "pet|Labrador"
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT l.title FROM edge e JOIN entity l ON l.id = e.label_id WHERE e.from_id = ?1 AND e.to_id = ?2",
+            &[&ada, &mum]
+        ),
+        "mother"
     );
     assert!(
         w.refused(
             "person.add_relationship",
-            json!({ "id": me, "name": "Ada", "kind": "twin" })
+            json!({ "id": ada, "name": "Ada", "kind": "self" })
         )
         .contains("themselves")
     );
-}
-
-#[test]
-fn a_persons_trash_takes_what_was_written_about_them_alone_and_a_task_stays() {
-    let w = World::new();
-    let (ada, bob) = (w.person("Ada"), w.person("Bob"));
-    let note = w.ok(
-        "person.add_note",
-        json!({ "id": ada, "text": "only about Ada" }),
-    )["note_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let shared = w.ok(
-        "person.add_note",
-        json!({ "id": ada, "text": "about Ada and Bob" }),
-    )["note_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    w.ok(
-        "edge.add",
-        json!({ "from": shared, "rel": "about", "to": bob }),
+    // A note about a person is found with them.
+    let note = id_of(
+        &w.ok(
+            "person.add_note",
+            json!({ "id": ada, "text": "Loves quokkas\nand tea" }),
+        ),
+        "note_id",
     );
-    let touch = w.ok(
-        "person.log_interaction",
-        json!({ "id": ada, "kind": "call", "text": "hello" }),
-    )["interaction_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let task = w.ok("person.add_task", json!({ "id": ada, "text": "ring back" }))["task_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let trashed = |id: &str| {
-        w.count(
-            "SELECT deleted_at IS NOT NULL FROM entity WHERE id = ?1",
-            &[id],
-        ) == 1
-    };
-    w.ok("entity.trash", json!({ "id": ada }));
-    assert!(
-        trashed(&note) && trashed(&touch),
-        "their own words and touches went with them"
+    assert_eq!(
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&note]),
+        "Loves quokkas"
     );
     assert!(
-        !trashed(&shared) && !trashed(&task),
-        "a note about two people and a task stay"
+        found_by(&w, "quokkas", &ada),
+        "a person is found by what is written about them"
     );
-    w.ok("entity.restore", json!({ "id": ada }));
-    assert!(!trashed(&note) && !trashed(&touch));
-    w.ok("entity.trash", json!({ "id": ada }));
-    w.ok("entity.purge", json!({ "id": ada }));
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM entity WHERE id IN (?1, ?2)",
-            &[&note, &touch]
-        ),
-        0
-    );
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM entity WHERE id IN (?1, ?2)",
-            &[&shared, &task]
-        ),
-        2
-    );
-    assert_eq!(w.count("SELECT COUNT(*) FROM note WHERE id IN (SELECT from_id FROM edge WHERE rel = 'about' AND to_id = ?1)", &[&touch]), 0);
-}
-
-fn contacts(w: &World, complete: bool, records: serde_json::Value) -> serde_json::Value {
-    w.ok("follow.contacts", json!({ "origin": { "ref": "phone", "label": "Phone" }, "complete": complete, "records": records }))
-}
-
-#[test]
-fn the_contacts_follower_keeps_points_in_step_without_undoing_the_member() {
-    let w = World::new();
-    let record = |points: serde_json::Value| json!([{ "external_id": "c1", "fields": { "title": "Grace Hopper", "role": "Admiral", "points": points } }]);
-    let phone = json!({ "kind": "phone", "value": "+1 555 010 0100", "label": "mobile" });
-    let email = json!({ "kind": "email", "value": "grace@navy.example" });
-    contacts(&w, true, record(json!([phone, email])));
-    let id = w.query::<String>("SELECT id FROM entity WHERE title = 'Grace Hopper'", &[]);
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM contact_point WHERE person_id = ?1",
-            &[&id]
-        ),
-        2
-    );
-    // The member adds a point and takes the email away; the source drops the phone and adds a link.
-    w.ok(
-        "person.save_contact_point",
-        json!({ "id": id, "kind": "address", "value": "1 Navy Yard" }),
-    );
-    let email_point = w.query::<String>(
-        "SELECT id FROM contact_point WHERE person_id = ?1 AND kind = 'email'",
-        &[&id],
-    );
-    w.ok(
-        "person.remove_contact_point",
-        json!({ "point_id": email_point }),
-    );
-    contacts(
-        &w,
-        true,
-        record(json!([email, { "kind": "url", "value": "https://navy.example/grace" }])),
-    );
-    let kinds: String = w.query(
-        "SELECT group_concat(kind) FROM (SELECT kind FROM contact_point WHERE person_id = ?1 ORDER BY kind)",
-        &[&id],
-    );
-    assert_eq!(
-        kinds, "address,url",
-        "the phone the source dropped is gone, the email the member removed stays removed, their address stays"
-    );
-    assert_eq!(
-        w.query::<i64>(
-            "SELECT COUNT(*) FROM person WHERE id = ?1 AND role = 'Admiral'",
-            &[&id]
-        ),
-        1
+    assert!(
+        w.refused("person.add_note", json!({ "id": ada, "text": "  " }))
+            .contains("nothing written")
     );
 }
 
 #[test]
-fn a_new_record_is_matched_to_the_member_s_own_person_by_name_and_only_adds() {
-    let w = World::new();
-    let id = w.person("Katherine Johnson");
-    w.ok(
-        "person.save_contact_point",
-        json!({ "id": id, "kind": "email", "value": "kj@nasa.example" }),
+fn in_your_vault_lists_what_a_person_is_linked_to_a_locker_item_like_any_other() {
+    let w = World::new("people_in_vault");
+    let ada = add(&w, "Ada");
+    let item = w.bare(
+        centraid_vault::model::Kind::LockerItem,
+        "Ada's passport",
+        None,
     );
-    let tally = contacts(
-        &w,
-        true,
-        json!([{ "external_id": "c9", "fields": { "title": "katherine johnson", "role": "Mathematician",
-        "points": [{ "kind": "phone", "value": "+1 555 010 0300" }] } }]),
-    );
+    let note = w.note("Ada notes");
+    for other in [&item, &note] {
+        w.ok("link.add", json!({ "a": ada, "b": other }));
+    }
+    let linked = w
+        .vault()
+        .read(|c| centraid_vault::commands::person::in_your_vault(c, &ada))
+        .expect("a read");
+    let kinds: Vec<_> = linked
+        .iter()
+        .map(|row| (row.title.as_str(), row.kind.as_str()))
+        .collect();
     assert_eq!(
-        (tally["matched"].as_i64(), tally["added"].as_i64()),
-        (Some(1), Some(0))
+        kinds,
+        [("Ada notes", "note"), ("Ada's passport", "locker_item")]
     );
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM contact_point WHERE person_id = ?1",
-            &[&id]
-        ),
-        2,
-        "the member's point stands beside the source's"
-    );
-    assert_eq!(
-        w.query::<String>("SELECT role FROM person WHERE id = ?1", &[&id]),
-        "Mathematician",
-        "a blank takes the source's word"
-    );
-}
-
-#[test]
-fn a_record_gone_from_a_complete_read_takes_an_untouched_person_and_spares_an_edited_one() {
-    let w = World::new();
-    contacts(
-        &w,
-        false,
-        json!([
-            { "external_id": "a", "fields": { "title": "Ann", "points": [{ "kind": "email", "value": "ann@x.example" }] } },
-            { "external_id": "b", "fields": { "title": "Ben", "points": [{ "kind": "email", "value": "ben@x.example" }] } }
-        ]),
-    );
-    let (ann, ben) = (
-        w.query::<String>("SELECT id FROM entity WHERE title = 'Ann'", &[]),
-        w.query::<String>("SELECT id FROM entity WHERE title = 'Ben'", &[]),
-    );
-    // The member adds a point to Ben: that is an edit.
-    w.ok(
-        "person.save_contact_point",
-        json!({ "id": ben, "kind": "phone", "value": "+1 555 010 0400" }),
-    );
-    let tally = contacts(&w, true, json!([]));
-    assert_eq!(
-        (tally["trashed"].as_i64(), tally["forgotten"].as_i64()),
-        (Some(1), Some(1))
-    );
-    assert_eq!(
-        w.count(
-            "SELECT deleted_at IS NOT NULL FROM entity WHERE id = ?1",
-            &[&ann]
-        ),
-        1
-    );
-    assert_eq!(
-        w.count(
-            "SELECT deleted_at IS NULL FROM entity WHERE id = ?1",
-            &[&ben]
-        ),
-        1
-    );
-    assert_eq!(
-        w.count("SELECT COUNT(*) FROM source WHERE entity_id = ?1", &[&ben]),
-        0,
-        "Ben is no longer followed"
-    );
-}
-
-#[test]
-fn a_vault_restored_onto_a_new_phone_is_re_found_by_name_and_loses_nothing() {
-    let w = World::new();
-    let read = |device: &str, ids: &[(&str, &str)]| {
-        let records: Vec<_> = ids
-            .iter()
-            .map(|(id, name)| json!({ "external_id": id, "device_id": device, "fields": { "title": name } }))
-            .collect();
-        w.ok(
-            "follow.contacts",
-            json!({ "origin": { "ref": "phone", "label": "Phone", "device_id": device }, "complete": true, "records": records }),
-        )
-    };
-    read(
-        "device-a",
-        &[("local:a1", "Ada"), ("local:a2", "Bo"), ("local:a3", "Cy")],
-    );
-    let people = || {
-        w.count(
-            "SELECT COUNT(*) FROM entity WHERE kind = 'person' AND deleted_at IS NULL",
-            &[],
-        )
-    };
-    assert_eq!(people(), 4, "three contacts and the owner");
-    // The new phone names Ada and Bo its own way and does not hold Cy.
-    let tally = read("device-b", &[("local:b1", "ada"), ("local:b2", "Bo")]);
-    assert_eq!(
-        (
-            tally["matched"].as_i64(),
-            tally["added"].as_i64(),
-            tally["trashed"].as_i64()
-        ),
-        (Some(2), Some(0), Some(0))
-    );
-    assert_eq!(
-        tally["forgotten"].as_i64(),
-        Some(1),
-        "Cy's source is another phone's: forgotten, the row kept"
-    );
-    assert_eq!(people(), 4);
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM source WHERE device_id = 'device-a'",
-            &[]
-        ),
-        0
-    );
-    assert_eq!(
-        w.count(
-            "SELECT COUNT(*) FROM source WHERE device_id = 'device-b'",
-            &[]
-        ),
-        2
-    );
-    // A second read of the same phone is quiet.
-    let again = read("device-b", &[("local:b1", "ada"), ("local:b2", "Bo")]);
-    assert_eq!(
-        (
-            again["added"].as_i64(),
-            again["updated"].as_i64(),
-            again["trashed"].as_i64()
-        ),
-        (Some(0), Some(0), Some(0))
-    );
+    // From the other end it is the same pair.
+    let back = w
+        .vault()
+        .read(|c| centraid_vault::commands::person::in_your_vault(c, &item))
+        .expect("a read");
+    assert_eq!(back.len(), 1);
+    assert_eq!(back[0].id, ada);
 }

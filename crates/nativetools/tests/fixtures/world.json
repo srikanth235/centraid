@@ -68,14 +68,12 @@
       "key": "cabin",
       "name": "Book the cabin",
       "due": "2026-10-02T09:00",
-      "effort": 30,
       "list": "home"
     },
     {
       "key": "reed",
       "name": "Mend reed for Benedikt",
-      "due": "2026-10-05",
-      "effort": 20
+      "due": "2026-10-05"
     },
     {
       "key": "report",

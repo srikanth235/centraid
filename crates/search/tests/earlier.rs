@@ -1,6 +1,8 @@
 //! WHAT AN ITEM SAID BEFORE, THROUGH THE DOOR (#1185): the result is the live item, once; the
 //! hit says "in an earlier version" only when nothing matches now. Counts and values only.
 
+mod common;
+
 use centraid_search::sqlite::SqliteDoor;
 use centraid_search::{Answer, EachRequest, Principal, Search, SearchRequest, Target};
 use centraid_vault::commands::Registry;
@@ -32,7 +34,7 @@ impl World {
             .execute(
                 &self.registry,
                 &VaultPrincipal::owner("phone"),
-                &Command::new(name, input),
+                &Command::new(name, common::mapped(&input)),
             )
             .unwrap_or_else(|error| panic!("`{name}`: {error}"));
         assert_eq!(
@@ -44,6 +46,7 @@ impl World {
     }
 
     fn note(&self, id: &str, title: &str, body: &str) {
+        let id = common::reg_uuid("note", id);
         self.run(
             "note.create",
             json!({"id": id, "title": title, "body": body}),
@@ -84,7 +87,7 @@ impl World {
 fn flags(found: &[Target]) -> Vec<(&str, bool)> {
     found
         .iter()
-        .map(|t| (t.id.as_str(), t.in_earlier_version))
+        .map(|t| (common::strip(&t.id), t.in_earlier_version))
         .collect()
 }
 
@@ -158,7 +161,7 @@ fn a_window_continues_across_the_live_and_earlier_stages() {
         seen.extend(
             page.rows
                 .iter()
-                .map(|t| (t.id.clone(), t.in_earlier_version)),
+                .map(|t| (common::strip(&t.id).to_owned(), t.in_earlier_version)),
         );
         match page.next {
             Some(next) => asked.page.after = Some(next),
@@ -191,28 +194,25 @@ fn a_trashed_note_is_found_by_neither_word_and_a_restored_one_by_both() {
 #[test]
 fn a_task_a_person_and_a_renamed_title_are_found_the_same_way() {
     let world = World::new();
+    let t = common::reg_uuid("task", "t");
+    let p = common::reg_uuid("person", "p");
     world
         .vault
         .commit(|tx| {
             tx.insert_entity(
-                "t",
+                &t,
                 Kind::Task,
                 "Call the plumber",
                 "2026-03-01T09:00:00.000Z",
             )?;
             tx.connection().execute(
-                "INSERT INTO task (id, description) VALUES ('t', 'copper')",
-                [],
+                "INSERT INTO task (id, description) VALUES (?1, 'copper')",
+                [&t],
             )?;
-            tx.insert_entity(
-                "p",
-                Kind::Person,
-                "Ada Lovelace",
-                "2026-03-01T09:00:00.000Z",
-            )?;
+            tx.insert_entity(&p, Kind::Person, "Ada Lovelace", "2026-03-01T09:00:00.000Z")?;
             tx.connection().execute(
-                "INSERT INTO person (id, nickname) VALUES ('p', 'Countess')",
-                [],
+                "INSERT INTO person (id, nickname) VALUES (?1, 'Countess')",
+                [&p],
             )?;
             Ok(())
         })
@@ -248,40 +248,22 @@ fn a_snippet_of_an_earlier_hit_is_the_words_it_said() {
 }
 
 #[test]
-fn a_locker_items_earlier_cells_are_not_found_through_the_door() {
+fn a_locker_items_earlier_plain_text_is_found_as_an_earlier_version() {
     let world = World::new();
-    world
-        .vault
-        .commit(|tx| {
-            tx.insert_entity("lk", Kind::LockerItem, "Bank", "2026-03-01T09:00:00.000Z")?;
-            tx.connection().execute(
-                "INSERT INTO locker_item (id, type) VALUES ('lk', 'login')",
-                [],
-            )?;
-            tx.connection().execute(
-                "INSERT INTO locker_item_field
-                   (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
-                 VALUES ('lk:notes', 'lk', 'notes', '', 'Notes', 'text', 'quokkaold',
-                         '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z')",
-                [],
-            )?;
-            Ok(())
-        })
-        .expect("seeds");
-    world
-        .vault
-        .commit(|tx| {
-            tx.connection().execute(
-                "UPDATE locker_item_field
-                    SET value_text = 'quokkanew', updated_at = '2026-03-02T09:00:00.000Z'
-                  WHERE id = 'lk:notes'",
-                [],
-            )?;
-            tx.touch("lk", "2026-03-02T09:00:00.000Z")?;
-            Ok(())
-        })
-        .expect("edits");
-    assert!(world.ask(&["locker_item"], "quokkaold").is_empty());
+    let lk = common::reg_uuid("locker_item", "lk");
+    world.run(
+        "locker.add_item",
+        json!({"item_id": lk, "type": "login", "title": "Bank",
+               "fields": [{"field_key": "notes", "value": "quokkaold"}]}),
+    );
+    world.run(
+        "locker.set_field",
+        json!({"item_id": lk, "field_key": "notes", "value": "quokkanew"}),
+    );
+    assert_eq!(
+        flags(&world.ask(&["locker_item"], "quokkaold")),
+        [("lk", true)]
+    );
     assert_eq!(
         flags(&world.ask(&["locker_item"], "quokkanew")),
         [("lk", false)]
@@ -303,5 +285,5 @@ fn the_earlier_stage_is_bounded_by_the_cap_and_not_by_the_matching_items() {
     let found = world.ask(&["note"], "kestrel");
     assert_eq!(found.len(), 41);
     assert_eq!(found.iter().filter(|t| t.in_earlier_version).count(), 1);
-    assert_eq!(found.last().map(|t| t.id.as_str()), Some("lost"));
+    assert_eq!(found.last().map(|t| common::strip(&t.id)), Some("lost"));
 }

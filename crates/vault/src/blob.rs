@@ -17,6 +17,18 @@
 //!
 //! A reference that *cascades* does not keep its target alive (a derivative
 //! does not keep the original it was cut from); only a plain reference does.
+//!
+//! **A blob an earlier version names is never collected while its entity lives.** A version names
+//! its blobs as `revision_blob` rows, and that foreign key keeps them. The row is written when the
+//! commit settles, after the command's own writes, so a command that replaced a blob and collected
+//! the old one in the same commit would delete the blob a moment before the version that names it
+//! is written, and the commit would fail. Collecting therefore leaves alone every blob the
+//! pending versions of the entities that still exist will name ([`pending_clause`]); the next
+//! collection finds it kept by its `revision_blob` row.
+//!
+//! **A sealed file** (a Locker item's file field: bytes already encrypted under the Locker key
+//! before they reach the store) is never given a derivative ([`is_sealed`]), is always part of a
+//! backup, and is never offered to be freed from the phone ([`sealed_hashes`]).
 
 use rusqlite::{Connection, OptionalExtension};
 
@@ -177,6 +189,14 @@ pub fn write_derivative(
             detail: "the bytes this is derived from are not held here yet".to_owned(),
         });
     }
+    if is_sealed(connection, blob)? {
+        return Err(VaultError::InvalidInput {
+            name: "blob".to_owned(),
+            detail:
+                "a sealed file is only ever bytes under the Locker key: nothing is made from it"
+                    .to_owned(),
+        });
+    }
     if let Some((hash, size, _)) = out {
         stage(connection, hash, size)?;
     }
@@ -251,6 +271,83 @@ pub struct BlobReference {
     pub keeps_alive: bool,
 }
 
+/// The SQL that keeps a collection off every blob a version about to be written will name.
+///
+/// Inside a commit, the history has noted the state each touched entity had before the commit (the
+/// state a version keeps) and writes the version when the commit settles. An entity that still
+/// exists after the commit gets that version; one that was purged gets none (its history goes with
+/// it). So the hashes in the noted states of entities that still exist are spoken for, and a
+/// collection run by a command, before the settle, must not take them. Outside a commit, or when
+/// the history has noted nothing, the clause is empty.
+fn pending_clause(connection: &Connection) -> Result<String> {
+    let noted: bool = connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM sqlite_temp_master WHERE type = 'table' AND name = ?1)",
+        [crate::history::SEEN],
+        |row| row.get(0),
+    )?;
+    if !noted {
+        return Ok(String::new());
+    }
+    Ok(format!(
+        " AND b.hash NOT IN (
+            SELECT jt.value
+              FROM temp.{seen} s
+              JOIN temp.{view} v ON v.entity_id = s.entity_id,
+                   json_tree(s.state) jt
+             WHERE s.state IS NOT NULL AND jt.type = 'text'
+               AND length(jt.value) = 64 AND jt.value NOT GLOB '*[^0-9a-f]*')",
+        seen = crate::history::SEEN,
+        view = crate::history::STATE_VIEW,
+    ))
+}
+
+/// The SQL fragment naming a sealed file: a blob a Locker item's file field rents now, or a version
+/// of one named in a Locker field's slot.
+pub(crate) fn sealed_condition(hash_expression: &str) -> String {
+    let field_slot =
+        crate::history::blob_slot("locker_item_field", "value_blob").map_or("field", |slot| {
+            match slot.slot {
+                crate::history::SlotName::One(name) | crate::history::SlotName::PerRow(name) => {
+                    name
+                }
+            }
+        });
+    format!(
+        "(EXISTS (SELECT 1 FROM locker_item_field f WHERE f.value_blob = {hash_expression})
+          OR EXISTS (SELECT 1 FROM revision_blob rb
+                      WHERE rb.blob = {hash_expression} AND rb.slot LIKE '{field_slot}:%'))"
+    )
+}
+
+/// Whether `hash` is a sealed file: bytes a Locker item's file field holds (or held in an earlier
+/// version). Nothing is ever derived from one, and none is ever freed from the phone.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn is_sealed(connection: &Connection, hash: &str) -> Result<bool> {
+    Ok(connection.query_row(
+        &format!("SELECT {}", sealed_condition("?1")),
+        [hash],
+        |row| row.get(0),
+    )?)
+}
+
+/// Every sealed file the vault holds, as hashes: what no pass may free from the phone (the core's
+/// "free up space" never offers these, as it never offers a kept album's originals).
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn sealed_hashes(connection: &Connection) -> Result<std::collections::BTreeSet<String>> {
+    let sql = format!(
+        "SELECT b.hash FROM blob b WHERE {} ORDER BY b.hash",
+        sealed_condition("b.hash")
+    );
+    Ok(connection
+        .prepare(&sql)?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Delete every blob no foreign key keeps alive; returns the hashes, so the
 /// caller can delete the bytes the store holds under them.
 ///
@@ -281,7 +378,10 @@ pub fn collect_hashes(connection: &Connection, hashes: &[String]) -> Result<Vec<
         })
         .collect::<Vec<_>>()
         .join(" AND ");
-    let sql = format!("SELECT hash FROM blob b WHERE b.hash = ?1 AND {unclaimed}");
+    let sql = format!(
+        "SELECT hash FROM blob b WHERE b.hash = ?1 AND {unclaimed}{}",
+        pending_clause(connection)?
+    );
     let mut collected = Vec::new();
     for hash in hashes {
         let doomed: Option<String> = connection
@@ -314,7 +414,10 @@ pub fn collect_up_to(connection: &Connection, limit: usize) -> Result<Vec<String
         })
         .collect::<Vec<_>>()
         .join(" AND ");
-    let sql = format!("SELECT hash FROM blob b WHERE {unclaimed} ORDER BY hash LIMIT ?1");
+    let sql = format!(
+        "SELECT hash FROM blob b WHERE {unclaimed}{} ORDER BY hash LIMIT ?1",
+        pending_clause(connection)?
+    );
     let mut collected = Vec::new();
     loop {
         let room = limit.saturating_sub(collected.len());
@@ -383,13 +486,28 @@ impl Vault {
     /// it as its own file, sealed like any other. One variant holds one file.
     ///
     /// # Errors
-    /// [`VaultError::InvalidInput`] for a variant that is not `thumb`,
-    /// `preview` or `poster`, a malformed hash, or an original not held yet.
+    /// [`VaultError::InvalidInput`] for a variant whose lookup row is not a file (`has_out`), a
+    /// malformed hash, an original not held yet, or a sealed file.
     pub fn stage_derivative(&self, derivative: &StagedDerivative) -> Result<()> {
-        if !matches!(derivative.variant.as_str(), "thumb" | "preview" | "poster") {
+        // A staged derivative is a picture the shell rendered, so its variant is one whose
+        // lookup row says it is a file (`has_out`): the table says which, not a list kept here.
+        let is_file: bool = self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT has_out = 1 FROM derivative_variant WHERE code = ?1",
+                    [&derivative.variant],
+                    |row| row.get(0),
+                )
+                .optional()?
+                .unwrap_or(false))
+        })?;
+        if !is_file {
             return Err(VaultError::InvalidInput {
                 name: "tier".to_owned(),
-                detail: format!("`{}` is not thumb, preview or poster", derivative.variant),
+                detail: format!(
+                    "`{}` is not a kind of picture a derivative holds",
+                    derivative.variant
+                ),
             });
         }
         let now = self.clock().now_text();

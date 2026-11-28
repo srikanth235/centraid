@@ -1,54 +1,26 @@
-//! The "phone says" line (#1183), once for the four detail screens that draw it: the lead, the one
-//! action and what the action says to a screen reader, in the store's own name. A screen's nouns
-//! ("name", "number", "distance") are its app's.
+//! What a More sheet says about following a phone store (app-plane §16): one row to turn it on, one
+//! to stop, and the state when the phone said no. A store's own noun is `store_*`.
 
 catalog! {
-    plain back_action = ("Add back", "Add back");
-    plain back_folder_spoken = (
-        "Add back the {noun} {value} from the folder",
-        "Add back the {noun} {value} from the folder"
+    plain follow_row = ("Follow {store}", "Follow {store}");
+    plain following_row = ("Following {store}", "Following {store}");
+    plain following_meta = ("Read from your phone when Centraid opens.", "Read from your phone when Centraid opens.");
+    plain stop_row = ("Stop following {store}", "Stop following {store}");
+    plain stopped_status = ("Stopped following {store}. What it added stays.", "Stopped following {store}. What it added stays.");
+    plain stop_title = ("Stop following {store}?", "Stop following {store}?");
+    plain stop_body = (
+        "Centraid stops reading {source}. What it already added stays.",
+        "Centraid stops reading {source}. What it already added stays."
     );
-    plain back_phone_spoken = (
-        "Add back the {noun} {value} from your phone",
-        "Add back the {noun} {value} from your phone"
-    );
-    plain back_store_spoken = (
-        "Add back the {noun} {value} from {store}",
-        "Add back the {noun} {value} from {store}"
-    );
-    plain has_folder_lead = ("Folder still has {value}", "Folder still has {value}");
-    plain has_phone_lead = ("Phone still has {value}", "Phone still has {value}");
-    plain has_store_lead = ("{store} still has {value}", "{store} still has {value}");
-    plain says_folder_lead = ("Folder says {value}", "Folder says {value}");
-    plain says_phone_lead = ("Phone says {value}", "Phone says {value}");
-    plain says_store_lead = ("{store} says {value}", "{store} says {value}");
-    plain use_folder_action = ("Use folder’s", "Use folder’s");
-    plain use_folder_spoken = (
-        "Use the {noun} the folder has, {value}",
-        "Use the {noun} the folder has, {value}"
-    );
-    plain use_phone_action = ("Use phone’s", "Use phone’s");
-    plain use_phone_spoken = (
-        "Use the {noun} your phone has, {value}",
-        "Use the {noun} your phone has, {value}"
-    );
-    plain use_store_action = ("Use {store}’s", "Use {store}’s");
-    plain use_store_spoken = (
-        "Use the {noun} {store} has, {value}",
-        "Use the {noun} {store} has, {value}"
-    );
-    plain unchecked_folder_status = (
-        "Couldn’t check what the folder says.",
-        "Couldn’t check what the folder says."
-    );
-    plain unchecked_phone_status = (
-        "Couldn’t check what your phone says.",
-        "Couldn’t check what your phone says."
-    );
-    plain unchecked_store_status = (
-        "Couldn’t check what {store} says.",
-        "Couldn’t check what {store} says."
-    );
+    plain stop_confirm = ("Stop following", "Stop following");
+    plain off_row = ("{store} is off", "{store} is off");
+    plain open_settings_row = ("Open Settings", "Open Settings");
+    plain unavailable_row = ("{store} isn’t on this phone", "{store} isn’t on this phone");
+    plain restricted_row = ("Your phone doesn’t allow {store}", "Your phone doesn’t allow {store}");
+    plain follow_files_row = ("Follow a folder", "Follow a folder");
+    plain following_files_row = ("Following folders", "Following folders");
+    plain asking_status = ("Waiting for your phone.", "Waiting for your phone.");
+
     plain doubted_status = (
         "Far fewer items than before in {source}, so nothing was removed.",
         "Far fewer items than before in {source}, so nothing was removed."
@@ -57,24 +29,18 @@ catalog! {
         "Only part of {source} was readable, so this shows what was read.",
         "Only part of {source} was readable, so this shows what was read."
     );
-    plain delete_note = (
-        "Read from your phone. To delete it, stop reading {store} first.",
-        "Read from your phone. To delete it, stop reading {store} first."
-    );
-    plain source_calendar = ("your phone’s calendars", "your phone’s calendars");
+
+    plain store_contacts = ("Contacts", "Contacts");
+    plain store_calendar = ("Calendars", "Calendars");
+    plain store_reminders = ("Reminders", "Reminders");
+    plain store_health = ("Health", "Health");
+    plain store_camera_roll = ("Camera roll", "Camera roll");
+    plain store_files = ("Folders", "Folders");
+
     plain source_contacts = ("your phone’s contacts", "your phone’s contacts");
-    plain source_files = ("the folder", "the folder");
+    plain source_calendar = ("your phone’s calendars", "your phone’s calendars");
     plain source_reminders = ("your phone’s reminders", "your phone’s reminders");
     plain source_health = ("your health store", "your health store");
-
-    plain reconnect_title = ("Reconnect", "Reconnect");
-    plain reconnect_lede = (
-        "Connect each store another phone followed to follow it here.",
-        "Connect each store another phone followed to follow it here."
-    );
-    plain reconnect_none = ("Nothing to reconnect", "Nothing to reconnect");
-    plain reconnect_connect = ("Connect", "Connect");
-    plain reconnect_contacts = ("Phone contacts", "Phone contacts");
-    plain reconnect_calendars = ("Phone calendars", "Phone calendars");
-    plain reconnect_folder = ("{label} folder", "{label} folder");
+    plain source_camera_roll = ("your camera roll", "your camera roll");
+    plain source_files = ("the folder", "the folder");
 }

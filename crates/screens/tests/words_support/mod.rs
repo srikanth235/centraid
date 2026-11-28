@@ -8,7 +8,6 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::custody::keeper::{FakeKeeper, KeeperSlot};
 use centraid_screens::custody::secrets::VaultSecrets;
 use centraid_screens::custody::{self, routes};
-use centraid_screens::locker;
 use centraid_screens::testing::{Driver, FakeShell};
 use centraid_screens::{Registry, Runtime};
 
@@ -38,9 +37,7 @@ pub fn phone(route: wire::Route, platform: &str) -> Phone {
     let secrets = VaultSecrets::new();
     let keeper = FakeKeeper::watching(&secrets);
     let slot = KeeperSlot::with(keeper.clone());
-    let registry = Registry::default()
-        .merge(custody::registry_with(&secrets, &slot))
-        .merge(locker::registry());
+    let registry = Registry::default().merge(custody::registry_with(&secrets, &slot));
     let runtime = Runtime::new(registry, vec![("words".to_owned(), route)])
         .with_services(custody::services());
     let mut driver = Driver::keyed(runtime);

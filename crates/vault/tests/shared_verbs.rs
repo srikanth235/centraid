@@ -1,12 +1,20 @@
-//! The shared verbs, each against a vault the product founds.
+//! The shared verbs of the entity kernel (#1214, K4), each against a vault the product founds:
+//! one home, the trash with its contents, flags as columns, minted ids, arrivals, tags and
+//! concepts, and what a purge does with what points at a row.
 //!
-//! Kinds are created the way a per-kind command will create them (the entity
-//! row, then the kind row, through the commit guard); everything else goes
-//! through the registry, so what is proved is the verb and the gate together.
+//! Kinds are made the way a per-kind command makes them (the entity row in its home, then the kind
+//! row, through the commit guard); everything else goes through the registry, so what is proved is
+//! the verb and the gate together. The rules a sentence states are held by the database too:
+//! `schema_rules.rs` writes each bad row with raw SQL.
+//!
+//! The shared verbs' tests that read an app's tables (a person merge, a follow's three-way
+//! merge, a document's bytes) are each app's own: `people_merge.rs`, `follow_*.rs`, `docs_photos.rs`.
 
 mod common;
 
-use centraid_vault::commands::Registry;
+use centraid_vault::commands::{
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, Registry, arrival,
+};
 use centraid_vault::model::Kind;
 use centraid_vault::{Command, CommandStatus, CommitTx, Principal, Vault};
 use serde_json::json;
@@ -18,11 +26,32 @@ struct World {
     registry: Registry,
 }
 
+fn arrive(ctx: &CommandCtx<'_, '_>) -> centraid_vault::Result<serde_json::Value> {
+    let id = ctx.insert_entity(Kind::Document, "Scanned")?;
+    ctx.connection().execute(
+        "INSERT INTO document (id, blob, media_type) VALUES (?1, ?2, 'text/plain')",
+        rusqlite::params![id, ctx.required_str("blob")?],
+    )?;
+    arrival::record(ctx, &id, Kind::Document)?;
+    Ok(json!({ "id": id }))
+}
+
 impl World {
     fn new() -> Self {
+        let mut registry = Registry::with_system_commands().expect("a registry");
+        registry
+            .register(CommandDefinition::plain(
+                "probe.arrive",
+                "probe",
+                r#"{"type":"object","additionalProperties":true}"#,
+                Idempotency::Idempotent,
+                &[] as &[CommandCondition],
+                arrive,
+            ))
+            .expect("a probe");
         Self {
             scratch: common::Scratch::founded("verbs").expect("a vault"),
-            registry: Registry::with_system_commands().expect("a registry"),
+            registry,
         }
     }
 
@@ -30,14 +59,20 @@ impl World {
         &self.scratch.vault
     }
 
-    /// An entity's `updated_at`: the clock moves a second before every command, so it changes
-    /// exactly when a command touched the entity.
+    /// An entity's `updated_at`.
     fn stamp(&self, id: &str) -> String {
         self.one::<String>("SELECT updated_at FROM entity WHERE id = ?1", &[id])
     }
 
+    /// Run a command; the clock moves a second first, so a stamp changes exactly when a command
+    /// touched the entity.
     fn run(&self, name: &str, input: serde_json::Value) -> centraid_vault::CommandOutcome {
         self.scratch.clock.advance_ms(1_000);
+        self.run_now(name, input)
+    }
+
+    /// Run a command at the clock's present instant.
+    fn run_now(&self, name: &str, input: serde_json::Value) -> centraid_vault::CommandOutcome {
         self.vault()
             .execute(
                 &self.registry,
@@ -83,24 +118,28 @@ impl World {
             .unwrap_or_else(|error| panic!("{sql}: {error}"))
     }
 
-    // -- the kinds, as a per-kind command writes them -----------------------
-
-    fn person(&self, id: &str, name: &str) {
-        self.commit(|tx| {
-            common::add_person(tx, id, name, AT)?;
-            Ok(())
-        });
+    fn mint(&self) -> String {
+        self.vault().ids().next()
     }
 
-    fn note(&self, id: &str, title: &str, body: &str, notebook: Option<&str>) {
+    // -- the kinds, as a per-kind command writes them -----------------------
+
+    /// An entity of `kind` in `parent`, with no kind row (the shared verbs read only the entity).
+    fn bare(&self, kind: Kind, title: &str, parent: Option<&str>) -> String {
+        let id = self.mint();
+        self.commit(|tx| tx.insert_entity_in(&id, kind, title, parent, AT));
+        id
+    }
+
+    fn note(&self, title: &str, notebook: Option<&str>) -> String {
+        let id = self.mint();
         self.commit(|tx| {
-            tx.insert_entity(id, Kind::Note, title, AT)?;
-            tx.connection().execute(
-                "INSERT INTO note (id, body, notebook_id) VALUES (?1, ?2, ?3)",
-                rusqlite::params![id, body, notebook],
-            )?;
+            tx.insert_entity_in(&id, Kind::Note, title, notebook, AT)?;
+            tx.connection()
+                .execute("INSERT INTO note (id, body) VALUES (?1, '')", [&id])?;
             Ok(())
         });
+        id
     }
 
     fn container(&self, kind: &str, title: &str, parent: Option<&str>) -> String {
@@ -113,63 +152,28 @@ impl World {
             .to_owned()
     }
 
-    fn document(&self, id: &str, title: &str, bytes: &[u8], folder: Option<&str>) -> String {
-        let hash = centraid_vault::blob::content_digest(bytes);
+    fn task(&self, parent: Option<&str>) -> String {
+        let id = self.mint();
         self.commit(|tx| {
-            centraid_vault::blob::stage(tx.connection(), &hash, bytes.len() as i64)?;
-            tx.insert_entity(id, Kind::Document, title, AT)?;
-            tx.connection().execute(
-                "INSERT INTO document (id, blob, media_type, folder_id) VALUES (?1, ?2, 'text/plain', ?3)",
-                rusqlite::params![id, hash, folder],
-            )?;
+            tx.insert_entity_in(&id, Kind::Task, "Task", parent, AT)?;
+            tx.connection()
+                .execute("INSERT INTO task (id) VALUES (?1)", [&id])?;
             Ok(())
         });
-        hash
+        id
     }
 
-    fn account(&self, id: &str, name: &str) {
+    fn event(&self, calendar: &str) -> String {
+        let id = self.mint();
         self.commit(|tx| {
-            tx.insert_entity(id, Kind::Account, name, AT)?;
+            tx.insert_entity_in(&id, Kind::Event, "Lunch", Some(calendar), AT)?;
             tx.connection().execute(
-                "INSERT INTO account (id, type, currency) VALUES (?1, 'checking', 'USD')",
-                [id],
+                "INSERT INTO event (id, starts, timing) VALUES (?1, '2026-03-02T10:00', 'floating')",
+                [&id],
             )?;
             Ok(())
         });
-    }
-
-    fn txn(&self, id: &str, account: &str, amount: i64, category: Option<&str>) {
-        self.commit(|tx| {
-            tx.insert_entity(id, Kind::Txn, id, AT)?;
-            tx.connection().execute(
-                "INSERT INTO txn (id, account_id, currency, posted_on, amount_minor, category_id)
-                 VALUES (?1, ?2, 'USD', '2026-03-01', ?3, ?4)",
-                rusqlite::params![id, account, amount, category],
-            )?;
-            Ok(())
-        });
-    }
-
-    fn task(&self, id: &str, project: Option<&str>, section: Option<&str>, parent: Option<&str>) {
-        self.commit(|tx| {
-            tx.insert_entity(id, Kind::Task, id, AT)?;
-            tx.connection().execute(
-                "INSERT INTO task (id, project_id, section_id, parent_id) VALUES (?1, ?2, ?3, ?4)",
-                rusqlite::params![id, project, section, parent],
-            )?;
-            Ok(())
-        });
-    }
-
-    fn event(&self, id: &str, calendar: &str) {
-        self.commit(|tx| {
-            tx.insert_entity(id, Kind::Event, id, AT)?;
-            tx.connection().execute(
-                "INSERT INTO event (id, starts, timing, calendar_id) VALUES (?1, '2026-03-02T10:00:00', 'floating', ?2)",
-                rusqlite::params![id, calendar],
-            )?;
-            Ok(())
-        });
+        id
     }
 
     fn exists(&self, id: &str) -> bool {
@@ -180,334 +184,863 @@ impl World {
         self.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[id])
             .is_some()
     }
+
+    fn trashed_by(&self, id: &str) -> Option<String> {
+        self.one::<Option<String>>("SELECT trashed_by FROM entity WHERE id = ?1", &[id])
+    }
+
+    fn home(&self, id: &str) -> Option<String> {
+        self.one::<Option<String>>("SELECT parent_id FROM entity WHERE id = ?1", &[id])
+    }
 }
 
 // ---------------------------------------------------------------------------
-// entity.*
+// entity.retitle
 // ---------------------------------------------------------------------------
 
 #[test]
 fn retitle_changes_the_title_once_and_refuses_what_it_does_not_serve() {
     let w = World::new();
-    w.person("p1", "Ada");
-    w.ok("entity.retitle", json!({"id": "p1", "title": "  Ada L.  "}));
+    let person = w.mint();
+    w.commit(|tx| common::add_person(tx, &person, "Ada", AT));
+    w.ok(
+        "entity.retitle",
+        json!({"id": &person, "title": "  Ada L.  "}),
+    );
     assert_eq!(
-        w.one::<String>("SELECT title FROM entity WHERE id = 'p1'", &[]),
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&person]),
         "Ada L."
     );
-    assert_ne!(w.stamp("p1"), AT, "a retitle is a change");
-    // A flag keeps its name; a name cannot be blank; the trash is not edited.
+    assert_ne!(w.stamp(&person), AT, "a retitle is a change");
     assert!(
-        w.refused(
-            "entity.retitle",
-            json!({"id": "flag:starred", "title": "x"})
-        )
-        .contains("built in")
-    );
-    assert!(
-        w.refused("entity.retitle", json!({"id": "p1", "title": "  "}))
+        w.refused("entity.retitle", json!({"id": &person, "title": "  "}))
             .contains("needs a name")
     );
-    w.ok("entity.trash", json!({"id": "p1"}));
+    // A reading carries no title: the screen formats the figure.
+    let reading = w.bare(Kind::Reading, "", None);
     assert!(
-        w.refused("entity.retitle", json!({"id": "p1", "title": "x"}))
-            .contains("in the trash")
+        w.refused("entity.retitle", json!({"id": &reading, "title": "x"}))
+            .contains("has no name")
     );
     // A photograph may have no title at all.
-    let hash = centraid_vault::blob::content_digest(b"p");
-    w.commit(|tx| {
-        centraid_vault::blob::stage(tx.connection(), &hash, 1)?;
-        tx.insert_entity("ph", Kind::Photo, "caption", AT)?;
-        tx.connection()
-            .execute("INSERT INTO photo (id, blob, media_type, form) VALUES ('ph', ?1, 'image/jpeg', 'photo')", [&hash])?;
-        Ok(())
-    });
-    w.ok("entity.retitle", json!({"id": "ph", "title": ""}));
+    let photo = w.bare(Kind::Photo, "caption", None);
+    w.ok("entity.retitle", json!({"id": &photo, "title": ""}));
+    // The trash is not edited.
+    w.ok("entity.trash", json!({"id": &person}));
+    assert!(
+        w.refused("entity.retitle", json!({"id": &person, "title": "x"}))
+            .contains("in the trash")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// One home (A19)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn moving_a_note_a_container_a_task_and_a_concept_is_one_command_and_one_path() {
+    let w = World::new();
+    let a = w.container("notebook", "A", None);
+    let b = w.container("notebook", "B", None);
+    let note = w.note("Soup", Some(&a));
+    let before = w.stamp(&note);
+    assert_eq!(w.home(&note), Some(a.clone()));
+    assert_eq!(
+        w.one::<String>("SELECT parent_kind FROM entity WHERE id = ?1", &[&note]),
+        "notebook"
+    );
+
+    let moved = w.ok("entity.move", json!({"id": &note, "parent": &b}));
+    assert_eq!(moved["moved"], true);
+    assert_eq!(w.home(&note), Some(b.clone()));
+    assert_ne!(w.stamp(&note), before, "a move is a change to the item");
+    // The same home again changes nothing.
+    let stamp = w.stamp(&note);
+    assert_eq!(
+        w.ok("entity.move", json!({"id": &note, "parent": &b}))["moved"],
+        false
+    );
+    assert_eq!(w.stamp(&note), stamp);
+    // To the top level, which a note may sit at.
+    w.ok("entity.move", json!({"id": &note, "parent": null}));
+    assert_eq!(w.home(&note), None);
+    assert_eq!(
+        w.one::<Option<String>>("SELECT parent_kind FROM entity WHERE id = ?1", &[&note]),
+        None
+    );
+
+    // A container is moved by its own command, which is the same path and also places it.
+    let inner = w.container("notebook", "Inner", Some(&a));
+    w.ok(
+        "container.move",
+        json!({"id": &inner, "parent": &b, "position": 7.5}),
+    );
+    assert_eq!(w.home(&inner), Some(b.clone()));
+    assert_eq!(
+        w.one::<f64>("SELECT position FROM container WHERE id = ?1", &[&inner]),
+        7.5
+    );
+    // A task goes to a task list, then to another, then holds a subtask.
+    let project = w.container("task_list", "Move house", None);
+    let other = w.container("task_list", "Packing", None);
+    let task = w.task(Some(&project));
+    w.ok("entity.move", json!({"id": &task, "parent": &other}));
+    let sub = w.task(Some(&task));
+    assert_eq!(w.home(&sub), Some(task.clone()));
+    // A concept is moved the same way: a tag inside a tag.
+    let tag = w.ok("tag.add", json!({"id": &note, "label": "Food"}))["tag"]
+        .as_str()
+        .expect("a tag")
+        .to_owned();
+    let child = w.ok("tag.add", json!({"id": &note, "label": "Soups"}))["tag"]
+        .as_str()
+        .expect("a tag")
+        .to_owned();
+    w.ok("entity.move", json!({"id": &child, "parent": &tag}));
+    assert_eq!(w.home(&child), Some(tag));
 }
 
 #[test]
-fn a_holder_takes_its_members_to_the_trash_and_a_restore_brings_back_only_those() {
+fn a_home_of_the_wrong_kind_a_loop_and_a_missing_home_are_refused_in_a_sentence() {
+    let w = World::new();
+    let book = w.container("notebook", "Book", None);
+    let inner = w.container("notebook", "Inner", Some(&book));
+    let folder = w.container("folder", "Folder", None);
+    let note = w.note("N", None);
+    // The kind of the home is `home_shape`'s.
+    assert!(
+        w.refused("entity.move", json!({"id": &note, "parent": &folder}))
+            .contains("does not go inside a folder")
+    );
+    assert!(
+        w.refused(
+            "container.create",
+            json!({"kind": "notebook", "title": "x", "parent": &folder})
+        )
+        .contains("does not go inside a folder")
+    );
+    // A loop, and a thing inside itself.
+    assert!(
+        w.refused("entity.move", json!({"id": &book, "parent": &inner}))
+            .contains("cannot go inside itself")
+    );
+    assert!(
+        w.refused("container.move", json!({"id": &book, "parent": &book}))
+            .contains("cannot go inside itself")
+    );
+    // A kind that may not sit at the top needs a home: an event a calendar.
+    let event = w.event("calendar:default");
+    assert!(
+        w.refused("entity.move", json!({"id": &event, "parent": null}))
+            .contains("belongs in a calendar")
+    );
+    // The home is there and is live.
+    assert!(
+        w.refused("entity.move", json!({"id": &note, "parent": "nothing"}))
+            .contains("nothing with the id")
+    );
+    let gone = w.container("notebook", "Gone", None);
+    w.ok("entity.trash", json!({"id": &gone}));
+    assert!(
+        w.refused("entity.move", json!({"id": &note, "parent": &gone}))
+            .contains("in the trash")
+    );
+    // The owner is nobody's to file.
+    let me = w
+        .vault()
+        .self_id()
+        .expect("reads")
+        .expect("a founded vault has an owner");
+    assert!(
+        w.refused("entity.move", json!({"id": me, "parent": &book}))
+            .contains("this is you")
+    );
+    // Refusals wrote nothing.
+    assert_eq!(w.home(&note), None);
+}
+
+// ---------------------------------------------------------------------------
+// The trash takes what a holder holds (A13)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_holder_takes_its_contents_to_the_trash_naming_itself_and_a_restore_brings_back_only_those() {
     let w = World::new();
     let book = w.container("notebook", "Recipes", None);
-    w.note("n-with", "Soup", "", Some(&book));
-    w.note("n-early", "Stew", "", Some(&book));
-    w.note("n-out", "Loose", "", None);
-    // One member was in the trash before its notebook went.
-    w.ok("entity.trash", json!({"id": "n-early"}));
-    let early_at = w.one::<String>("SELECT deleted_at FROM entity WHERE id = 'n-early'", &[]);
-    w.scratch.clock.advance_ms(60_000);
+    let with = w.note("Soup", Some(&book));
+    let early = w.note("Stew", Some(&book));
+    let out = w.note("Loose", None);
+    // One member was in the trash before its notebook went, AT THE SAME INSTANT: no timestamp is
+    // compared, so it still does not come back with the notebook.
+    w.ok("entity.trash", json!({"id": &early}));
+    assert_eq!(
+        w.trashed_by(&early),
+        None,
+        "trashed on its own it names no one"
+    );
 
-    let output = w.ok("entity.trash", json!({"id": &book}));
+    let output = w.run_now("entity.trash", json!({"id": &book})).output;
     assert_eq!(
         output["trashed"].as_array().expect("ids").len(),
         2,
         "the notebook and its live note"
     );
-    assert!(w.trashed(&book) && w.trashed("n-with") && !w.trashed("n-out"));
-    let went_with = w.one::<String>("SELECT deleted_at FROM entity WHERE id = 'n-with'", &[]);
+    assert!(w.trashed(&book) && w.trashed(&with) && !w.trashed(&out));
+    assert_eq!(w.trashed_by(&with), Some(book.clone()));
     assert_eq!(
-        went_with,
-        w.one::<String>("SELECT deleted_at FROM entity WHERE id = ?1", &[&book])
+        w.trashed_by(&book),
+        None,
+        "the holder was trashed on its own"
     );
-    assert_ne!(went_with, early_at);
-    let trashed_stamp = w.stamp("n-with");
+    assert_eq!(
+        w.one::<String>("SELECT deleted_at FROM entity WHERE id = ?1", &[&with]),
+        w.one::<String>("SELECT deleted_at FROM entity WHERE id = ?1", &[&early]),
+        "the same instant, and still not the same trash"
+    );
+    let trashed_stamp = w.stamp(&with);
     assert_ne!(trashed_stamp, AT, "a trash is a change");
 
     w.ok("entity.restore", json!({"id": &book}));
-    assert!(!w.trashed(&book) && !w.trashed("n-with"));
+    assert!(!w.trashed(&book) && !w.trashed(&with));
+    assert_eq!(w.trashed_by(&with), None);
     assert!(
-        w.trashed("n-early"),
+        w.trashed(&early),
         "the note that was already in the trash stays there"
     );
     assert_ne!(
-        w.stamp("n-with"),
+        w.stamp(&with),
         trashed_stamp,
         "trash and restore are two changes"
     );
 }
 
 #[test]
-fn a_purge_purges_what_went_with_the_holder_and_moves_the_rest_to_the_top_level() {
+fn nested_holders_each_name_their_own_holder_and_come_back_together() {
+    let w = World::new();
+    let outer = w.container("folder", "Outer", None);
+    let inner = w.container("folder", "Inner", Some(&outer));
+    let deep = w.note("Deep", None);
+    let doc_in_inner = w.bare(Kind::Document, "Doc", Some(&inner));
+    let _ = deep;
+    let doc_in_outer = w.bare(Kind::Document, "Doc2", Some(&outer));
+    // `inner` goes alone first, with what it holds.
+    w.ok("entity.trash", json!({"id": &inner}));
+    assert_eq!(w.trashed_by(&doc_in_inner), Some(inner.clone()));
+    // Then `outer`: the already-trashed `inner` and what it holds are not its.
+    w.ok("entity.trash", json!({"id": &outer}));
+    assert_eq!(w.trashed_by(&doc_in_outer), Some(outer.clone()));
+    assert_eq!(w.trashed_by(&inner), None);
+    w.ok("entity.restore", json!({"id": &outer}));
+    assert!(!w.trashed(&outer) && !w.trashed(&doc_in_outer));
+    assert!(
+        w.trashed(&inner) && w.trashed(&doc_in_inner),
+        "inner went on its own"
+    );
+    // Now `outer` is live, so `inner` can come back, and brings its document.
+    w.ok("entity.restore", json!({"id": &inner}));
+    assert!(!w.trashed(&inner) && !w.trashed(&doc_in_inner));
+
+    // One trash of a whole tree: every row names its direct holder, and one restore of the root
+    // brings the whole tree back.
+    w.ok("entity.trash", json!({"id": &outer}));
+    assert_eq!(w.trashed_by(&inner), Some(outer.clone()));
+    assert_eq!(w.trashed_by(&doc_in_inner), Some(inner.clone()));
+    let restored = w.ok("entity.restore", json!({"id": &outer}));
+    assert_eq!(restored["restored"].as_array().expect("ids").len(), 4);
+    for id in [&outer, &inner, &doc_in_inner, &doc_in_outer] {
+        assert!(!w.trashed(id) && w.trashed_by(id).is_none());
+    }
+}
+
+#[test]
+fn an_account_a_person_and_a_task_hold_what_belongs_to_them() {
+    let w = World::new();
+    // A task holds its subtasks (a home), and a restore of the task brings them back.
+    let project = w.container("task_list", "P", None);
+    let task = w.task(Some(&project));
+    let sub = w.task(Some(&task));
+    w.ok("entity.trash", json!({"id": &task}));
+    assert_eq!(w.trashed_by(&sub), Some(task.clone()));
+    w.ok("entity.restore", json!({"id": &task}));
+    assert!(!w.trashed(&sub));
+    // A task list holds its tasks.
+    w.ok("entity.trash", json!({"id": &project}));
+    assert_eq!(w.trashed_by(&task), Some(project.clone()));
+    w.ok("entity.restore", json!({"id": &project}));
+    assert!(!w.trashed(&task));
+    // An account holds its lines.
+    let account = w.mint();
+    let line = w.mint();
+    w.commit(|tx| {
+        tx.insert_entity(&account, Kind::Account, "Everyday", AT)?;
+        tx.connection().execute(
+            "INSERT INTO account (id, type, currency) VALUES (?1, 'checking', 'USD')",
+            [&account],
+        )?;
+        tx.insert_entity(&line, Kind::Txn, "Coffee", AT)?;
+        tx.connection().execute(
+            "INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES (?1, ?2, '2026-03-01', -450, 'hand')",
+            [&line, &account],
+        )?;
+        Ok(())
+    });
+    w.ok("entity.trash", json!({"id": &account}));
+    assert_eq!(w.trashed_by(&line), Some(account.clone()));
+    // One line comes out of a trashed account on its own; the rest come back with the account.
+    w.ok("entity.restore", json!({"id": &line}));
+    assert!(!w.trashed(&line) && w.trashed(&account));
+    w.ok("entity.restore", json!({"id": &account}));
+    assert!(!w.trashed(&account));
+    // A person holds the touches with them alone, and nothing else: their notes stay.
+    let person = w.mint();
+    w.commit(|tx| common::add_person(tx, &person, "Ada", AT));
+    let note = w.note("About Ada", None);
+    let alone = w.bare(Kind::Touch, "", None);
+    let shared = w.bare(Kind::Touch, "", None);
+    let other = w.mint();
+    w.commit(|tx| common::add_person(tx, &other, "Bea", AT));
+    w.commit(|tx| {
+        for (from, rel, to) in [
+            (&note, "about", &person),
+            (&alone, "with", &person),
+            (&shared, "with", &person),
+            (&shared, "with", &other),
+        ] {
+            tx.connection().execute(
+                "INSERT INTO edge (from_id, rel, to_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![from, rel, to, AT],
+            )?;
+        }
+        Ok(())
+    });
+    w.ok("entity.trash", json!({"id": &person}));
+    assert_eq!(w.trashed_by(&alone), Some(person.clone()));
+    assert!(
+        !w.trashed(&shared),
+        "a touch with two people is the member's own"
+    );
+    assert!(!w.trashed(&note), "a note about them stays");
+}
+
+#[test]
+fn one_item_comes_out_of_a_trashed_holder_at_the_top_and_one_that_needs_a_home_does_not() {
     let w = World::new();
     let book = w.container("notebook", "Recipes", None);
-    w.note("n-with", "Soup", "", Some(&book));
-    w.note("n-back", "Stew", "", Some(&book));
+    let with = w.note("Soup", Some(&book));
+    let own = w.note("Stew", Some(&book));
+    w.ok("entity.trash", json!({"id": &own}));
     w.ok("entity.trash", json!({"id": &book}));
-    // A member restored on its own is not lost with the notebook.
-    w.ok("entity.restore", json!({"id": "n-back"}));
+    // "I trashed the folder but need this one": taken with the holder, or trashed on its own before,
+    // it comes back at the top level and the holder stays in the trash.
+    for id in [&with, &own] {
+        w.ok("entity.restore", json!({"id": id}));
+        assert!(!w.trashed(id));
+        assert_eq!(w.home(id), None);
+        assert_eq!(w.trashed_by(id), None);
+    }
+    assert!(w.trashed(&book));
+    // Restoring the holder now brings back nothing that left.
+    w.ok("entity.restore", json!({"id": &book}));
+    assert_eq!(w.home(&with), None);
+    // The undo of a trash puts the item back where it was when its home is live.
+    let kept = w.note("Kept", Some(&book));
+    w.ok("entity.trash", json!({"id": &kept}));
+    w.ok("entity.restore", json!({"id": &kept}));
+    assert_eq!(w.home(&kept), Some(book.clone()));
+    // An event needs a calendar: while its calendar is in the trash it is refused, naming the holder.
+    let cal = w.container("calendar", "Work", None);
+    let event = w.event(&cal);
+    w.ok("entity.trash", json!({"id": &cal}));
     assert!(
-        w.refused("entity.purge", json!({"id": "n-back"}))
-            .contains("not in the trash")
+        w.refused("entity.restore", json!({"id": &event}))
+            .contains("restore “Work” first")
     );
+    assert!(w.trashed(&event));
+    w.ok("entity.restore", json!({"id": &cal}));
+    assert!(!w.trashed(&event), "it came back with its calendar");
+    assert_eq!(w.home(&event), Some(cal));
+}
+
+// ---------------------------------------------------------------------------
+// A purge
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_purge_removes_everything_homed_in_a_holder_contents_before_the_holder() {
+    let w = World::new();
+    let book = w.container("notebook", "Recipes", None);
+    let inner = w.container("notebook", "Inner", Some(&book));
+    let deep = w.note("Soup", Some(&inner));
+    let back = w.note("Stew", Some(&book));
+    let alone = w.note("Alone", Some(&book));
+    // One member was in the trash before its notebook went: it is no one's contents, and is
+    // purged with the holder all the same.
+    w.ok("entity.trash", json!({"id": &alone}));
+    w.ok("entity.trash", json!({"id": &book}));
+    assert_eq!(w.trashed_by(&alone), None);
+    assert_eq!(w.trashed_by(&deep), Some(inner.clone()));
 
     let output = w.ok("entity.purge", json!({"id": &book}));
-    assert_eq!(output["purged"].as_array().expect("ids").len(), 2);
-    assert!(!w.exists(&book) && !w.exists("n-with"));
-    assert!(w.exists("n-back"));
-    assert_eq!(
-        w.one::<Option<String>>("SELECT notebook_id FROM note WHERE id = 'n-back'", &[]),
-        None,
-        "it is at the top level now"
+    let purged: Vec<&str> = output["purged"]
+        .as_array()
+        .expect("ids")
+        .iter()
+        .filter_map(|id| id.as_str())
+        .collect();
+    let at = |id: &str| purged.iter().position(|p| *p == id).expect("purged");
+    assert!(
+        at(&deep) < at(&inner) && at(&inner) < at(&book),
+        "contents go first: {purged:?}"
     );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM note WHERE id = 'n-with'", &[]),
-        0,
-        "the kind row went with the entity"
-    );
-}
-
-#[test]
-fn what_cannot_outlive_its_holder_is_purged_with_it() {
-    let w = World::new();
-    w.account("acct", "Everyday");
-    w.txn("t1", "acct", -500, None);
-    w.txn("t2", "acct", 900, None);
-    w.commit(|tx| {
-        tx.connection()
-            .execute("INSERT INTO transfer (a, b) VALUES ('t1', 't2')", [])?;
-        Ok(())
-    });
-    let project = w.container("project", "Move house", None);
-    let section = w.container("section", "Packing", Some(&project));
-    w.task("task", Some(&project), Some(&section), None);
-    for holder in ["acct", project.as_str()] {
-        w.ok("entity.trash", json!({"id": holder}));
+    assert!(at(&back) < at(&book), "contents go first: {purged:?}");
+    for id in [&book, &inner, &deep, &back] {
+        assert!(!w.exists(id));
     }
-    w.ok("entity.purge", json!({"id": "acct"}));
     assert!(
-        !w.exists("t1") && !w.exists("t2"),
-        "an account's lines go with it"
-    );
-    w.ok("entity.restore", json!({"id": &project}));
-    w.ok("entity.trash", json!({"id": &project}));
-    w.ok("entity.purge", json!({"id": &project}));
-    assert!(!w.exists(&section), "a section cannot outlive its project");
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM entity WHERE id = 'task'", &[]),
-        0,
-        "the task went to the trash with its project"
+        !w.exists(&alone),
+        "everything still homed in a trashed holder goes with it, trashed with it or on its own"
     );
 }
 
 #[test]
-fn a_category_a_place_and_a_task_release_what_points_at_them() {
+fn a_purge_refuses_only_the_owner_the_founded_calendar_and_a_kind_in_use() {
     let w = World::new();
-    w.account("acct", "Everyday");
-    w.txn("t1", "acct", -500, Some("category:food.groceries"));
-    w.ok("entity.purge", json!({"id": "category:food.groceries"}));
-    assert_eq!(
-        w.one::<Option<String>>("SELECT category_id FROM txn WHERE id = 't1'", &[]),
-        None
-    );
-    // A group's children move to the top level rather than going with it.
-    w.ok("entity.purge", json!({"id": "category:food"}));
-    assert_eq!(
-        w.one::<Option<String>>(
-            "SELECT parent_id FROM concept WHERE id = 'category:food.dining'",
-            &[]
-        ),
-        None
-    );
-
-    w.task("parent", None, None, None);
-    w.task("child", None, None, Some("parent"));
-    // A subtask goes to the trash with its parent; one the member restored on its
-    // own is live and is not theirs to lose, so the purge releases it.
-    w.ok("entity.trash", json!({"id": "parent"}));
-    assert_eq!(
-        w.one::<i64>(
-            "SELECT COUNT(*) FROM entity WHERE id = 'child' AND deleted_at IS NOT NULL",
-            &[]
-        ),
-        1
-    );
-    w.ok("entity.restore", json!({"id": "child"}));
-    let restored_stamp = w.stamp("child");
-    w.ok("entity.purge", json!({"id": "parent"}));
-    assert_eq!(
-        w.one::<Option<String>>("SELECT parent_id FROM task WHERE id = 'child'", &[]),
-        None
-    );
-    // A release is a change to what was released: it is touched.
-    assert_ne!(w.stamp("child"), restored_stamp);
-}
-
-#[test]
-fn a_purge_refuses_with_a_sentence_when_something_would_lose_its_meaning() {
-    let w = World::new();
-    // The vault's own calendar is never trashed, so the refusal is reached on another one.
-    w.commit(|tx| {
-        tx.insert_entity("calendar:work", Kind::Calendar, "Work", AT)?;
-        tx.connection().execute(
-            "INSERT INTO container (id, kind) VALUES ('calendar:work', 'calendar')",
-            [],
-        )?;
-        Ok(())
-    });
-    w.event("e1", "calendar:work");
-    w.event("e2", "calendar:default");
+    // The owner, and the calendar every vault is founded with.
+    let me = w
+        .vault()
+        .self_id()
+        .expect("reads")
+        .expect("a founded vault has an owner");
     assert!(
-        w.refused("entity.purge", json!({"id": "calendar:work"}))
-            .contains("not in the trash"),
-        "a calendar is trashed before it is purged"
-    );
-    // An event the member trashed on its own stays on the calendar when the calendar follows it
-    // (only what is live goes with a calendar), so the purge still refuses on its account.
-    w.ok("entity.trash", json!({"id": "e1"}));
-    w.scratch.clock.advance_days(1);
-    w.ok("entity.trash", json!({"id": "calendar:work"}));
-    assert!(
-        w.refused("entity.purge", json!({"id": "calendar:work"}))
-            .contains("event is still on")
-    );
-    assert!(
-        w.refused("entity.purge", json!({"id": "flag:starred"}))
-            .contains("built in")
-    );
-    w.commit(|tx| {
-        tx.insert_entity("act", Kind::Activity, "Run", AT)?;
-        tx.connection().execute(
-            "INSERT INTO activity (id, type_id, type_kind, starts) VALUES ('act', 'workout_kind:run', 'workout_kind', '2026-03-01T07:00:00.000Z')",
-            [],
-        )?;
-        Ok(())
-    });
-    assert!(
-        w.refused("entity.purge", json!({"id": "workout_kind:run"}))
-            .contains("1 activity use")
-    );
-    let me = w.vault().self_id().expect("reads").expect("founded");
-    assert!(
-        w.refused("entity.trash", json!({"id": &me}))
+        w.refused("entity.purge", json!({"id": me}))
             .contains("this is you")
     );
     assert!(
-        w.refused("entity.purge", json!({"id": &me}))
+        w.refused("entity.trash", json!({"id": "calendar:default"}))
+            .contains("founded with")
+    );
+    assert!(
+        w.refused("entity.purge", json!({"id": "calendar:default"}))
+            .contains("founded with")
+    );
+    // A calendar holding an event trashed on its own is deleted for ever with it.
+    let cal = w.container("calendar", "Work", None);
+    let event = w.event(&cal);
+    w.ok("entity.trash", json!({"id": &event}));
+    w.ok("entity.trash", json!({"id": &cal}));
+    w.ok("entity.purge", json!({"id": &cal}));
+    assert!(!w.exists(&cal) && !w.exists(&event));
+    // A kind of workout in use is changed first (workout kinds have no trash, so no trash step).
+    let run = "workout_kind:run";
+    let workout = w.mint();
+    w.commit(|tx| {
+        tx.insert_entity(&workout, Kind::Workout, "Morning run", AT)?;
+        tx.connection().execute(
+            "INSERT INTO workout (id, type_id, starts) VALUES (?1, ?2, ?3)",
+            rusqlite::params![workout, run, AT],
+        )?;
+        Ok(())
+    });
+    assert!(
+        w.refused("entity.purge", json!({"id": run}))
+            .contains("1 activity use")
+    );
+    // A category with a line filed under it.
+    let account = w.mint();
+    let line = w.mint();
+    w.commit(|tx| {
+        tx.insert_entity(&account, Kind::Account, "Everyday", AT)?;
+        tx.connection().execute(
+            "INSERT INTO account (id, type, currency) VALUES (?1, 'checking', 'USD')",
+            [&account],
+        )?;
+        tx.insert_entity(&line, Kind::Txn, "Lunch", AT)?;
+        tx.connection().execute(
+            "INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES (?1, ?2, '2026-03-01', -900, 'hand')",
+            [&line, &account],
+        )?;
+        tx.connection().execute(
+            "INSERT INTO txn_split (txn_id, position, category_id, amount_minor) VALUES (?1, 0, 'category:food', -900)",
+            [&line],
+        )?;
+        Ok(())
+    });
+    // A category with a line filed under it is deleted: the line is left uncategorised.
+    w.ok("entity.purge", json!({"id": "category:food"}));
+    assert!(!w.exists("category:food"));
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM txn_split WHERE txn_id = ?1", &[&line]),
+        0
+    );
+    // A trash-less kind is deleted, not moved to the trash; a trash kind must be in it first.
+    assert!(
+        w.refused("entity.trash", json!({"id": "category:housing"}))
+            .contains("is deleted, not moved to the trash")
+    );
+    let note = w.note("N", None);
+    assert!(
+        w.refused("entity.purge", json!({"id": &note}))
             .contains("not in the trash")
     );
-    // A tag is deleted, not trashed.
-    w.ok("tag.add", json!({"id": "e2", "label": "trip"}));
-    assert!(
-        w.refused("entity.trash", json!({"id": "tag:trip"}))
-            .contains("deleted, not moved to the trash")
-    );
-    w.ok("entity.purge", json!({"id": "tag:trip"}));
+}
+
+#[test]
+fn what_cannot_outlive_its_target_goes_with_it_and_what_can_lets_go() {
+    let w = World::new();
+    // An account's lines go with the account; a person's readings with the person.
+    let account = w.mint();
+    let line = w.mint();
+    let person = w.mint();
+    let reading = w.mint();
+    w.commit(|tx| {
+        tx.insert_entity(&account, Kind::Account, "Everyday", AT)?;
+        tx.connection().execute(
+            "INSERT INTO account (id, type, currency) VALUES (?1, 'checking', 'USD')",
+            [&account],
+        )?;
+        tx.insert_entity(&line, Kind::Txn, "Coffee", AT)?;
+        tx.connection().execute(
+            "INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES (?1, ?2, '2026-03-01', -450, 'hand')",
+            [&line, &account],
+        )?;
+        common::add_person(tx, &person, "Ada", AT)?;
+        tx.insert_entity(&reading, Kind::Reading, "", AT)?;
+        tx.connection().execute(
+            "INSERT INTO reading (id, person_id, metric, at, value) VALUES (?1, ?2, 'weight_kg', ?3, 60)",
+            rusqlite::params![reading, person, AT],
+        )?;
+        Ok(())
+    });
+    // A line trashed on its own is still purged with its account.
+    w.ok("entity.trash", json!({"id": &line}));
+    w.ok("entity.trash", json!({"id": &account}));
+    let out = w.ok("entity.purge", json!({"id": &account}));
+    assert_eq!(out["purged"].as_array().expect("ids").len(), 2);
+    assert!(!w.exists(&line));
+    w.ok("entity.trash", json!({"id": &person}));
+    w.ok("entity.purge", json!({"id": &person}));
+    assert!(!w.exists(&reading));
+    // A place lets go of the photographs and events that named it; a copy lets go of its original.
+    let place = w.mint();
+    let photo = w.mint();
+    let copy = w.mint();
+    let hash = centraid_vault::blob::content_digest(b"p");
+    w.commit(|tx| {
+        centraid_vault::blob::stage(tx.connection(), &hash, 1)?;
+        tx.insert_entity(&place, Kind::Place, "Home", AT)?;
+        tx.connection()
+            .execute("INSERT INTO place (id) VALUES (?1)", [&place])?;
+        for (id, edited_from) in [(&photo, None), (&copy, Some(&photo))] {
+            tx.insert_entity(id, Kind::Photo, "p", AT)?;
+            tx.connection().execute(
+                "INSERT INTO photo (id, blob, media_type, form, place_id, edited_from)
+                 VALUES (?1, ?2, 'image/jpeg', 'photo', ?3, ?4)",
+                rusqlite::params![id, hash, place, edited_from],
+            )?;
+        }
+        Ok(())
+    });
+    w.ok("entity.trash", json!({"id": &place}));
+    w.ok("entity.purge", json!({"id": &place}));
     assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM edge WHERE rel = 'tagged'", &[]),
-        0,
-        "the tagging went with the tag"
+        w.one::<Option<String>>("SELECT place_id FROM photo WHERE id = ?1", &[&photo]),
+        None
     );
+    w.ok("entity.trash", json!({"id": &photo}));
+    w.ok("entity.purge", json!({"id": &photo}));
+    assert_eq!(
+        w.one::<Option<String>>("SELECT edited_from FROM photo WHERE id = ?1", &[&copy]),
+        None
+    );
+}
+
+#[test]
+fn an_entity_number_is_never_reused_after_a_purge() {
+    let w = World::new();
+    let first = w.note("First", None);
+    let n = w.one::<i64>("SELECT n FROM entity WHERE id = ?1", &[&first]);
+    w.ok("entity.trash", json!({"id": &first}));
+    w.ok("entity.purge", json!({"id": &first}));
+    assert!(!w.exists(&first));
+    let second = w.note("Second", None);
+    let m = w.one::<i64>("SELECT n FROM entity WHERE id = ?1", &[&second]);
+    assert!(m > n, "the purged row's number {n} was given again as {m}");
 }
 
 #[test]
 fn emptying_the_trash_takes_one_kind_or_all_and_only_what_is_due_when_asked() {
     let w = World::new();
-    w.note("old", "Old", "", None);
-    w.note("new", "New", "", None);
-    w.person("gone", "Gone");
-    w.ok("entity.trash", json!({"id": "old"}));
-    w.scratch.clock.advance_days(31);
-    w.ok("entity.trash", json!({"id": "new"}));
-    w.ok("entity.trash", json!({"id": "gone"}));
-    let due = w.ok("entity.empty_trash", json!({"due_only": true}));
-    assert_eq!(due["purged"], 1, "only what has waited out its thirty days");
-    assert!(!w.exists("old") && w.exists("new"));
-    let notes = w.ok("entity.empty_trash", json!({"kind": "note"}));
-    assert_eq!(notes["purged"], 1);
-    assert!(w.exists("gone"), "another kind's trash is left alone");
+    let note = w.note("N", None);
+    let book = w.container("notebook", "B", None);
+    let in_book = w.note("In B", Some(&book));
+    for id in [&note, &book] {
+        w.ok("entity.trash", json!({"id": id}));
+    }
+    // Not yet due: nothing.
+    assert_eq!(
+        w.ok("entity.empty_trash", json!({"due_only": true}))["purged"],
+        0
+    );
+    // One kind.
+    // (the notebook took its note with it, and a note is a note)
+    assert_eq!(
+        w.ok("entity.empty_trash", json!({"kind": "note"}))["purged"],
+        2
+    );
+    assert!(!w.exists(&note) && !w.exists(&in_book) && w.exists(&book));
+    // What is left, once it is due.
+    // (the pass trusts a clock only within a week of the last write: the member writes on day 29)
+    w.scratch.clock.advance_days(29);
+    w.note("later", None);
+    w.scratch.clock.advance_days(2);
+    assert_eq!(
+        w.ok("entity.empty_trash", json!({"due_only": true}))["purged"],
+        1
+    );
+    assert!(!w.exists(&book));
+    // A kind with no trash has none to empty, and `with_kind` needs `kind`.
     assert!(
         w.refused("entity.empty_trash", json!({"kind": "tag"}))
-            .contains("no trash")
+            .contains("no trash to empty")
     );
-    w.ok("entity.empty_trash", json!({}));
-    assert!(!w.exists("gone"));
-}
-
-#[test]
-fn emptying_a_having_trash_takes_only_what_the_trash_lists_and_a_touch_stays_with_its_person() {
-    let w = World::new();
-    w.person("pat", "Pat");
-    let touch = w.ok(
-        "person.log_interaction",
-        json!({"id": "pat", "kind": "call"}),
-    )["interaction_id"]
-        .as_str()
-        .expect("an id")
-        .to_owned();
-    let workout = w.ok(
-        "workout.log",
-        json!({"type": "run", "starts": "2026-03-04", "moving_s": 1_800}),
-    )["workout_id"]
-        .as_str()
-        .expect("an id")
-        .to_owned();
-    w.ok("entity.trash", json!({"id": "pat"}));
-    w.ok("entity.trash", json!({"id": workout}));
-    assert!(w.trashed(&touch), "the touch went to the trash with Pat");
-    // the schema's enum refuses any other selector
-    w.refused(
-        "entity.empty_trash",
-        json!({"kind": "activity", "having": "tag"}),
+    assert!(
+        w.refused("entity.empty_trash", json!({"with_kind": "note"}))
+            .contains("second kind")
     );
-    let out = w.ok(
-        "entity.empty_trash",
-        json!({"kind": "activity", "having": "workout"}),
-    );
-    assert_eq!(out["purged"], 1);
-    assert!(!w.exists(&workout));
-    assert!(w.exists(&touch) && w.trashed(&touch), "the touch stays");
-    w.ok("entity.restore", json!({"id": "pat"}));
-    assert!(!w.trashed(&touch), "and comes back with its person");
 }
 
 // ---------------------------------------------------------------------------
-// tag.*, flag.*, edge.*
+// Flags are columns (A14)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_flag_is_an_instant_on_the_row_and_setting_it_is_not_an_edit() {
+    let w = World::new();
+    let project = w.container("task_list", "Move house", None);
+    let note = w.note("N", None);
+    // An edit first, so there is a revision for a flag to (not) add to.
+    w.ok(
+        "entity.retitle",
+        json!({"id": &project, "title": "Move flat"}),
+    );
+    let stamp = w.stamp(&project);
+    let revisions =
+        |id: &str| w.one::<i64>("SELECT COUNT(*) FROM revision WHERE entity_id = ?1", &[id]);
+    let before = revisions(&project);
+    assert!(before > 0, "the retitle wrote a version");
+    let writes = w.one::<i64>("SELECT writes FROM vault", &[]);
+
+    let archived = w.ok("flag.set", json!({"id": &project, "flag": "archived"}));
+    assert_eq!(archived["changed"], true);
+    assert_eq!(archived["changed_ids"], json!([&project]));
+    let first_star = {
+        w.ok("flag.set", json!({"id": &project, "flag": "starred"}));
+        w.one::<String>("SELECT starred_at FROM entity WHERE id = ?1", &[&project])
+    };
+    assert_eq!(first_star, w.vault().clock().now_text());
+    assert_eq!(
+        w.one::<Option<String>>("SELECT pinned_at FROM entity WHERE id = ?1", &[&project]),
+        None
+    );
+    // Neither the "last edited" nor a revision moved; the search owes nothing.
+    assert_eq!(w.stamp(&project), stamp, "a flag stamps no updated_at");
+    assert_eq!(revisions(&project), before, "a flag writes no revision");
+    // Setting it again keeps its first instant.
+    let unchanged = w.ok("flag.set", json!({"id": &project, "flag": "starred"}));
+    assert_eq!(unchanged["changed"], false);
+    assert_eq!(unchanged["changed_ids"], json!([]));
+    assert_eq!(
+        w.one::<String>("SELECT starred_at FROM entity WHERE id = ?1", &[&project]),
+        first_star
+    );
+    // The same for every kind but a missing or trashed row.
+    for flag in ["starred", "pinned", "archived"] {
+        w.ok("flag.set", json!({"id": &note, "flag": flag}));
+        w.ok("flag.set", json!({"id": "category:food", "flag": flag}));
+    }
+    assert_eq!(
+        w.ok("flag.clear", json!({"id": &project, "flag": "archived"}))["changed"],
+        true
+    );
+    assert_eq!(
+        w.ok("flag.clear", json!({"id": &project, "flag": "archived"}))["changed"],
+        false
+    );
+    assert_eq!(w.stamp(&project), stamp);
+    assert!(w.one::<i64>("SELECT writes FROM vault", &[]) >= writes);
+    assert!(
+        w.refused("flag.set", json!({"id": "nothing", "flag": "pinned"}))
+            .contains("nothing with the id")
+    );
+    w.ok("entity.trash", json!({"id": &note}));
+    assert!(
+        w.refused("flag.set", json!({"id": &note, "flag": "pinned"}))
+            .contains("in the trash")
+    );
+    // The shelves read the column: three flags, three partial indexes.
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM entity WHERE starred_at IS NOT NULL",
+            &[]
+        ),
+        3
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Ids (A17) and arrivals (A10)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_new_entity_id_is_a_uuid_v7_minted_from_the_injected_clock() {
+    use centraid_vault::clock::{Clock as _, ClockIds, FixedClock};
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a scratch");
+    let clock = std::sync::Arc::new(FixedClock::frozen());
+    let vault = Vault::create_with(
+        dir.join("vault.db"),
+        Box::new(std::sync::Arc::clone(&clock)),
+        Box::new(ClockIds::new(Box::new(std::sync::Arc::clone(&clock)))),
+    )
+    .expect("a vault");
+    vault.found("Test", "Test Owner").expect("founded");
+    let registry = Registry::with_system_commands().expect("a registry");
+    let mut seen = Vec::new();
+    for (days, title) in [(0, "A"), (1, "B"), (400, "C")] {
+        clock.advance_days(days);
+        let out = vault
+            .execute(
+                &registry,
+                &Principal::owner("phone"),
+                &Command::new(
+                    "container.create",
+                    json!({"kind": "notebook", "title": title}),
+                ),
+            )
+            .expect("runs");
+        seen.push((
+            out.output["id"].as_str().expect("an id").to_owned(),
+            clock.now_ms(),
+        ));
+    }
+    for (id, ms) in &seen {
+        assert!(centraid_vault::model::is_minted_id(id), "{id}");
+        // The first 48 bits are the clock's milliseconds: not the host's.
+        let prefix = format!("{:08x}-{:04x}", (ms >> 16) & 0xffff_ffff, ms & 0xffff);
+        assert!(id.starts_with(&prefix), "{id} is not minted at {ms}");
+    }
+    assert!(
+        seen[0].0 < seen[1].0 && seen[1].0 < seen[2].0,
+        "v7 sorts by time"
+    );
+    // The founding's own slugs are untouched.
+    assert!(seen.iter().all(|(id, _)| !id.contains(':')));
+    let seeded: i64 = vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM entity WHERE id LIKE '%:%' AND kind = substr(id, 1, instr(id, ':') - 1)",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("counts");
+    assert!(seeded > 0, "seeded slugs stay slugs");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_caller_chosen_id_is_a_uuid_v7_or_it_is_refused() {
+    let w = World::new();
+    let ok = w.mint();
+    w.ok(
+        "container.create",
+        json!({"kind": "list", "title": "Mine", "id": &ok}),
+    );
+    assert!(w.exists(&ok));
+    let outcome = w.vault().execute(
+        &w.registry,
+        &Principal::owner("phone"),
+        &Command::new(
+            "container.create",
+            json!({"kind": "list", "title": "Slug", "id": "list:mine"}),
+        ),
+    );
+    let error = outcome.expect_err("a slug is founding's alone");
+    assert!(error.to_string().contains("UUIDv7"), "{error}");
+    assert!(!w.exists("list:mine"));
+}
+
+#[test]
+fn a_one_time_arrival_stamps_both_its_columns_and_makes_no_origin_or_source() {
+    let w = World::new();
+    let hash = centraid_vault::blob::content_digest(b"scan");
+    w.commit(|tx| {
+        centraid_vault::blob::stage(tx.connection(), &hash, 4)?;
+        Ok(())
+    });
+    let counts = |w: &World| {
+        (
+            w.one::<i64>("SELECT COUNT(*) FROM origin", &[]),
+            w.one::<i64>("SELECT COUNT(*) FROM source", &[]),
+        )
+    };
+    let before = counts(&w);
+    let id = w.ok(
+        "probe.arrive",
+        json!({"blob": &hash, "arrived_via": "scan", "arrived_label": "/home/me/receipts/2026/scan-001.pdf"}),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    assert_eq!(
+        w.one::<String>("SELECT arrived_via FROM entity WHERE id = ?1", &[&id]),
+        "scan"
+    );
+    assert_eq!(
+        w.one::<String>("SELECT arrived_label FROM entity WHERE id = ?1", &[&id]),
+        "scan-001.pdf",
+        "a label is a file's own name, never a path"
+    );
+    assert_eq!(
+        counts(&w),
+        before,
+        "an arrival is two columns, not a followed store"
+    );
+    // A typed item has neither, and the two come together or not at all.
+    let typed = w.ok("probe.arrive", json!({"blob": &hash}))["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    assert_eq!(
+        w.one::<Option<String>>("SELECT arrived_via FROM entity WHERE id = ?1", &[&typed]),
+        None
+    );
+    for input in [
+        json!({"blob": &hash, "arrived_via": "scan"}),
+        json!({"blob": &hash, "arrived_label": "x.pdf"}),
+        json!({"blob": &hash, "arrived_via": "vcard", "arrived_label": "x.vcf"}),
+        json!({"blob": &hash, "arrived_via": "scan", "arrived_label": "  /  "}),
+    ] {
+        let error = w
+            .vault()
+            .execute(
+                &w.registry,
+                &Principal::owner("phone"),
+                &Command::new("probe.arrive", input),
+            )
+            .expect_err("refused");
+        assert!(error.to_string().contains("arrived_"), "{error}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tags and concepts (A1, A7, J1)
 // ---------------------------------------------------------------------------
 
 #[test]
 fn a_new_label_wears_the_palette_colour_fewest_labels_wear_and_a_recolour_sticks() {
     let w = World::new();
-    w.note("n1", "Trip", "", None);
+    let note = w.note("Trip", None);
     let colour = |key: &str| {
         w.one::<Option<String>>("SELECT color FROM concept WHERE key = ?1", &[key])
             .expect("a label always has a colour")
@@ -515,7 +1048,7 @@ fn a_new_label_wears_the_palette_colour_fewest_labels_wear_and_a_recolour_sticks
     // The first eight labels take the eight hues, in palette order: no colour repeats early.
     let labels = ["a", "b", "c", "d", "e", "f", "g", "h"];
     for label in labels {
-        w.ok("tag.add", json!({"id": "n1", "label": label}));
+        w.ok("tag.add", json!({"id": &note, "label": label}));
     }
     let seen: Vec<String> = labels.iter().map(|label| colour(label)).collect();
     assert_eq!(
@@ -532,19 +1065,19 @@ fn a_new_label_wears_the_palette_colour_fewest_labels_wear_and_a_recolour_sticks
         ]
     );
     // The ninth starts the palette again, and a repeated tagging keeps the colour.
-    w.ok("tag.add", json!({"id": "n1", "label": "i"}));
+    w.ok("tag.add", json!({"id": &note, "label": "i"}));
     assert_eq!(colour("i"), "blue");
-    w.ok("tag.add", json!({"id": "n1", "label": "A"}));
+    w.ok("tag.add", json!({"id": &note, "label": "A"}));
     assert_eq!(colour("a"), "blue");
     // A colour asked for wins on a NEW label and never recolours a known one.
     w.ok(
         "tag.add",
-        json!({"id": "n1", "label": "j", "color": "orchid"}),
+        json!({"id": &note, "label": "j", "color": "orchid"}),
     );
     assert_eq!(colour("j"), "orchid");
     w.ok(
         "tag.add",
-        json!({"id": "n1", "label": "j", "color": "violet"}),
+        json!({"id": &note, "label": "j", "color": "violet"}),
     );
     assert_eq!(colour("j"), "orchid");
     // The recolour is its own command, by the label's words.
@@ -562,972 +1095,146 @@ fn a_new_label_wears_the_palette_colour_fewest_labels_wear_and_a_recolour_sticks
     // Only the palette's keys are colours.
     let outcome = w.run("tag.color", json!({"label": "j", "color": "#FF0000"}));
     assert_ne!(outcome.status, CommandStatus::Executed);
+    // Only a concept kind that takes a colour wears one: a category, by the lookup row.
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM concept c JOIN concept_kind k ON k.code = c.kind
+              WHERE c.color IS NOT NULL AND k.takes_color = 0",
+            &[]
+        ),
+        0
+    );
 }
 
 #[test]
 fn a_tag_is_minted_by_its_folded_label_and_a_tagging_changes_nothing_on_the_entity() {
     let w = World::new();
-    w.note("n1", "Trip", "", None);
-    let first = w.ok("tag.add", json!({"id": "n1", "label": "Road  Trip"}));
-    assert_eq!(first["tag"], "tag:road trip");
+    let note = w.note("Trip", None);
+    let first = w.ok("tag.add", json!({"id": &note, "label": "Road  Trip"}));
+    let tag = first["tag"].as_str().expect("a tag").to_owned();
+    assert!(
+        centraid_vault::model::is_minted_id(&tag),
+        "a member's tag has a minted id: {tag}"
+    );
     assert_eq!(first["added"], true);
-    let again = w.ok("tag.add", json!({"id": "n1", "label": "road trip"}));
+    assert_eq!(first["changed_ids"], json!([&note]));
+    assert_eq!(
+        w.one::<String>("SELECT key FROM concept WHERE id = ?1", &[&tag]),
+        "road trip"
+    );
+    let again = w.ok("tag.add", json!({"id": &note, "label": "road trip"}));
     assert_eq!(again["added"], false, "the same word is the same tag");
+    assert_eq!(again["changed_ids"], json!([]));
+    assert_eq!(again["tag"], tag.as_str());
     assert_eq!(
         w.one::<i64>("SELECT COUNT(*) FROM concept WHERE kind = 'tag'", &[]),
         1
     );
     assert_eq!(
-        w.one::<String>("SELECT title FROM entity WHERE id = 'tag:road trip'", &[]),
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&tag]),
         "Road Trip"
     );
-    assert_eq!(w.stamp("n1"), AT, "a tag is not a change to the note");
+    assert_eq!(w.stamp(&note), AT, "a tag is not a change to the note");
     assert_eq!(
-        w.ok("tag.remove", json!({"id": "n1", "label": "ROAD TRIP"}))["removed"],
+        w.ok("tag.remove", json!({"id": &note, "label": "ROAD TRIP"}))["removed"],
         true
+    );
+    assert_eq!(
+        w.ok("tag.remove", json!({"id": &note, "label": "never used"}))["removed"],
+        false
     );
     assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM edge", &[]), 0);
     assert!(
-        w.refused("tag.add", json!({"id": "n1", "label": " "}))
+        w.refused("tag.add", json!({"id": &note, "label": " "}))
             .contains("needs a word")
     );
-    assert!(
-        w.refused("tag.add", json!({"id": "tag:road trip", "label": "x"}))
-            .contains("is a word")
-    );
 }
 
 #[test]
-fn a_flag_is_a_seeded_tagging_on_anything_that_is_not_a_word() {
+fn a_tag_goes_on_what_edge_shape_says_and_the_command_says_so_when_it_does_not() {
     let w = World::new();
-    let project = w.container("project", "Move house", None);
-    w.ok("flag.set", json!({"id": &project, "flag": "archived"}));
-    w.ok("flag.set", json!({"id": &project, "flag": "starred"}));
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged' AND to_id LIKE 'flag:%'", &[&project]),
-        2
-    );
-    assert_eq!(
-        w.ok("flag.clear", json!({"id": &project, "flag": "archived"}))["changed"],
-        true
-    );
-    assert_eq!(
-        w.ok("flag.clear", json!({"id": &project, "flag": "archived"}))["changed"],
-        false
-    );
-    assert!(
-        w.refused("flag.set", json!({"id": "flag:starred", "flag": "pinned"}))
-            .contains("is a word")
-    );
-    // A category is a word the member manages: it can be archived.
-    w.ok(
-        "flag.set",
-        json!({"id": "category:food", "flag": "archived"}),
-    );
-}
-
-#[test]
-fn an_edge_joins_what_edge_shape_allows_and_says_so_in_a_sentence_when_it_does_not() {
-    let w = World::new();
-    w.person("p1", "Ada");
-    w.person("p2", "Grace");
-    w.note("n1", "Note", "body", None);
-    let album = w.container("album", "Trip", None);
-    let refusal = w.refused(
-        "edge.add",
-        json!({"from": &album, "rel": "contains", "to": "n1"}),
-    );
-    assert!(refusal.contains("cannot be `contains`"), "{refusal}");
-    assert!(
-        w.refused(
-            "edge.add",
-            json!({"from": "p1", "rel": "related", "to": "p2"})
-        )
-        .contains("say how")
-    );
-    assert!(
-        w.refused("edge.add", json!({"from": "p1", "rel": "with", "to": "p2"}))
-            .contains("cannot be `with`")
-    );
-    assert!(
-        w.refused(
-            "edge.add",
-            json!({"from": "p1", "rel": "related", "to": "p1", "label": "self"})
-        )
-        .contains("itself")
-    );
-    assert!(
-        w.refused(
-            "edge.add",
-            json!({"from": "n1", "rel": "about", "to": "p1", "position": 1})
-        )
-        .contains("has a place")
-    );
-
-    // A relation is a concept the member names.
-    let out = w.ok(
-        "edge.add",
-        json!({"from": "p1", "rel": "related", "to": "p2", "label": "Colleague"}),
-    );
-    assert_eq!(out["label"], "relation:colleague");
-    assert_eq!(
-        w.one::<String>(
-            "SELECT kind FROM entity WHERE id = 'relation:colleague'",
-            &[]
-        ),
-        "relation"
-    );
-    w.ok(
-        "edge.add",
-        json!({"from": "p1", "rel": "related", "to": "p2", "label": "colleague"}),
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM edge WHERE rel = 'related'", &[]),
-        1,
-        "adding is idempotent"
-    );
-    w.ok(
-        "edge.add",
-        json!({"from": "p1", "rel": "related", "to": "p2", "label": "friend"}),
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM edge WHERE rel = 'related'", &[]),
-        2,
-        "a second label is a second edge"
-    );
-    w.ok(
-        "edge.remove",
-        json!({"from": "p1", "rel": "related", "to": "p2", "label": "Colleague"}),
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM edge WHERE rel = 'related'", &[]),
-        1
-    );
-}
-
-#[test]
-fn a_list_is_ordered_by_position_and_an_item_is_moved_not_rewritten() {
-    let w = World::new();
-    let list = w.container("list", "Family", None);
-    for (id, name) in [("a", "Ann"), ("b", "Bo"), ("c", "Cy")] {
-        w.person(id, name);
-        w.ok(
-            "edge.add",
-            json!({"from": &list, "rel": "contains", "to": id}),
+    // Every linkable kind takes a tag: the wildcard is `entity_kind.linkable`, read from the table.
+    let person = w.mint();
+    w.commit(|tx| common::add_person(tx, &person, "Ada", AT));
+    for id in [
+        &w.note("N", None),
+        &person,
+        &w.task(None),
+        &w.event("calendar:default"),
+    ] {
+        assert_eq!(
+            w.ok("tag.add", json!({"id": id, "label": "x"}))["added"],
+            true
         );
     }
-    let order = |w: &World| -> Vec<String> {
-        w.vault()
-            .read(|connection| {
-                let mut statement = connection.prepare(
-                    "SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains' ORDER BY position",
-                )?;
-                Ok(statement
-                    .query_map([&list], |row| row.get(0))?
-                    .collect::<rusqlite::Result<Vec<String>>>()?)
-            })
-            .expect("reads")
-    };
-    assert_eq!(
-        order(&w),
-        ["a", "b", "c"],
-        "appended in the order they were added"
-    );
-    w.ok(
-        "edge.move",
-        json!({"from": &list, "to": "c", "position": 0.5}),
-    );
-    assert_eq!(order(&w), ["c", "a", "b"]);
-    // Adding an item that is already there does not move it.
-    w.ok(
-        "edge.add",
-        json!({"from": &list, "rel": "contains", "to": "a"}),
-    );
-    assert_eq!(order(&w), ["c", "a", "b"]);
-    assert!(
-        w.refused(
-            "edge.move",
-            json!({"from": &list, "to": "nobody", "position": 1})
-        )
-        .contains("not in this list")
-    );
-}
-
-#[test]
-fn an_invitees_answer_is_updated_in_place() {
-    let w = World::new();
-    w.person("p1", "Ada");
-    w.event("e1", "calendar:default");
-    w.ok(
-        "edge.add",
-        json!({"from": "e1", "rel": "attendee", "to": "p1"}),
-    );
-    assert_eq!(
-        w.one::<Option<String>>("SELECT state FROM edge WHERE rel = 'attendee'", &[]),
-        None
-    );
-    w.ok(
-        "edge.add",
-        json!({"from": "e1", "rel": "attendee", "to": "p1", "state": "accepted"}),
-    );
-    assert_eq!(
-        w.one::<String>("SELECT state FROM edge WHERE rel = 'attendee'", &[]),
-        "accepted"
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM edge WHERE rel = 'attendee'", &[]),
-        1
-    );
-    assert_eq!(w.stamp("e1"), AT, "an attendee is not a touch");
-}
-
-#[test]
-fn an_about_or_links_edge_touches_the_note_at_its_start_and_no_other_edge_does() {
-    let w = World::new();
-    w.person("mum", "Mum");
-    w.note("n1", "Call", "", None);
-    w.note("n2", "Other", "", None);
-    w.ok(
-        "edge.add",
-        json!({"from": "n1", "rel": "about", "to": "mum"}),
-    );
-    let about = w.stamp("n1");
-    assert_ne!(about, AT, "an about edge touches the note at its start");
-    assert_eq!(w.stamp("mum"), AT, "the person is re-indexed, not touched");
-    w.ok(
-        "edge.add",
-        json!({"from": "n1", "rel": "links", "to": "n2", "anchor": {"from": 3, "to": 9}}),
-    );
-    let linked = w.stamp("n1");
-    assert_ne!(linked, about, "a links edge touches it again");
-    assert_eq!(
-        w.one::<String>("SELECT anchor FROM edge WHERE rel = 'links'", &[]),
-        r#"{"from":3,"to":9}"#
-    );
-    w.ok(
-        "edge.remove",
-        json!({"from": "n1", "rel": "about", "to": "mum"}),
-    );
-    let removed = w.stamp("n1");
-    assert_ne!(removed, linked, "removing an about edge touches it");
-    // Removing an edge that is not there changes nothing.
-    w.ok(
-        "edge.remove",
-        json!({"from": "n1", "rel": "about", "to": "mum"}),
-    );
-    assert_eq!(w.stamp("n1"), removed);
-}
-
-// ---------------------------------------------------------------------------
-// container.*
-// ---------------------------------------------------------------------------
-
-#[test]
-fn containers_nest_only_in_their_own_kind_and_never_inside_themselves() {
-    let w = World::new();
-    let outer = w.container("folder", "Taxes", None);
-    let inner = w.container("folder", "2026", Some(&outer));
-    assert!(
-        w.refused(
-            "container.create",
-            json!({"kind": "notebook", "title": "N", "parent": &outer})
-        )
-        .contains("does not go inside")
-    );
-    assert!(
-        w.refused("container.create", json!({"kind": "section", "title": "S"}))
-            .contains("belongs to a project")
-    );
-    assert!(
-        w.refused("container.move", json!({"id": &outer, "parent": &inner}))
-            .contains("inside itself")
-    );
-    let area = w.container("area", "Home", None);
-    let project = w.container("project", "Move", Some(&area));
-    w.container("section", "Packing", Some(&project));
-    assert!(
-        w.refused("container.move", json!({"id": &project, "parent": &outer}))
-            .contains("does not go inside")
-    );
-    w.ok("container.move", json!({"id": &project, "parent": null}));
-    assert_eq!(
-        w.one::<Option<String>>("SELECT parent_id FROM container WHERE id = ?1", &[&project]),
-        None
-    );
-    w.ok(
-        "container.move",
-        json!({"id": &inner, "parent": null, "position": 7}),
-    );
-    assert_eq!(
-        w.one::<f64>("SELECT position FROM container WHERE id = ?1", &[&inner]),
-        7.0
-    );
-    assert!(
-        w.refused("container.create", json!({"kind": "folder", "title": " "}))
-            .contains("needs a name")
-    );
-}
-
-// ---------------------------------------------------------------------------
-// blob.*, derivative.*
-// ---------------------------------------------------------------------------
-
-#[test]
-fn staging_bytes_is_idempotent_and_the_same_bytes_have_one_size() {
-    let w = World::new();
-    let hash = centraid_vault::blob::content_digest(b"hello");
-    assert_eq!(
-        w.ok("blob.stage", json!({"hash": &hash, "size": 5}))["added"],
-        true
-    );
-    assert_eq!(
-        w.ok("blob.stage", json!({"hash": &hash, "size": 5}))["added"],
-        false
-    );
-    let error = w
+    // A container, a concept, a chat and a reading take none.
+    let notebook = w.container("notebook", "B", None);
+    let thread = w.bare(Kind::Thread, "Chat", None);
+    let reading = w.bare(Kind::Reading, "", None);
+    for (id, noun) in [
+        (notebook.as_str(), "notebook"),
+        (thread.as_str(), "thread"),
+        (reading.as_str(), "reading"),
+        ("category:food", "category"),
+    ] {
+        let sentence = w.refused("tag.add", json!({"id": id, "label": "x"}));
+        assert_eq!(sentence, format!("a {noun} does not take a tag"));
+        let sentence = w.refused("tag.remove", json!({"id": id, "label": "x"}));
+        assert_eq!(sentence, format!("a {noun} does not take a tag"));
+    }
+    // The table says the same for every kind, so the command and the database agree.
+    let kinds: Vec<(String, bool)> = w
         .vault()
-        .execute(
-            &w.registry,
-            &Principal::owner("p"),
-            &Command::new("blob.stage", json!({"hash": &hash, "size": 6})),
-        )
-        .expect_err("a different size");
-    assert!(error.to_string().contains("already held at 5 bytes"));
-}
-
-#[test]
-fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_blob_named() {
-    let w = World::new();
-    let kept = w.document("d1", "Kept", b"kept", None);
-    let orphan = centraid_vault::blob::content_digest(b"orphan");
-    // A derivative of the orphan has bytes of its own; the orphan's collection
-    // takes the derivative, and its bytes then have no claim either. Written
-    // through the library, not the command: `derivative.write` collects, and
-    // would take the orphan before this test asks.
-    let thumb = centraid_vault::blob::content_digest(b"orphan thumb");
-    w.commit(|tx| {
-        centraid_vault::blob::stage(tx.connection(), &orphan, 6)?;
-        centraid_vault::blob::write_derivative(
-            tx.connection(),
-            AT,
-            &orphan,
-            "thumb",
-            Some((&thumb, 12, "image/jpeg")),
-            None,
-        )
-    });
-    let collected = w.ok("blob.collect", json!({}))["released"]
-        .as_array()
-        .expect("hashes")
-        .clone();
-    let mut collected: Vec<String> = collected
-        .iter()
-        .map(|hash| hash.as_str().expect("hash").to_owned())
-        .collect();
-    collected.sort();
-    let mut expected = vec![orphan.clone(), thumb.clone()];
-    expected.sort();
-    assert_eq!(collected, expected);
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM blob", &[]), 1);
-    // A derivative of the kept document keeps its own bytes alive only while it exists.
-    let kept_thumb = centraid_vault::blob::content_digest(b"kept thumb");
-    w.ok(
-        "derivative.write",
-        json!({"blob": &kept, "variant": "preview", "out": &kept_thumb, "out_size": 10, "media_type": "image/jpeg"}),
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM blob", &[]),
-        2,
-        "the kept document's blob and its preview"
-    );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM derivative", &[]), 1);
-
-    // Trash keeps the reference alive; a purge releases it.
-    w.ok("entity.trash", json!({"id": "d1"}));
-    assert!(
-        w.ok("blob.collect", json!({}))["released"]
-            .as_array()
-            .expect("hashes")
-            .is_empty()
-    );
-    // The purge collects inside its own commit and says what it released.
-    let purged = w.ok("entity.purge", json!({"id": "d1"}));
-    assert_eq!(purged["released"].as_array().expect("hashes").len(), 2);
-    assert!(
-        w.ok("blob.collect", json!({}))["released"]
-            .as_array()
-            .expect("hashes")
-            .is_empty(),
-        "nothing is left for a later sweep"
-    );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM blob", &[]), 0);
-}
-
-#[test]
-fn a_derivative_is_one_row_per_variant_and_checks_its_own_shape() {
-    let w = World::new();
-    let original = w.document("d1", "Scan", b"scan", None);
-    assert!(
-        w.refused(
-            "derivative.write",
-            json!({"blob": &original, "variant": "thumb"})
-        )
-        .contains("needs its bytes")
-    );
-    assert!(
-        w.refused(
-            "derivative.write",
-            json!({"blob": &original, "variant": "text"})
-        )
-        .contains("needs its value")
-    );
-    w.ok(
-        "derivative.write",
-        json!({"blob": &original, "variant": "text", "text": "first"}),
-    );
-    w.ok(
-        "derivative.write",
-        json!({"blob": &original, "variant": "text", "text": "second"}),
-    );
-    assert_eq!(
-        w.one::<String>("SELECT text FROM derivative WHERE variant = 'text'", &[]),
-        "second"
-    );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM derivative", &[]), 1);
-    let missing = centraid_vault::blob::content_digest(b"never staged");
-    assert!(
-        w.vault()
-            .execute(
-                &w.registry,
-                &Principal::owner("p"),
-                &Command::new(
-                    "derivative.write",
-                    json!({"blob": &missing, "variant": "text", "text": "x"})
-                ),
-            )
-            .is_err()
-    );
-    w.ok(
-        "derivative.drop",
-        json!({"blob": &original, "variant": "text"}),
-    );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM derivative", &[]), 0);
-}
-
-// ---------------------------------------------------------------------------
-// person.merge
-// ---------------------------------------------------------------------------
-
-#[test]
-fn a_merge_repoints_every_reference_and_purges_the_person_who_goes() {
-    let w = World::new();
-    w.person("keep", "Margaret");
-    w.person("lose", "Peggy");
-    w.person("sib", "Ann");
-    w.note("n1", "Birthday", "", None);
-    w.event("e1", "calendar:default");
-    w.commit(|tx| {
-        let c = tx.connection();
-        c.execute("UPDATE person SET role = NULL, nickname = 'Peggy', cadence_days = 14 WHERE id = 'lose'", [])?;
-        c.execute("UPDATE person SET role = 'Teacher' WHERE id = 'keep'", [])?;
-        for (id, kind, value, preferred) in [
-            ("c-keep", "email", "m@orchard.example", 1),
-            ("c-dup", "email", "m@orchard.example", 0),
-            ("c-phone", "phone", "555 0100", 1),
-            ("c-mail2", "email", "peggy@orchard.example", 1),
-        ] {
-            let owner = if id == "c-keep" { "keep" } else { "lose" };
-            c.execute(
-                "INSERT INTO contact_point (id, person_id, kind, value, normalized, preferred, position)
-                 VALUES (?1, ?2, ?3, ?4, ?4, ?5, 1)",
-                rusqlite::params![id, owner, kind, value, preferred],
-            )?;
-        }
-        c.execute("INSERT INTO measurement (person_id, day, metric, value) VALUES ('keep', '2026-03-01', 'steps', 100)", [])?;
-        c.execute("INSERT INTO measurement (person_id, day, metric, value) VALUES ('lose', '2026-03-01', 'steps', 999)", [])?;
-        c.execute("INSERT INTO measurement (person_id, day, metric, value) VALUES ('lose', '2026-03-02', 'steps', 200)", [])?;
-        Ok(())
-    });
-    w.ok(
-        "edge.add",
-        json!({"from": "n1", "rel": "about", "to": "lose"}),
-    );
-    w.ok(
-        "edge.add",
-        json!({"from": "e1", "rel": "attendee", "to": "lose", "state": "accepted"}),
-    );
-    w.ok(
-        "edge.add",
-        json!({"from": "lose", "rel": "related", "to": "sib", "label": "sister"}),
-    );
-    w.ok(
-        "edge.add",
-        json!({"from": "lose", "rel": "related", "to": "keep", "label": "same"}),
-    );
-    w.ok("tag.add", json!({"id": "lose", "label": "family"}));
-
-    let output = w.ok("person.merge", json!({"from": "lose", "into": "keep"}));
-    assert_eq!(output["into"], "keep");
-    assert!(!w.exists("lose"));
-    // Edges follow, and an edge that would join the survivor to themselves is dropped.
-    assert_eq!(
-        w.one::<i64>(
-            "SELECT COUNT(*) FROM edge WHERE from_id = 'n1' AND rel = 'about' AND to_id = 'keep'",
-            &[]
-        ),
-        1
-    );
-    assert_eq!(
-        w.one::<String>(
-            "SELECT state FROM edge WHERE rel = 'attendee' AND to_id = 'keep'",
-            &[]
-        ),
-        "accepted"
-    );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM edge WHERE rel = 'related' AND from_id = 'keep' AND to_id = 'sib'", &[]), 1);
-    assert_eq!(
-        w.one::<i64>(
-            "SELECT COUNT(*) FROM edge WHERE rel = 'related' AND (from_id = to_id)",
-            &[]
-        ),
-        0
-    );
-    assert_eq!(
-        w.one::<i64>(
-            "SELECT COUNT(*) FROM edge WHERE from_id = 'keep' AND rel = 'tagged'",
-            &[]
-        ),
-        1
-    );
-    assert_eq!(
-        w.one::<i64>(
-            "SELECT COUNT(*) FROM edge WHERE from_id = 'lose' OR to_id = 'lose'",
-            &[]
-        ),
-        0
-    );
-    // Contact points: a duplicate is kept once, the survivor's preference stands.
-    assert_eq!(
-        w.one::<i64>(
-            "SELECT COUNT(*) FROM contact_point WHERE person_id = 'keep'",
-            &[]
-        ),
-        3
-    );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM contact_point WHERE person_id = 'keep' AND kind = 'email' AND preferred = 1", &[]), 1);
-    assert_eq!(w.one::<String>("SELECT id FROM contact_point WHERE person_id = 'keep' AND kind = 'email' AND preferred = 1", &[]), "c-keep");
-    // A measurement both have is the survivor's; the other moves.
-    assert_eq!(
-        w.one::<f64>(
-            "SELECT value FROM measurement WHERE person_id = 'keep' AND day = '2026-03-01'",
-            &[]
-        ),
-        100.0
-    );
-    assert_eq!(
-        w.one::<f64>(
-            "SELECT value FROM measurement WHERE person_id = 'keep' AND day = '2026-03-02'",
-            &[]
-        ),
-        200.0
-    );
-    // Blanks are filled; what the survivor says stands.
-    assert_eq!(
-        w.one::<String>("SELECT role FROM person WHERE id = 'keep'", &[]),
-        "Teacher"
-    );
-    assert_eq!(
-        w.one::<String>("SELECT nickname FROM person WHERE id = 'keep'", &[]),
-        "Peggy"
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT cadence_days FROM person WHERE id = 'keep'", &[]),
-        14
-    );
-    assert_ne!(w.stamp("keep"), AT, "a merge touches the survivor");
-}
-
-#[test]
-fn a_merge_refuses_what_is_not_two_people_or_would_remove_the_owner() {
-    let w = World::new();
-    w.person("p1", "Ada");
-    w.note("n1", "N", "", None);
-    let me = w.vault().self_id().expect("reads").expect("founded");
-    assert!(
-        w.refused("person.merge", json!({"from": "p1", "into": "p1"}))
-            .contains("themselves")
-    );
-    assert!(
-        w.refused("person.merge", json!({"from": "n1", "into": "p1"}))
-            .contains("only people")
-    );
-    assert!(
-        w.refused("person.merge", json!({"from": &me, "into": "p1"}))
-            .contains("this is you")
-    );
-    w.ok("person.merge", json!({"from": "p1", "into": &me}));
-    assert!(!w.exists("p1"));
-}
-
-// ---------------------------------------------------------------------------
-// follow.*: the per-field three-way merge
-// ---------------------------------------------------------------------------
-
-fn contacts(w: &World, complete: bool, records: serde_json::Value) -> serde_json::Value {
-    w.ok(
-        "follow.contacts",
-        json!({
-            "origin": {"ref": "icloud", "label": "iCloud"},
-            "records": records,
-            "complete": complete
-        }),
-    )
-}
-
-fn contact(
-    external_id: &str,
-    title: &str,
-    role: Option<&str>,
-    nickname: Option<&str>,
-) -> serde_json::Value {
-    let mut fields = json!({"title": title});
-    if let Some(role) = role {
-        fields["role"] = json!(role);
-    }
-    if let Some(nickname) = nickname {
-        fields["nickname"] = json!(nickname);
-    }
-    json!({"external_id": external_id, "fields": fields})
-}
-
-fn field(w: &World, id: &str, column: &str) -> Option<String> {
-    w.one::<Option<String>>(&format!("SELECT {column} FROM person WHERE id = ?1"), &[id])
-}
-
-fn followed(w: &World, external_id: &str) -> Option<String> {
-    w.vault()
-        .read(|connection| {
-            Ok(connection
-                .query_row(
-                    "SELECT entity_id FROM source WHERE external_id = ?1",
-                    [external_id],
-                    |row| row.get(0),
-                )
-                .ok()
-                .flatten())
+        .read(|c| {
+            let mut statement =
+                c.prepare("SELECT code, linkable FROM entity_kind ORDER BY code")?;
+            Ok(statement
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?)
         })
-        .expect("reads")
+        .expect("kinds");
+    assert!(kinds.iter().any(|(_, linkable)| *linkable) && kinds.iter().any(|(_, l)| !*l));
 }
 
 #[test]
-fn a_new_record_is_added_with_its_source_and_a_known_one_updates_only_what_the_member_left_alone() {
+fn a_concept_hierarchy_is_the_home_of_its_own_kind() {
     let w = World::new();
-    let out = contacts(
-        &w,
-        true,
-        json!([contact("c1", "Ada Lovelace", Some("Engineer"), Some("Ada"))]),
-    );
-    assert_eq!(
-        (out["added"].as_u64(), out["matched"].as_u64()),
-        (Some(1), Some(0))
-    );
-    let id = followed(&w, "c1").expect("linked");
-    assert_eq!(
-        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
-        "Ada Lovelace"
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM origin WHERE system = 'contacts'", &[]),
-        1
-    );
-
-    // The member changes the nickname; the source changes the role and the nickname.
-    w.commit(|tx| {
-        tx.connection().execute(
-            "UPDATE person SET nickname = 'Countess' WHERE id = ?1",
-            [&id],
-        )?;
-        tx.touch(&id, AT)?;
-        Ok(())
-    });
-    let out = contacts(
-        &w,
-        true,
-        json!([contact(
-            "c1",
-            "Ada Lovelace",
-            Some("Mathematician"),
-            Some("Ada L.")
-        )]),
-    );
-    assert_eq!(out["updated"], 1);
-    assert_eq!(
-        field(&w, &id, "role").as_deref(),
-        Some("Mathematician"),
-        "the member never touched it"
-    );
-    assert_eq!(
-        field(&w, &id, "nickname").as_deref(),
-        Some("Countess"),
-        "the member's value stands"
-    );
-    // `stated` moved on: a later statement equal to the member's value does not undo it, and a
-    // later change to the field the member owns still does not reach it.
-    contacts(
-        &w,
-        true,
-        json!([contact(
-            "c1",
-            "Ada Lovelace",
-            Some("Mathematician"),
-            Some("Ada Byron")
-        )]),
-    );
-    assert_eq!(field(&w, &id, "nickname").as_deref(), Some("Countess"));
-    // An identical statement is no change at all.
-    let stamped = w.stamp(&id);
-    let out = contacts(
-        &w,
-        true,
-        json!([contact(
-            "c1",
-            "Ada Lovelace",
-            Some("Mathematician"),
-            Some("Ada Byron")
-        )]),
-    );
-    assert_eq!(out["unchanged"], 1);
-    assert_eq!(w.stamp(&id), stamped);
-}
-
-#[test]
-fn a_record_is_matched_to_a_row_the_member_already_has_before_one_is_added() {
-    let w = World::new();
-    w.person("mine", "Grace Hopper");
-    w.commit(|tx| {
-        tx.connection()
-            .execute("UPDATE person SET role = 'Admiral' WHERE id = 'mine'", [])?;
-        Ok(())
-    });
-    let out = contacts(
-        &w,
-        true,
-        json!([contact(
-            "c9",
-            "grace hopper",
-            Some("Rear Admiral"),
-            Some("Amazing Grace")
-        )]),
-    );
-    assert_eq!(
-        (out["added"].as_u64(), out["matched"].as_u64()),
-        (Some(0), Some(1))
-    );
-    assert_eq!(followed(&w, "c9").as_deref(), Some("mine"));
-    assert_eq!(
-        field(&w, "mine", "role").as_deref(),
-        Some("Admiral"),
-        "the member's own value stands over a match"
-    );
-    assert_eq!(
-        field(&w, "mine", "nickname").as_deref(),
-        Some("Amazing Grace"),
-        "a blank takes the source's word"
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM person", &[]),
-        2,
-        "the self person and hers"
-    );
-    // A row another source already follows is not a candidate.
-    let out = w.ok(
-        "follow.contacts",
-        json!({"origin": {"ref": "google", "label": "Google"}, "records": [contact("g1", "Grace Hopper", None, None)]}),
-    );
-    assert_eq!(out["added"], 1);
-}
-
-#[test]
-fn a_record_gone_from_a_complete_read_trashes_an_untouched_row_and_forgets_an_edited_one() {
-    let w = World::new();
-    contacts(
-        &w,
-        true,
-        json!([
-            contact("keep", "Kept", Some("A"), None),
-            contact("quiet", "Quiet", Some("B"), None),
-            contact("edited", "Edited", Some("C"), None),
-        ]),
-    );
-    let (quiet, edited) = (
-        followed(&w, "quiet").expect("linked"),
-        followed(&w, "edited").expect("linked"),
-    );
-    w.commit(|tx| {
-        tx.connection()
-            .execute("UPDATE person SET role = 'mine' WHERE id = ?1", [&edited])?;
-        tx.touch(&edited, AT)?;
-        Ok(())
-    });
-    // An incomplete read removes nothing.
-    let out = contacts(&w, false, json!([contact("keep", "Kept", Some("A"), None)]));
-    assert_eq!(
-        (out["trashed"].as_u64(), out["forgotten"].as_u64()),
-        (Some(0), Some(0))
-    );
-    let out = contacts(&w, true, json!([contact("keep", "Kept", Some("A"), None)]));
-    assert_eq!(
-        (out["trashed"].as_u64(), out["forgotten"].as_u64()),
-        (Some(1), Some(1))
-    );
-    assert!(w.trashed(&quiet) && !w.trashed(&edited));
-    assert_eq!(
-        followed(&w, "quiet").as_deref(),
-        Some(quiet.as_str()),
-        "a trashed row stays linked"
-    );
-    assert_eq!(
-        followed(&w, "edited"),
-        None,
-        "an edited row forgets its source and keeps the row"
-    );
-    assert_eq!(field(&w, &edited, "role").as_deref(), Some("mine"));
-    // The forgotten row is a candidate again: if the record comes back it is matched.
-    let out = contacts(
-        &w,
-        true,
-        json!([
-            contact("keep", "Kept", Some("A"), None),
-            contact("edited2", "Edited", None, None)
-        ]),
-    );
-    assert_eq!(out["matched"], 1);
-    assert_eq!(followed(&w, "edited2").as_deref(), Some(edited.as_str()));
-}
-
-#[test]
-fn a_purged_rows_source_is_a_tombstone_and_never_takes_a_row_again() {
-    let w = World::new();
-    contacts(&w, true, json!([contact("c1", "Ada", None, None)]));
-    let id = followed(&w, "c1").expect("linked");
-    w.ok("entity.trash", json!({"id": &id}));
-    w.ok("entity.purge", json!({"id": &id}));
-    assert!(!w.exists(&id));
-    assert_eq!(
-        w.one::<i64>(
-            "SELECT COUNT(*) FROM source WHERE external_id = 'c1' AND entity_id IS NULL",
-            &[]
-        ),
-        1
-    );
-    let out = contacts(&w, true, json!([contact("c1", "Ada", None, None)]));
-    assert_eq!(
-        (out["added"].as_u64(), out["matched"].as_u64()),
-        (Some(0), Some(0)),
-        "the source is not added again"
-    );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM person", &[]), 1);
-    // The database refuses to give a tombstone a row.
-    let refused = w.vault().commit(|tx| {
-        tx.connection().execute(
-            "UPDATE source SET entity_id = ?1, entity_kind = 'person' WHERE external_id = 'c1'",
-            [w.vault().self_id().expect("reads").expect("founded")],
-        )?;
-        Ok(())
-    });
+    let note = w.note("N", None);
+    let food = w.ok("tag.add", json!({"id": &note, "label": "Food"}))["tag"]
+        .as_str()
+        .expect("a tag")
+        .to_owned();
+    let soup = w.ok("tag.add", json!({"id": &note, "label": "Soup"}))["tag"]
+        .as_str()
+        .expect("a tag")
+        .to_owned();
+    w.ok("entity.move", json!({"id": &soup, "parent": &food}));
+    // A loop of tags, and a tag inside a category, are refused.
     assert!(
-        refused
-            .expect_err("final")
-            .to_string()
-            .contains("never takes a row again")
+        w.refused("entity.move", json!({"id": &food, "parent": &soup}))
+            .contains("cannot go inside itself")
     );
-}
-
-#[test]
-fn a_row_the_member_trashed_stays_trashed_and_a_statement_line_is_never_removed() {
-    let w = World::new();
-    contacts(&w, true, json!([contact("c1", "Ada", Some("A"), None)]));
-    let id = followed(&w, "c1").expect("linked");
-    w.ok("entity.trash", json!({"id": &id}));
-    let out = contacts(&w, true, json!([contact("c1", "Ada", Some("B"), None)]));
-    assert_eq!(out["unchanged"], 1, "the member's trash stands");
-    assert!(w.trashed(&id));
-    assert_eq!(
-        field(&w, &id, "role").as_deref(),
-        Some("A"),
-        "nothing is written under a trashed row"
-    );
-    w.ok("entity.restore", json!({"id": &id}));
-    contacts(&w, true, json!([contact("c1", "Ada", Some("B"), None)]));
-    assert_eq!(
-        field(&w, &id, "role").as_deref(),
-        Some("B"),
-        "a restored row still compares as untouched"
-    );
-
-    // A statement imports into an account and never removes a line.
-    w.account("acct", "Everyday");
-    let statement = |records: serde_json::Value, complete: bool| {
-        w.ok(
-            "follow.statement",
-            json!({
-                "origin": {"ref": "12-3456", "label": "Everyday statement", "fills": "acct"},
-                "records": records,
-                "complete": complete
-            }),
-        )
-    };
-    let line = |id: &str, amount: i64| json!({"external_id": id, "fields": {"title": format!("line {id}"), "posted_on": "2026-03-01", "amount_minor": amount}});
-    let out = statement(json!([line("a", -100), line("b", -250)]), true);
-    assert_eq!(out["added"], 2);
-    assert_eq!(
-        w.one::<String>(
-            "SELECT currency FROM txn WHERE account_id = 'acct' LIMIT 1",
-            &[]
-        ),
-        "USD"
-    );
-    let out = statement(json!([line("a", -100)]), true);
-    assert_eq!(
-        (
-            out["added"].as_u64(),
-            out["trashed"].as_u64(),
-            out["unchanged"].as_u64()
-        ),
-        (Some(0), Some(0), Some(1))
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM txn", &[]),
-        2,
-        "the month's later statement does not hold the earlier line, and it stays"
-    );
-    // An origin feeds the kind its map says, and a record states only what the system owns.
-    assert!(w
-        .vault()
-        .execute(
-            &w.registry,
-            &Principal::owner("p"),
-            &Command::new(
-                "follow.statement",
-                json!({"origin": {"ref": "x", "label": "x", "fills": "calendar:default"}, "records": []}),
-            ),
-        )
-        .is_err());
     assert!(
-        w.vault()
-            .execute(
-                &w.registry,
-                &Principal::owner("p"),
-                &Command::new(
-                    "follow.contacts",
-                    json!({"origin": {"ref": "i", "label": "i"}, "records": [
-                        {"external_id": "z", "fields": {"title": "Z", "starts": "never"}}
-                    ]})
-                ),
-            )
-            .is_err()
+        w.refused(
+            "entity.move",
+            json!({"id": &soup, "parent": "category:food"})
+        )
+        .contains("does not go inside a category")
     );
+    // A category goes under a category (the seeded ones are the member's too).
+    w.ok(
+        "entity.move",
+        json!({"id": "category:food.dining", "parent": "category:fun"}),
+    );
+    // A concept is purged outright (it has no trash) and what sat in it goes to the top.
+    w.ok("entity.purge", json!({"id": &food}));
+    assert!(!w.exists(&food));
+    assert_eq!(w.home(&soup), None);
 }
+
+// ---------------------------------------------------------------------------
+// vault.rename
+// ---------------------------------------------------------------------------
 
 #[test]
 fn the_vault_is_renamed_by_its_own_command_and_never_to_nothing() {
@@ -1552,5 +1259,246 @@ fn the_vault_is_renamed_by_its_own_command_and_never_to_nothing() {
         named(&w),
         "Family",
         "a refused rename leaves the name alone"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The words the commands interpret equal the rows and columns they name
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_flags_the_arrivals_and_the_colours_are_what_the_founded_file_holds() {
+    use centraid_vault::commands::container::{LIST_COLORS, PHONE_CALENDAR_COLORS};
+    use centraid_vault::commands::flag::Flag;
+    use centraid_vault::commands::tag::LABEL_COLORS;
+    use std::collections::BTreeSet;
+
+    let w = World::new();
+    let words = |sql: &str| -> BTreeSet<String> {
+        w.vault()
+            .read(|c| {
+                Ok(c.prepare(sql)?
+                    .query_map([], |r| r.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .expect("reads")
+    };
+    // A flag is a column of `entity`, and each is the only `_at` flag column there is.
+    let columns =
+        words("SELECT name FROM pragma_table_info('entity') WHERE name LIKE '%\\_at' ESCAPE '\\'");
+    for flag in Flag::ALL {
+        assert!(columns.contains(flag.column()), "{}", flag.column());
+    }
+    // The ways a one-time arrival comes in are the `arrival_via` rows.
+    // The macro every command's schema takes lists exactly them; which kind each brings in is
+    // `arrival_via_kind`, which `arrival::record` reads and `entity`'s own key holds.
+    let via = words("SELECT code FROM vocab WHERE domain = 'arrival_via'");
+    let offered: BTreeSet<String> = [
+        "picker", "vcard", "markdown", "csv", "scan", "upload", "share", "ics",
+    ]
+    .iter()
+    .map(|name| (*name).to_owned())
+    .collect();
+    assert_eq!(offered, via);
+    // Every colour a command offers or reads is a key of the palette.
+    let palette = words("SELECT code FROM vocab WHERE domain = 'palette'");
+    for color in LIST_COLORS
+        .iter()
+        .chain(&PHONE_CALENDAR_COLORS)
+        .chain(&LABEL_COLORS)
+    {
+        assert!(palette.contains(*color), "{color} is not a palette key");
+    }
+    // The kinds of container and concept are the rows of their lookups, with the Rust enum.
+    assert_eq!(
+        words("SELECT code FROM vocab WHERE domain = 'container_kind'"),
+        Kind::CONTAINERS
+            .iter()
+            .map(|k| k.as_str().to_owned())
+            .collect()
+    );
+    assert_eq!(
+        words("SELECT code FROM concept_kind"),
+        Kind::CONCEPTS
+            .iter()
+            .map(|k| k.as_str().to_owned())
+            .collect()
+    );
+}
+
+#[test]
+fn empty_trash_with_nested_holders_always_succeeds() {
+    let w = World::new();
+    let outer = w.container("folder", "Outer", None);
+    let inner = w.container("folder", "Inner", Some(&outer));
+    let a = w.bare(Kind::Document, "A", Some(&inner));
+    let b = w.bare(Kind::Document, "B", Some(&outer));
+    let cal = w.container("calendar", "Work", None);
+    let event = w.event(&cal);
+    let project = w.container("task_list", "P", None);
+    let task = w.task(Some(&project));
+    w.ok("entity.trash", json!({"id": &inner}));
+    w.ok("entity.trash", json!({"id": &event}));
+    for id in [&outer, &cal, &project] {
+        w.ok("entity.trash", json!({"id": id}));
+    }
+    let out = w.ok("entity.empty_trash", json!({}));
+    assert!(out["purged"].as_i64() >= Some(3));
+    for id in [&outer, &inner, &a, &b, &cal, &event, &project, &task] {
+        assert!(!w.exists(id), "{id} survived the emptying");
+    }
+}
+
+/// A split line that loses one category keeps summing (E3, ruled by the owner): every part that
+/// named it is filed again under its group, two parts that then name one category become one, and
+/// a category with no group leaves the line uncategorised. A purge is never refused for it.
+#[test]
+fn a_line_split_across_categories_keeps_a_sum_when_one_is_purged() {
+    let w = World::new();
+    let id = w.ok(
+        "account.add",
+        json!({ "title": "A", "type": "checking", "currency": "USD" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let child = w.ok(
+        "category.add",
+        json!({ "title": "Beans", "parent_id": "category:food" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let top = w.ok("category.add", json!({ "title": "Pets" }))["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let line = |amount: i64, parts: serde_json::Value| {
+        w.ok(
+            "txn.add",
+            json!({ "account_id": id, "posted_on": "2026-03-01", "amount_minor": amount, "splits": parts }),
+        )["id"]
+            .as_str()
+            .expect("an id")
+            .to_owned()
+    };
+    let split = line(
+        -1_000,
+        json!([
+            { "category_id": child, "amount_minor": -600 },
+            { "category_id": "category:food", "amount_minor": -100 },
+            { "category_id": "category:health.care", "amount_minor": -300 } ]),
+    );
+    let pets = line(
+        -500,
+        json!([
+            { "category_id": top, "amount_minor": -200 },
+            { "category_id": "category:health.care", "amount_minor": -300 } ]),
+    );
+    let sums = |line: &str| {
+        (
+            w.one::<i64>("SELECT COUNT(*) FROM txn_split WHERE txn_id = ?1", &[line]),
+            w.one::<i64>(
+                "SELECT COALESCE(SUM(amount_minor), 0) FROM txn_split WHERE txn_id = ?1",
+                &[line],
+            ),
+        )
+    };
+    w.ok("entity.purge", json!({ "id": child }));
+    assert_eq!(
+        sums(&split),
+        (2, -1_000),
+        "the two food parts became one and kept the sum"
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT category_id || amount_minor FROM txn_split WHERE txn_id = ?1 ORDER BY position LIMIT 1",
+            &[&split]
+        ),
+        "category:food-700"
+    );
+    w.ok("entity.purge", json!({ "id": top }));
+    assert_eq!(sums(&pets), (0, 0), "no group: the line is uncategorised");
+    assert_eq!(
+        w.one::<i64>("SELECT amount_minor FROM txn WHERE id = ?1", &[&pets]),
+        -500
+    );
+}
+
+#[test]
+fn a_holders_confirm_names_how_many_go_with_it() {
+    let w = World::new();
+    let held = |id: &str| {
+        w.vault()
+            .read(|c| centraid_vault::commands::entity::held_count(c, id))
+            .expect("a count")
+    };
+    let book = w.container("notebook", "Recipes", None);
+    assert_eq!(held(&book), 0);
+    w.note("Soup", Some(&book));
+    w.note("Stew", Some(&book));
+    let inner = w.container("notebook", "Drinks", Some(&book));
+    w.note("Tea", Some(&inner));
+    assert_eq!(
+        held(&book),
+        4,
+        "two notes, the notebook inside and its note"
+    );
+    let list = w.container("task_list", "Errands", None);
+    let task = w.task(Some(&list));
+    w.task(Some(&task));
+    assert_eq!(held(&list), 2);
+    let trashed = w.note("Gone", Some(&book));
+    w.ok("entity.trash", json!({"id": &trashed}));
+    assert_eq!(
+        held(&book),
+        4,
+        "a row already in the trash is not counted again"
+    );
+}
+
+#[test]
+fn every_shared_verb_acts_on_a_hundred_rows_in_one_commit_and_a_bad_one_stops_them_all() {
+    let w = World::new();
+    let book = w.container("notebook", "Box", None);
+    let notes: Vec<String> = (0..100)
+        .map(|n| w.note(&format!("Note {n}"), None))
+        .collect();
+    w.ok("entity.move", json!({"ids": &notes, "parent": &book}));
+    assert!(notes.iter().all(|id| w.home(id) == Some(book.clone())));
+    w.ok("flag.set", json!({"ids": &notes, "flag": "starred"}));
+    w.ok("flag.set", json!({"ids": &notes, "flag": "archived"}));
+    w.ok("tag.add", json!({"ids": &notes, "label": "bulk"}));
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM entity WHERE kind = 'note' AND starred_at IS NOT NULL AND archived_at IS NOT NULL",
+            &[]
+        ),
+        100
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM edge WHERE rel = 'tagged'", &[]),
+        100
+    );
+    w.ok("tag.remove", json!({"ids": &notes, "label": "bulk"}));
+    w.ok("flag.clear", json!({"ids": &notes, "flag": "starred"}));
+    w.ok("entity.trash", json!({"ids": &notes}));
+    assert!(notes.iter().all(|id| w.trashed(id)));
+    w.ok("entity.restore", json!({"ids": &notes}));
+    assert!(notes.iter().all(|id| !w.trashed(id)));
+    let one_command = w.run("flag.set", json!({"ids": &notes, "flag": "pinned"}));
+    assert_eq!(one_command.status, CommandStatus::Executed);
+    assert_eq!(
+        one_command.output["count"],
+        json!(100),
+        "one command, one commit, every row"
+    );
+    let mut with_a_stranger = notes.clone();
+    with_a_stranger.push("no-such-row".to_owned());
+    let sentence = w.refused("entity.trash", json!({"ids": with_a_stranger}));
+    assert!(!sentence.is_empty());
+    assert!(
+        notes.iter().all(|id| !w.trashed(id)),
+        "a list with one bad row changes none"
     );
 }

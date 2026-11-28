@@ -10,7 +10,6 @@
 //! | The same `invoke_key` runs once | the commit records the key in the vault's `action_key` table; a second delivery, after a restart too, answers `replayed` and runs nothing |
 //! | A frozen (moved) vault writes nothing | [`moved_epoch`], checked before anything runs |
 //! | A refusal names the check that failed | [`wire::ActRefusal`]: `vault_moved`, `input_schema`, or the vault's own predicate |
-//! | An executed act can be taken back | [`inverse`], the action and input that reverse it |
 //!
 //! # THE ORDER
 //!
@@ -33,8 +32,6 @@
 //! vault keeps a digest, not answers, so a caller that needs more than "it
 //! landed" reads it again.
 
-mod inverse;
-
 use std::collections::BTreeMap;
 
 use centraid_api_proto::core_v1 as wire;
@@ -50,7 +47,6 @@ use crate::phone::Plane;
 /// What an act runs against. Borrowed from the handle for one call.
 pub(crate) struct Ctx<'a> {
     pub vault: &'a Vault,
-    pub locker: &'a crate::locker::phone::Cell,
     pub registry: &'a Registry,
     pub owner: &'a Principal,
     pub changes: &'a ChangeFeed,
@@ -104,7 +100,7 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
     // THE UNDOS EVERY APP SHARES: an edit's Undo is the vault's history putting the record back
     // and a create's is the trash, so `undo-change` and `undo-create` are the shell's actions, run
     // under whichever app's screen asks.
-    if centraid_apps_kit::manifest::SHELL_UNDOS.contains(&request.action.as_str())
+    if centraid_domain::manifest::SHELL_UNDOS.contains(&request.action.as_str())
         && app.manifest().action(&request.action).is_none()
     {
         app = catalog::app(crate::shell::ID).ok_or_else(|| CoreError::Invariant {
@@ -160,12 +156,8 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
         key: &request.invoke_key,
         asked: &asked,
     };
-    // An edit's Undo names the version the act makes: how many the record held before is asked
-    // first, and again after (see `inverse`).
-    let earlier = earlier_target(ctx, entry, &request.app, &request.action, &input)?;
     let outcome = match crate::api::command(
         ctx.vault,
-        ctx.locker,
         ctx.registry,
         ctx.owner,
         &command_request,
@@ -192,37 +184,15 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
                 })?;
         return replayed(&request.invoke_key, &earlier, &asked);
     }
-    let Value::Object(input_object) = &input else {
-        return Err(CoreError::Invariant {
-            context: "a decoded input is always an object".to_owned(),
-        });
-    };
     let answer = match outcome.status {
-        CommandStatus::Executed => {
-            let taken_back = match earlier {
-                // An act that edits one record or creates another (a date) falls back to what it
-                // created when the vault made no version.
-                Some((id, before)) => earlier_inverse(ctx, &id, before)?.or_else(|| {
-                    inverse::of(&request.app, &request.action, input_object, &outcome.output)
-                }),
-                None => inverse::of(&request.app, &request.action, input_object, &outcome.output),
-            };
-            let inverse = taken_back.map(|(action, input)| wire::ActInverse {
-                action: action.to_owned(),
-                input: input_to_wire(&input),
-            });
-            wire::ActResponse {
-                status: wire::ActStatus::Executed as i32,
-                output: serde_json::to_vec(&outcome.output).map_err(|error| {
-                    CoreError::Invariant {
-                        context: format!("a handler's own output is not JSON: {error}"),
-                    }
-                })?,
-                inverse,
-                tables: sorted(outcome.tables),
-                ..wire::ActResponse::default()
-            }
-        }
+        CommandStatus::Executed => wire::ActResponse {
+            status: wire::ActStatus::Executed as i32,
+            output: serde_json::to_vec(&outcome.output).map_err(|error| CoreError::Invariant {
+                context: format!("a handler's own output is not JSON: {error}"),
+            })?,
+            tables: sorted(outcome.tables),
+            ..wire::ActResponse::default()
+        },
         CommandStatus::Failed => refused(
             wire::ActRefusal {
                 // THE FAILING CHECK, not only the sentence: the predicate
@@ -237,46 +207,6 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
         ),
     };
     Ok(answer)
-}
-
-/// For an action the table takes back by the record's earlier version: the record it acts on and
-/// how many versions it holds before the command runs. `None` for every other action.
-fn earlier_target(
-    ctx: &Ctx<'_>,
-    entry: &centraid_apps_kit::manifest::ActionEntry,
-    app: &str,
-    action: &str,
-    input: &Value,
-) -> Result<Option<(String, u32)>> {
-    if !inverse::is_earlier(app, action) {
-        return Ok(None);
-    }
-    let Some(id) = entry
-        .id_property()
-        .and_then(|property| input.get(property))
-        .and_then(Value::as_str)
-    else {
-        return Ok(None);
-    };
-    let before = ctx
-        .vault
-        .read(|connection| centraid_vault::history::count(connection, id))?;
-    Ok(Some((id.to_owned(), before)))
-}
-
-/// The Undo of an act that was to make one version of `id`: offered only when the vault now holds
-/// exactly one more version than before, so an act the history did not capture (nothing a member
-/// can see changed, or a change the history leaves out) offers none, and the Undo names the
-/// version this act made.
-fn earlier_inverse(
-    ctx: &Ctx<'_>,
-    id: &str,
-    before: u32,
-) -> Result<Option<(&'static str, Map<String, Value>)>> {
-    let after = ctx
-        .vault
-        .read(|connection| centraid_vault::history::count(connection, id))?;
-    Ok((after == before.saturating_add(1)).then(|| inverse::earlier(id, after)))
 }
 
 /// THE IDS A MANIFEST SAYS THE CORE MINTS (`"x-minted": true` on an input property).
@@ -351,7 +281,6 @@ pub(crate) fn command_keyed(
     let mark = centraid_vault::action_key::KeyMark { key, asked: &asked };
     let outcome = match crate::api::command(
         ctx.vault,
-        ctx.locker,
         ctx.registry,
         ctx.owner,
         &request,

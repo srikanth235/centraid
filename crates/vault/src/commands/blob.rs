@@ -5,38 +5,11 @@
 //! [`crate::Vault::stage_bytes`]; a command is for a caller that wants the
 //! gate.
 
+use rusqlite::OptionalExtension;
+
 use crate::blob;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::Result;
-
-/// A sentence when the bytes a command names cannot be claimed: they are not
-/// claimed yet and the command did not say how large they are.
-///
-/// **A command claims the bytes it names** (R-1135-5-9): the stage door only
-/// hashes and stores, so bytes staged and never named leave no row and nothing to
-/// collect, and no collector can race the command that is about to name them.
-pub(crate) fn pre_claimable(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<Option<String>> {
-    let Some(hash) = ctx.optional_str(key) else {
-        return Ok(None);
-    };
-    let held: i64 =
-        ctx.connection()
-            .query_row("SELECT COUNT(*) FROM blob WHERE hash = ?1", [hash], |row| {
-                row.get(0)
-            })?;
-    let sized = ctx.input.get("size").is_some_and(|size| !size.is_null());
-    Ok((held == 0 && !sized)
-        .then(|| "those bytes have not been counted; say how large they are".to_owned()))
-}
-
-/// Claim the bytes a command names, at the size it counted (a hash already
-/// claimed is left as it is, and its size must agree).
-pub(crate) fn claim(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<()> {
-    if let Some(size) = ctx.input.get("size").and_then(serde_json::Value::as_i64) {
-        blob::stage(ctx.connection(), ctx.required_str(key)?, size)?;
-    }
-    Ok(())
-}
 
 #[derive(serde::Deserialize)]
 struct StageBlobInput {
@@ -75,7 +48,19 @@ fn pre_variant(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let variant = ctx.required_str("variant")?;
     let has_file = ctx.input.get("out").is_some_and(|out| !out.is_null());
     let has_text = ctx.input.get("text").is_some_and(|text| !text.is_null());
-    let files = matches!(variant, "thumb" | "preview" | "poster");
+    // Whether a variant is a file is the lookup row's attribute (`derivative_variant.has_out`), not a
+    // list kept here; an unknown variant is no row.
+    let files: Option<bool> = ctx
+        .connection()
+        .query_row(
+            "SELECT has_out FROM derivative_variant WHERE code = ?1",
+            [variant],
+            |row| row.get::<_, i64>(0).map(|has_out| has_out == 1),
+        )
+        .optional()?;
+    let Some(files) = files else {
+        return Ok(Some(format!("`{variant}` is not a kind of derivative")));
+    };
     Ok(if files && !has_file {
         Some(format!("a {variant} is a picture and needs its bytes"))
     } else if !files && has_file {
@@ -95,6 +80,17 @@ fn pre_variant(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     } else {
         None
     })
+}
+
+/// A variant to drop is a lookup row; which kinds exist is the table's, not a list kept here.
+fn pre_drop(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let variant = ctx.required_str("variant")?;
+    let known: bool = ctx.connection().query_row(
+        "SELECT EXISTS (SELECT 1 FROM derivative_variant WHERE code = ?1)",
+        [variant],
+        |row| row.get(0),
+    )?;
+    Ok((!known).then(|| format!("`{variant}` is not a kind of derivative")))
 }
 
 /// The file a variant of `blob` holds now (zero or one hash): what a write or a drop may release.
@@ -179,7 +175,7 @@ const WRITE_SCHEMA: &str = r#"{
   "properties": {
     "blob": { "type": "string", "minLength": 64, "maxLength": 64 },
     "variant": { "type": "string",
-                 "enum": ["thumb", "preview", "poster", "text", "caption", "phash", "thumbhash"] },
+                 "minLength": 1 },
     "out": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
     "out_size": { "type": "integer", "minimum": 0 },
     "media_type": { "type": ["string", "null"] },
@@ -193,8 +189,7 @@ const DROP_SCHEMA: &str = r#"{
   "additionalProperties": false,
   "properties": {
     "blob": { "type": "string", "minLength": 64, "maxLength": 64 },
-    "variant": { "type": "string",
-                 "enum": ["thumb", "preview", "poster", "text", "caption", "phash", "thumbhash"] }
+    "variant": { "type": "string", "minLength": 1 }
   }
 }"#;
 
@@ -242,7 +237,10 @@ pub fn definitions() -> Vec<CommandDefinition> {
             "derivative",
             DROP_SCHEMA,
             Idempotency::Idempotent,
-            &[],
+            &[CommandCondition {
+                predicate: "variant_is_known",
+                check: pre_drop,
+            }],
             drop_derivative,
         ),
     ]

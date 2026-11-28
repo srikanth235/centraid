@@ -1,5 +1,6 @@
 package dev.centraid.android.screens
 
+import android.Manifest
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
@@ -11,55 +12,40 @@ import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import centraid.core.v1.ContentRef
 import centraid.core.v1.ContentUrlRequest
+import centraid.core.v1.ContentSource
 import centraid.core.v1.EffectFailed
 import centraid.core.v1.EffectResult
 import centraid.core.v1.Envelope
 import centraid.core.v1.ExportOriginals
-import centraid.core.v1.LoadRequest
 import centraid.core.v1.OriginalsExported
-import dev.centraid.android.kit.writeFailureReason
 import centraid.core.v1.Request
-import centraid.core.v1.StageHandle
-import centraid.core.v1.Value
 import dev.centraid.android.backup.LibraryRefs
 import dev.centraid.android.kit.EffectReason
+import dev.centraid.android.kit.writeFailureReason
 import dev.centraid.android.session.Stage
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import java.io.File
-import java.io.InputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * THE ORIGINALS OF A PICK, HANDED TO THE PLATFORM (#1135): the generic
- * `ExportOriginals` performer. "Send a copy" puts copies in the system share
- * sheet; "Download original" puts them in this device's own photos. Neither
- * writes to the vault. Rust (`photos/shelf.rs`) asks for it with the photograph
- * ids, owns every sentence and reads the closed [OriginalsExported] this answers;
- * this file does what only Android can — find each original on this phone, take
- * the place out of the bytes, the chooser, `MediaStore`.
- *
- * **HOW AN ORIGINAL IS FOUND.** Two trips through the core's one door: `photos.photo`
- * for each photograph's content item, then the byte door ([ContentUrlRequest]) for
- * where those bytes are on this device. A photograph whose original is not here
- * is counted in `missing` rather than silently dropped.
- *
- * **THE LOCATION IS TAKEN OUT OF THE BYTES, OR NOTHING IS SENT** (#816). A place
- * left out of the words while the file carries its coordinates discloses it
- * anyway. A photograph's GPS tags are cleared in place on the COPY with
- * `ExifInterface` — no re-encode, so capture time and orientation survive — and a
- * format `ExifInterface` cannot rewrite (HEIF, a video) stops the whole send
- * with `STATUS_LOCATION_NOT_REMOVABLE` rather than going out whole.
- *
- * The copies live under `cacheDir/shared-copies/batch`, inside the one folder
- * the lightbox's `FileProvider` serves (`res/xml/shared_copies.xml`), and each
- * send clears the previous send's: they are plaintext outside the vault, and a
- * chooser does not say when it is done.
- *
- * The SwiftUI twin is `ShelfCopyExport.swift`.
- */
+private const val COPIES_AUTHORITY_SUFFIX = ".photocopies"
+private const val BATCH_DIR = "shared-copies/batch"
+
+internal fun mediaPermissions(): Array<String> = when {
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> arrayOf(
+        Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VIDEO,
+        Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+    )
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> arrayOf(
+        Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VIDEO,
+    )
+    else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+}
+
 internal suspend fun performExportOriginals(
     context: Context,
     core: CentraidCore,
@@ -70,326 +56,290 @@ internal suspend fun performExportOriginals(
     }
     val located = withContext(Dispatchers.IO) { locateOriginals(context, core, export.photo_ids) }
     val missing = located.missing
-    val full = FullPhone()
+    var storageFull = false
     fun exported(status: OriginalsExported.Status, handed: Int = 0) = EffectResult(
         originals_exported = OriginalsExported(status = status, handed = handed, missing = missing),
     )
     if (located.originals.isEmpty()) return exported(OriginalsExported.Status.STATUS_NONE_HERE)
     return when (export.mode) {
         ExportOriginals.Mode.MODE_SEND -> {
-            val files = withContext(Dispatchers.IO) { prepare(context, located.originals, export.keep_location, export, full) }
-                ?: return exported(
-                    if (full.seen) OriginalsExported.Status.STATUS_STORAGE_FULL else OriginalsExported.Status.STATUS_LOCATION_NOT_REMOVABLE,
-                )
+            val files = withContext(Dispatchers.IO) {
+                prepareCopies(context, located.originals) { storageFull = true }
+            } ?: return exported(
+                if (storageFull) {
+                    OriginalsExported.Status.STATUS_STORAGE_FULL
+                } else {
+                    OriginalsExported.Status.STATUS_LOCATION_NOT_REMOVABLE
+                },
+            )
             val authority = context.packageName + COPIES_AUTHORITY_SUFFIX
             val uris = ArrayList(files.map { FileProvider.getUriForFile(context, authority, it) })
             val send = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                type = if (located.originals.all { it.isVideo }) "video/*" else if (located.originals.none { it.isVideo }) "image/*" else "*/*"
+                type = when {
+                    located.originals.all { it.isVideo } -> "video/*"
+                    located.originals.none { it.isVideo } -> "image/*"
+                    else -> "*/*"
+                }
                 putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(
-                Intent.createChooser(send, export.chooser_title.ifEmpty { null }).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
             exported(OriginalsExported.Status.STATUS_DONE, files.size)
         }
-
         ExportOriginals.Mode.MODE_SAVE -> {
-            val saved = withContext(Dispatchers.IO) { saveToPhotos(context, located.originals, export, full) }
+            val saved = withContext(Dispatchers.IO) {
+                saveToLibrary(context, located.originals) { storageFull = true }
+            }
             if (saved < 0) {
-                exported(if (full.seen) OriginalsExported.Status.STATUS_STORAGE_FULL else OriginalsExported.Status.STATUS_FAILED)
+                exported(
+                    if (storageFull) OriginalsExported.Status.STATUS_STORAGE_FULL else OriginalsExported.Status.STATUS_FAILED,
+                )
             } else {
                 exported(OriginalsExported.Status.STATUS_DONE, saved)
             }
         }
-
         else -> EffectResult(failed = EffectFailed(reason = EffectReason.UNSUPPORTED))
     }
 }
 
-/** Supply one immutable OS original to the Rust-owned aggregate archive. */
 private suspend fun performArchiveOriginal(
     context: Context,
     core: CentraidCore,
     export: ExportOriginals,
 ): EffectResult {
-    // An incomplete archive descriptor must never fall through Stage's ordinary Owned path.
     if (export.export_job_id.isBlank() || export.export_photo_id.isBlank() ||
         Stage.raw(export.export_content_hash).size != 32 || export.export_byte_size < 0L
     ) {
-        return EffectResult(
-            originals_exported = OriginalsExported(
-                status = OriginalsExported.Status.STATUS_FAILED,
-                archive_disposition = OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE,
-            ),
+        return archiveResult(
+            OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE,
+            OriginalsExported.Status.STATUS_FAILED,
         )
     }
-    val input = withContext(Dispatchers.IO) { openLibraryOriginal(context, export.export_os_ref) }
-        ?: return EffectResult(
-            originals_exported = OriginalsExported(
-                status = OriginalsExported.Status.STATUS_NONE_HERE,
-                missing = 1,
-                archive_disposition = OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNAVAILABLE,
-            ),
+    val row = LibraryRefs.row(export.export_os_ref)
+        ?: return archiveResult(
+            OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNAVAILABLE,
+            OriginalsExported.Status.STATUS_NONE_HERE,
         )
-    try {
-        input.use {
-            val read = Stage.slices(input)
-            return when (
-                val staged = Stage.stage(
-                    core = core,
-                    mediaType = export.export_media_type,
-                    byteSize = export.export_byte_size,
-                    archiveJobId = export.export_job_id,
-                    archivePhotoId = export.export_photo_id,
-                    archiveHash = export.export_content_hash,
-                ) { max ->
-                    withContext(Dispatchers.IO) { read(max) }
-                }
-            ) {
-                is Stage.Outcome.Staged -> {
-                    val stagedForArchive =
-                        staged.handle.export_disposition == StageHandle.ExportDisposition.EXPORT_DISPOSITION_STAGED &&
-                            staged.handle.export_stage_id.isNotEmpty()
-                    EffectResult(
-                        originals_exported = OriginalsExported(
-                            status = OriginalsExported.Status.STATUS_DONE,
-                            archive_disposition = if (stagedForArchive) {
-                                OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_STAGED
-                            } else {
-                                OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE
-                            },
-                            archive_stage_id = staged.handle.export_stage_id.takeIf { stagedForArchive }.orEmpty(),
-                        ),
-                    )
-                }
-                is Stage.Outcome.Refused -> EffectResult(
-                    originals_exported = OriginalsExported(
-                        status = OriginalsExported.Status.STATUS_FAILED,
-                        archive_disposition = OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE,
-                    ),
-                )
-            }
-        }
+    val baseUri = if (row.video) {
+        MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+    } else {
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    }
+    val uri = ContentUris.withAppendedId(baseUri, row.id)
+    val stream = try {
+        withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri) }
     } catch (cancelled: CancellationException) {
         throw cancelled
+    } catch (_: SecurityException) {
+        null
     } catch (_: Exception) {
-        return EffectResult(
-            originals_exported = OriginalsExported(
-                status = OriginalsExported.Status.STATUS_FAILED,
-                archive_disposition = OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE,
-            ),
+        return archiveResult(
+            OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE,
+            OriginalsExported.Status.STATUS_FAILED,
+        )
+    } ?: return archiveResult(
+        OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNAVAILABLE,
+        OriginalsExported.Status.STATUS_NONE_HERE,
+    )
+
+    val outcome = stream.use { input ->
+        Stage.stage(
+            core = core,
+            mediaType = export.export_media_type.ifEmpty { "application/octet-stream" },
+            byteSize = export.export_byte_size,
+            archiveJobId = export.export_job_id,
+            archivePhotoId = export.export_photo_id,
+            archiveHash = export.export_content_hash,
+            read = Stage.slices(input),
+        )
+    }
+    return when (outcome) {
+        is Stage.Outcome.Staged -> archiveResult(
+            OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_STAGED,
+            OriginalsExported.Status.STATUS_DONE,
+            handed = 1,
+            stageId = outcome.handle.export_stage_id,
+        )
+        is Stage.Outcome.Refused -> archiveResult(
+            OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE,
+            if (outcome.full) OriginalsExported.Status.STATUS_STORAGE_FULL else OriginalsExported.Status.STATUS_FAILED,
         )
     }
 }
 
-/** One original this device holds, located for a platform hand-off. */
-internal data class LocatedOriginal(
-    val assetId: String,
-    val path: String,
+private fun archiveResult(
+    disposition: OriginalsExported.ArchiveDisposition,
+    status: OriginalsExported.Status,
+    handed: Int = 0,
+    stageId: String = "",
+): EffectResult = EffectResult(
+    originals_exported = OriginalsExported(
+        status = status,
+        handed = handed,
+        missing = if (disposition == OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_STAGED) 0 else 1,
+        archive_disposition = disposition,
+        archive_stage_id = stageId,
+    ),
+)
+
+private data class LocatedOriginal(
+    val file: File,
     val mediaType: String,
     val isVideo: Boolean,
 )
 
-/** What [locateOriginals] found, and how many of the pick it did not. */
-internal data class Located(val originals: List<LocatedOriginal>, val missing: Int)
+private data class LocatedBatch(
+    val originals: List<LocatedOriginal>,
+    val missing: Int,
+)
 
-/** `ContentUrlRequest`'s own ceiling (`MAX_CONTENT_URLS`), asked in slices. */
-private const val URL_BATCH: Int = 100
-
-/** WHERE EACH PICKED ORIGINAL IS ON THIS DEVICE, in the pick's order, and how many are not here. */
-private suspend fun locateOriginals(context: Context, core: CentraidCore, photoIds: List<String>): Located {
+private suspend fun locateOriginals(
+    context: Context,
+    core: CentraidCore,
+    photoIds: List<String>,
+): LocatedBatch {
     val ids = photoIds.filter { it.isNotEmpty() }.distinct()
-    // The content item and the form of each photograph, from the one read.
-    val known = LinkedHashMap<String, Pair<String, Boolean>>()
-    for (id in ids) {
-        val outcome = core.call(
-            Envelope(
-                request = Request(
-                    load = LoadRequest(app = "photos", query = "photo", params = mapOf("id" to Value(text = id))),
-                ),
-            ),
-        )
-        val cell = (outcome as? CoreOutcome.Answered)?.value?.response?.load?.answer?.photos_photo?.photo?.cell
-        if (cell != null && cell.content_id.isNotEmpty()) known[id] = cell.content_id to (cell.form == "video")
-    }
+    if (ids.isEmpty()) return LocatedBatch(emptyList(), 0)
     val found = mutableListOf<LocatedOriginal>()
-    known.keys.chunked(URL_BATCH).forEach { slice ->
-        val refs = slice.map { id ->
-            ContentRef(content_id = known.getValue(id).first, owner_type = "photo", owner_id = id)
-        }
-        val outcome = core.call(Envelope(request = Request(content_urls = ContentUrlRequest(refs = refs))))
-        val urls = (outcome as? CoreOutcome.Answered)?.value?.response?.content_urls?.urls.orEmpty()
-        // ONE ANSWER PER REF, IN ORDER (`ContentUrls`' own rule), so the zip is by
-        // position and a short answer pairs nothing wrongly.
-        slice.forEachIndexed { index, id ->
-            val url = urls.getOrNull(index)
-            // THE ORIGINAL LIVES IN THE PHOTO LIBRARY, not the store: write it out as a file.
-            val path = url?.path?.takeIf { it.isNotEmpty() }
-                ?: url?.os_ref?.takeIf { it.isNotEmpty() }?.let { copyLibraryOriginal(context, it) }
-            if (url != null && url.content_id == refs[index].content_id && !path.isNullOrEmpty()) {
-                found += LocatedOriginal(
-                    assetId = id,
-                    path = path,
-                    mediaType = url.media_type,
-                    isVideo = known.getValue(id).second,
-                )
+    val scratch = File(context.cacheDir, "$BATCH_DIR/lib").apply {
+        deleteRecursively()
+        mkdirs()
+    }
+    for (chunk in ids.chunked(100)) {
+        val refs = chunk.map { id -> ContentRef(content_id = id, owner_type = "photo", owner_id = id) }
+        val response = when (
+            val outcome = core.call(
+                Envelope(request_id = 0, request = Request(content_urls = ContentUrlRequest(refs = refs))),
+            )
+        ) {
+            is CoreOutcome.Answered -> outcome.value.response?.content_urls
+            is CoreOutcome.Failed -> null
+        } ?: continue
+        for (url in response.urls) {
+            val mime = url.media_type.ifEmpty { "image/jpeg" }
+            val isVideo = mime.startsWith("video/")
+            val localPath = url.path.orEmpty()
+            if (localPath.isNotEmpty()) {
+                val file = File(localPath)
+                if (file.isFile) found.add(LocatedOriginal(file, mime, isVideo))
+            } else if (url.source == ContentSource.CONTENT_SOURCE_OS_LIBRARY && url.os_ref.isNotEmpty()) {
+                val row = LibraryRefs.row(url.os_ref) ?: continue
+                val baseUri = if (row.video) {
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                } else {
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                }
+                val uri = ContentUris.withAppendedId(baseUri, row.id)
+                val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime).orEmpty().ifEmpty { "bin" }
+                val dest = File(scratch, "${row.id}.$ext")
+                val copied = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        dest.outputStream().use { out -> input.copyTo(out) }
+                    } != null
+                }.getOrDefault(false)
+                if (copied) found.add(LocatedOriginal(dest, mime, isVideo))
             }
         }
     }
-    return Located(found, ids.size - found.size)
+    return LocatedBatch(found, (ids.size - found.size).coerceAtLeast(0))
 }
 
-/**
- * AN ORIGINAL THE PHOTO LIBRARY HOLDS, AS A FILE: a `MediaStore` row has no path in the
- * store, so a hand-off copies its bytes into the cache. Null when the row is gone.
- * The SwiftUI twin is `PhoneLibrary.exportOriginal`.
- */
-internal fun copyLibraryOriginal(context: Context, osRef: String): String? {
-    val input = openLibraryOriginal(context, osRef) ?: return null
-    val target = File.createTempFile("library-", ".bin", context.cacheDir)
-    val copied = runCatching {
-        input.use { source -> target.outputStream().use { source.copyTo(it) } }
-        true
-    }.getOrDefault(false)
-    if (!copied) target.delete()
-    return if (copied) target.path else null
-}
-
-/** Open the OS original from the saved MediaStore ref, without making an intermediate copy. */
-internal fun openLibraryOriginal(context: Context, osRef: String): InputStream? {
-    val row = LibraryRefs.row(osRef) ?: return null
-    val collection = if (row.video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-    val uri = ContentUris.withAppendedId(collection, row.id)
-    return runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
-}
-
-/** `<applicationId>.photocopies` — the manifest's one `FileProvider`, `PhotoHandOff`'s. */
-private const val COPIES_AUTHORITY_SUFFIX: String = ".photocopies"
-
-/** Under `shared_copies.xml`'s `shared-copies/`, in the batch's own subfolder. */
-private const val COPIES_FOLDER: String = "shared-copies/batch"
-
-/**
- * Copies under [COPIES_FOLDER], named by type, the location taken out unless
- * the member kept it. Null when a file's location could not be taken out.
- */
-private fun prepare(
+private fun prepareCopies(
     context: Context,
     originals: List<LocatedOriginal>,
-    keepLocation: Boolean,
-    export: ExportOriginals,
-    full: FullPhone,
+    onStorageFull: () -> Unit,
 ): List<File>? {
-    val folder = File(context.cacheDir, COPIES_FOLDER)
-    folder.deleteRecursively()
-    folder.mkdirs()
-    return originals.mapIndexed { index, original ->
-        val target = File(folder, fileName(original, index, export))
-        val copied = runCatching { File(original.path).copyTo(target, overwrite = true) }
-        if (copied.isFailure) {
-            full.note(copied.exceptionOrNull())
+    val folder = File(context.cacheDir, BATCH_DIR).apply {
+        deleteRecursively()
+        mkdirs()
+    }
+    val out = mutableListOf<File>()
+    for ((index, item) in originals.withIndex()) {
+        // Fail closed: formats ExifInterface cannot strip are never sent with location intact.
+        if (item.isVideo) return null
+        val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(item.mediaType).orEmpty().ifEmpty { "jpg" }
+        val target = File(folder, "Photo ${index + 1}.$ext")
+        try {
+            item.file.copyTo(target, overwrite = true)
+            val exif = ExifInterface(target.absolutePath)
+            for (tag in GPS_TAGS) exif.setAttribute(tag, null)
+            exif.saveAttributes()
+            out.add(target)
+        } catch (error: Exception) {
+            if (error.writeFailureReason(EffectReason.FAILED) == EffectReason.STORAGE_FULL) onStorageFull()
+            folder.deleteRecursively()
             return null
         }
-        if (!keepLocation && !stripLocation(target, original)) return null
-        target
     }
+    return out
 }
 
-/**
- * THE GPS TAGS, CLEARED ON THE COPY. `ExifInterface` rewrites JPEG, PNG and
- * WebP in place; anything else — HEIF, every video — cannot be cleaned here,
- * so it is refused rather than sent whole.
- */
-private fun stripLocation(file: File, original: LocatedOriginal): Boolean {
-    if (original.isVideo) return false
-    val type = original.mediaType.lowercase()
-    if (type != "image/jpeg" && type != "image/png" && type != "image/webp") return false
-    return runCatching {
-        val exif = ExifInterface(file.absolutePath)
-        GPS_TAGS.forEach { tag -> exif.setAttribute(tag, null) }
-        exif.saveAttributes()
-    }.isSuccess
-}
-
-private val GPS_TAGS: List<String> = listOf(
-    ExifInterface.TAG_GPS_LATITUDE,
-    ExifInterface.TAG_GPS_LATITUDE_REF,
-    ExifInterface.TAG_GPS_LONGITUDE,
-    ExifInterface.TAG_GPS_LONGITUDE_REF,
-    ExifInterface.TAG_GPS_ALTITUDE,
-    ExifInterface.TAG_GPS_ALTITUDE_REF,
-    ExifInterface.TAG_GPS_TIMESTAMP,
-    ExifInterface.TAG_GPS_DATESTAMP,
-    ExifInterface.TAG_GPS_PROCESSING_METHOD,
-    ExifInterface.TAG_GPS_AREA_INFORMATION,
-    ExifInterface.TAG_GPS_DEST_LATITUDE,
-    ExifInterface.TAG_GPS_DEST_LATITUDE_REF,
-    ExifInterface.TAG_GPS_DEST_LONGITUDE,
-    ExifInterface.TAG_GPS_DEST_LONGITUDE_REF,
-    ExifInterface.TAG_GPS_IMG_DIRECTION,
-    ExifInterface.TAG_GPS_IMG_DIRECTION_REF,
-    ExifInterface.TAG_GPS_SPEED,
-    ExifInterface.TAG_GPS_SPEED_REF,
-    ExifInterface.TAG_GPS_TRACK,
-    ExifInterface.TAG_GPS_TRACK_REF,
-)
-
-/**
- * Into this device's photos, under `Pictures/Centraid` or `Movies/Centraid`.
- * The count saved, or -1 when the store refused.
- *
- * **ANDROID 10 AND LATER.** Before it, `MediaStore` wants
- * `WRITE_EXTERNAL_STORAGE`, a runtime grant this app does not ask for; on
- * those devices the save is refused with the export-failed sentence rather
- * than a permission prompt nothing else in Photos needs.
- */
-private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>, export: ExportOriginals, full: FullPhone): Int {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return -1
+private fun saveToLibrary(
+    context: Context,
+    originals: List<LocatedOriginal>,
+    onStorageFull: () -> Unit,
+): Int {
     val resolver = context.contentResolver
     var saved = 0
-    originals.forEachIndexed { index, original ->
-        val collection = if (original.isVideo) {
-            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    for ((index, item) in originals.withIndex()) {
+        val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(item.mediaType).orEmpty()
+        val stem = if (item.isVideo) "Video" else "Photo"
+        val name = if (ext.isEmpty()) "$stem ${index + 1}" else "$stem ${index + 1}.$ext"
+        val collection = if (item.isVideo) {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         } else {
-            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         }
         val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName(original, index, export))
-            put(MediaStore.MediaColumns.MIME_TYPE, original.mediaType.ifEmpty { if (original.isVideo) "video/mp4" else "image/jpeg" })
-            put(MediaStore.MediaColumns.RELATIVE_PATH, if (original.isVideo) "Movies/Centraid" else "Pictures/Centraid")
-            put(MediaStore.MediaColumns.IS_PENDING, 1)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, item.mediaType)
         }
-        val uri = resolver.insert(collection, values) ?: return -1
-        val wrote = runCatching {
-            resolver.openOutputStream(uri)?.use { out -> File(original.path).inputStream().use { it.copyTo(out) } }
-        }
-        wrote.exceptionOrNull()?.let(full::note)
-        val written = wrote.getOrNull() != null
-        if (!written) {
-            resolver.delete(uri, null, null)
+        try {
+            val dest = resolver.insert(collection, values) ?: return -1
+            resolver.openOutputStream(dest)?.use { output ->
+                item.file.inputStream().use { input -> input.copyTo(output) }
+            } ?: return -1
+            saved += 1
+        } catch (error: Exception) {
+            if (error.writeFailureReason(EffectReason.FAILED) == EffectReason.STORAGE_FULL) onStorageFull()
             return -1
         }
-        resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-        saved += 1
     }
     return saved
 }
 
-/** `Photo 1.jpg`, `Video 2.mp4` — Rust's stems, the extension from the media type the byte door reported. */
-private fun fileName(original: LocatedOriginal, index: Int, export: ExportOriginals): String {
-    val stem = if (original.isVideo) export.video_stem else export.photo_stem
-    val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(original.mediaType)
-        ?: if (original.isVideo) "mp4" else "jpg"
-    return "$stem ${index + 1}.$ext"
-}
-
-/** Whether a copy of this export stopped for lack of space: the shell's fact, worded by Rust. */
-private class FullPhone {
-    var seen = false
-        private set
-
-    fun note(why: Throwable?) {
-        if (why != null && why.writeFailureReason("") == EffectReason.STORAGE_FULL) seen = true
-    }
-}
+private val GPS_TAGS = arrayOf(
+    ExifInterface.TAG_GPS_ALTITUDE,
+    ExifInterface.TAG_GPS_ALTITUDE_REF,
+    ExifInterface.TAG_GPS_AREA_INFORMATION,
+    ExifInterface.TAG_GPS_DATESTAMP,
+    ExifInterface.TAG_GPS_DEST_BEARING,
+    ExifInterface.TAG_GPS_DEST_BEARING_REF,
+    ExifInterface.TAG_GPS_DEST_DISTANCE,
+    ExifInterface.TAG_GPS_DEST_DISTANCE_REF,
+    ExifInterface.TAG_GPS_DEST_LATITUDE,
+    ExifInterface.TAG_GPS_DEST_LATITUDE_REF,
+    ExifInterface.TAG_GPS_DEST_LONGITUDE,
+    ExifInterface.TAG_GPS_DEST_LONGITUDE_REF,
+    ExifInterface.TAG_GPS_DIFFERENTIAL,
+    ExifInterface.TAG_GPS_DOP,
+    ExifInterface.TAG_GPS_IMG_DIRECTION,
+    ExifInterface.TAG_GPS_IMG_DIRECTION_REF,
+    ExifInterface.TAG_GPS_LATITUDE,
+    ExifInterface.TAG_GPS_LATITUDE_REF,
+    ExifInterface.TAG_GPS_LONGITUDE,
+    ExifInterface.TAG_GPS_LONGITUDE_REF,
+    ExifInterface.TAG_GPS_MAP_DATUM,
+    ExifInterface.TAG_GPS_MEASURE_MODE,
+    ExifInterface.TAG_GPS_PROCESSING_METHOD,
+    ExifInterface.TAG_GPS_SATELLITES,
+    ExifInterface.TAG_GPS_SPEED,
+    ExifInterface.TAG_GPS_SPEED_REF,
+    ExifInterface.TAG_GPS_STATUS,
+    ExifInterface.TAG_GPS_TIMESTAMP,
+    ExifInterface.TAG_GPS_TRACK,
+    ExifInterface.TAG_GPS_TRACK_REF,
+    ExifInterface.TAG_GPS_VERSION_ID,
+)

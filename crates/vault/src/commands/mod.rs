@@ -43,11 +43,13 @@
 //! nothing (#1146). A write a shell may re-offer without a key is idempotent by
 //! its own content, or by an id the phone minted before the first attempt.
 
+pub mod alert;
 pub mod arrival;
 pub mod blob;
+pub mod concept;
 pub mod contact_point;
 pub mod container;
-mod csv;
+pub mod csv;
 pub mod document;
 pub mod document_portable;
 pub mod edge;
@@ -66,16 +68,21 @@ pub mod note;
 pub mod note_portable;
 pub mod origin_cursor;
 pub mod person;
+pub mod person_date;
 pub mod person_portable;
 pub mod photo;
 pub mod photo_portable;
 pub mod place;
+pub mod reading;
+pub mod reminder;
 pub mod rule;
 pub mod sealed;
 pub mod tag;
 pub mod task;
 pub mod task_portable;
 pub mod thread;
+pub mod touch;
+pub mod txn;
 pub mod txn_portable;
 pub mod vault;
 pub mod vault_export;
@@ -152,8 +159,14 @@ pub struct CommandCtx<'tx, 'conn> {
 
 impl<'conn> CommandCtx<'_, 'conn> {
     /// The cause and quietness this commit's history will settle under.
-    pub(crate) fn settling_as(&self) -> (String, bool) {
+    pub(crate) fn settling_as(&self) -> crate::history::Settling {
         self.tx.settling_as()
+    }
+
+    /// Say this commit is not a quiet save, whatever the caller marked it: a version put back
+    /// (a restore, an undo) is a version of its own and never folds into a session.
+    pub(crate) fn end_quiet(&self) {
+        self.tx.set_quiet(false);
     }
 
     /// The connection this command writes through — the guard's, so the
@@ -204,8 +217,44 @@ impl<'conn> CommandCtx<'_, 'conn> {
 
     /// [`Self::insert_entity`] for an id the caller minted first (a row a
     /// shell may re-offer, keyed by an id the phone minted).
+    ///
+    /// # Errors
+    /// [`VaultError::InvalidInput`] when `id` is not a canonical UUIDv7: the one id a member's
+    /// row has (a seeded slug is founding's alone, #1214 A17); then whatever SQLite refused.
     pub fn insert_entity_as(&self, id: &str, kind: Kind, title: &str) -> Result<()> {
-        self.tx.insert_entity(id, kind, title, &self.now)
+        self.insert_entity_in(id, kind, title, None)
+    }
+
+    /// [`Self::insert_entity_as`] born in a home: `parent` holds it.
+    pub fn insert_entity_in(
+        &self,
+        id: &str,
+        kind: Kind,
+        title: &str,
+        parent: Option<&str>,
+    ) -> Result<()> {
+        if !crate::model::is_minted_id(id) {
+            return Err(VaultError::InvalidInput {
+                name: "id".to_owned(),
+                detail: "an id is a lowercase UUIDv7".to_owned(),
+            });
+        }
+        self.tx
+            .insert_entity_in(id, kind, title, parent, &self.now)?;
+        // A new item may be the title a note's `[[link]]` has been waiting for.
+        note::resolve_waiting(self, id)
+    }
+
+    /// [`Self::insert_entity`] born in a home.
+    pub fn insert_entity_under(
+        &self,
+        kind: Kind,
+        title: &str,
+        parent: Option<&str>,
+    ) -> Result<String> {
+        let id = self.next_id();
+        self.insert_entity_in(&id, kind, title, parent)?;
+        Ok(id)
     }
 
     /// A required string input.
@@ -223,6 +272,63 @@ impl<'conn> CommandCtx<'_, 'conn> {
     #[must_use]
     pub fn optional_str(&self, key: &str) -> Option<&str> {
         self.input.get(key).and_then(serde_json::Value::as_str)
+    }
+
+    /// The rows a shared verb is asked to act on: `id`, then each of `ids`, once each. A verb
+    /// that takes either acts on all of them in the one commit it runs in.
+    #[must_use]
+    pub fn target_ids(&self) -> Vec<String> {
+        let mut found: Vec<String> = Vec::new();
+        let listed = self
+            .input
+            .get("ids")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str);
+        for id in self.optional_str("id").into_iter().chain(listed) {
+            if !found.iter().any(|seen| seen == id) {
+                found.push(id.to_owned());
+            }
+        }
+        found
+    }
+
+    /// This command's context as it is for one of its target rows alone: the same input with
+    /// `id` set to `id` and `ids` gone, so the checks and writes a verb has for one row serve each
+    /// row of many.
+    #[must_use]
+    pub fn for_target(&self, id: &str) -> CommandCtx<'_, 'conn> {
+        let mut input = self.input.clone();
+        if let Some(map) = input.as_object_mut() {
+            map.remove("ids");
+            map.insert("id".to_owned(), serde_json::Value::String(id.to_owned()));
+        }
+        CommandCtx {
+            tx: self.tx,
+            command: self.command,
+            input,
+            principal: self.principal.clone(),
+            now: self.now.clone(),
+            ids: self.ids,
+            blobs: self.blobs,
+        }
+    }
+
+    /// Run a one-row check against every target row; the first sentence is the refusal.
+    ///
+    /// # Errors
+    /// What the check returns.
+    pub fn check_each(
+        &self,
+        check: fn(&CommandCtx<'_, '_>) -> Result<Option<String>>,
+    ) -> Result<Option<String>> {
+        for id in self.target_ids() {
+            if let Some(sentence) = check(&self.for_target(&id))? {
+                return Ok(Some(sentence));
+            }
+        }
+        Ok(None)
     }
 
     /// Deserialize the command's JSON input into a typed input struct.
@@ -344,39 +450,46 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 30] = [
+        let modules: &[fn() -> Vec<CommandDefinition>] = &[
+            alert::definitions,
             blob::definitions,
+            concept::definitions,
             contact_point::definitions,
             container::definitions,
             document::definitions,
+            document_portable::definitions,
             edge::definitions,
             entity::definitions,
             event::definitions,
             event_portable::definitions,
             flag::definitions,
             follow::definitions,
+            health_portable::definitions,
             history::definitions,
-            locker::definitions,
             measurement::definitions,
+            locker::definitions,
             money::definitions,
             note::definitions,
             person::definitions,
+            reading::definitions,
+            person_date::definitions,
             photo::definitions,
+            photo_portable::definitions,
             place::definitions,
+            reminder::definitions,
             rule::definitions,
             tag::definitions,
+            thread::definitions,
             task::definitions,
             task_portable::definitions,
-            thread::definitions,
+            touch::definitions,
+            txn::definitions,
             txn_portable::definitions,
-            health_portable::definitions,
-            document_portable::definitions,
-            photo_portable::definitions,
             vault::definitions,
             vault_export::definitions,
             workout::definitions,
         ];
-        for definitions in modules {
+        for definitions in modules.iter().copied() {
             for definition in definitions() {
                 registry.register(definition)?;
             }
@@ -455,10 +568,11 @@ pub struct Command {
     /// A QUIET save: an editor's autosave, which the caller says it is (never inferred from the
     /// name). Its history may fold into the session of the last one; see [`crate::history`].
     pub quiet: bool,
-    /// WHO ACTED when it is not the member acting by hand: the chat's door says `assist`. It is
-    /// said by the door, never inferred from the command's name or input, and it only changes the
-    /// commit's producer, so the history can say "Changed by Chat" ([`crate::history::Who`]).
-    pub actor: Option<&'static str>,
+    /// WHO ACTED (B4): the member by hand unless the door the command came through says otherwise
+    /// (the chat's door, a follow pass for its origin). It is said by the door, never inferred
+    /// from the command's name or input, and it is written to the revisions the commit keeps
+    /// ([`crate::history::Actor`]).
+    pub actor: crate::history::Actor,
 }
 
 impl Command {
@@ -468,14 +582,26 @@ impl Command {
             name: name.into(),
             input,
             quiet: false,
-            actor: None,
+            actor: crate::history::Actor::Member,
         }
     }
 
-    /// This command as made by `actor` (the chat's door), not by the member's own hand.
+    /// This command as made by the assistant (the chat's door: `by("assist")`), not by the
+    /// member's own hand.
     #[must_use]
-    pub const fn by(mut self, actor: &'static str) -> Self {
-        self.actor = Some(actor);
+    pub fn by(mut self, door: &'static str) -> Self {
+        debug_assert_eq!(
+            door, "assist",
+            "the chat's door is the only one that says `by`"
+        );
+        self.actor = crate::history::Actor::Assistant;
+        self
+    }
+
+    /// This command as made by `actor`.
+    #[must_use]
+    pub fn as_actor(mut self, actor: crate::history::Actor) -> Self {
+        self.actor = actor;
         self
     }
 
@@ -580,10 +706,8 @@ impl Vault {
         })?;
 
         let ran = self.commit(|tx| {
-            match command.actor {
-                Some(actor) => tx.set_producer(format!("{actor}.{}", command.name)),
-                None => tx.set_producer(&command.name),
-            }
+            tx.set_producer(&command.name);
+            tx.set_actor(command.actor.clone());
             tx.set_quiet(command.quiet);
             let connection = tx.connection();
             if let Some(mark) = keyed

@@ -1,0 +1,37 @@
+room pushed_page key="money/txn/b1325743-ba29-7670-846c-cecdcf8c7cb5"
+  header title="Transaction"
+    back "Money" #back
+    key menu sym="MoreHoriz" "More" #key/menu
+      menu #txn/menu
+        section
+          item "Edit" #menu/edit
+          item "Star" #menu/star
+          item "Share" #menu/share
+          item "Move to trash" destructive #menu/trash
+          item "Move or tag" #menu/organize
+  ready
+    hero "Corner Co-op" noun="Transaction"
+      line "-$60.00"
+      line "2026-11-20 · Checking"
+    facts
+      fact "Amount" "-$60.00" kind=money
+      fact "Account" "Checking" kind=text
+      fact "Date" "2026-11-20" kind=date
+      fact "Status" "Posted" kind=text
+    section #section/splits "Splits"
+      row #split/0 "Groceries" trailing="-$40.00"
+      row #split/1 "Dining" trailing="-$20.00"
+    says statement "Statement says" take="Use statement"
+      field "Payee" stated="CORNER COOP #44" mine="Corner Co-op" #says/title
+      field "Amount" stated="-$62.00" mine="-$60.00" #says/amount
+      field "Date" stated="2026-11-19" mine="2026-11-20" #says/date
+    attachments "Attachments"
+      menu #attachments/add
+        section
+          item "Scan" #attachments/scan
+          item "Choose file" #attachments/file
+          item "Photo" #attachments/photo
+    linked "Linked"
+      add "Add link" sym="Link" #linked/add
+    earlier_versions "3 earlier versions" count=3 #earlier
+    origin "From statement"

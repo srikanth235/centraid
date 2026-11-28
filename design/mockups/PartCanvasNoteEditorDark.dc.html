@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Canvas: note editor (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div data-theme="dark" style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Canvas: note editor</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">The rich text of a note with its formatting accessory.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">BODY WITH A CHECKLIST</div>
+  <div>
+    <!-- variant:body -->
+    <div style="padding: 0 20px; font-size: 16px; line-height: 1.5; color: var(--text-ink);">
+      <p data-slot="t0" style="margin: 0 0 12px;">Flights are booked: out on 12 December, back on the 18th. The flat is up the hill from the Alfama tram stop.</p>
+      <p style="margin: 0 0 14px;">Day by day is in <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: var(--tint-straw); color: var(--app-docs); font-weight: 600; font-size: 15px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--app-docs)" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg>Lisbon itinerary</span></p>
+    <p style="margin: 0 0 14px;">Still to write: <span data-slot="t1" style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: var(--tint-coral); color: var(--state-red); font-weight: 600; font-size: 15px;">Packing list</span> and <span data-slot="t2" style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: var(--surface-fill); color: var(--stroke-strong); font-weight: 600; font-size: 15px;">Old plan</span>.</p>
+
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+        <span style="width: 22px; height: 22px; border-radius: 11px; background: var(--app-notes-fill); flex-shrink: 0; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+        <span data-slot="t3" style="color: var(--text-faint); text-decoration: line-through;">Book the flights</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+        <span style="width: 22px; height: 22px; border-radius: 11px; background: var(--app-notes-fill); flex-shrink: 0; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-fill)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+        <span data-slot="t4" style="color: var(--text-faint); text-decoration: line-through;">Book the flat in Alfama</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+        <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid var(--stroke-strong); box-sizing: border-box; flex-shrink: 0;"></span>
+        <span data-slot="t5">Travel insurance</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+        <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid var(--stroke-strong); box-sizing: border-box; flex-shrink: 0;"></span>
+        <span>Ask <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: var(--tint-violet); color: var(--app-people); font-weight: 600; font-size: 15px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--app-people)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0116 0"></path></svg>Ana Díaz</span> to water the plants</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+        <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid var(--stroke-strong); box-sizing: border-box; flex-shrink: 0;"></span>
+        <span>Print the boarding passes<span style="display: inline-block; width: 2px; height: 20px; background: var(--app-notes-fill); vertical-align: -4px; margin-left: 1px;"></span></span>
+      </div>
+      <div data-slot="t6" style="margin: 14px 0 0; font-size: 13px; color: var(--text-meta);">From Vault folder</div>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

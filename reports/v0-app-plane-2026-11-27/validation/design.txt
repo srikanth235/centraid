@@ -1,0 +1,3 @@
+Command: cargo xtask design --check
+Result: exit 0; no generated design drift.
+Run after the foreground-routing and native lifecycle-control fixes.

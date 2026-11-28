@@ -8,7 +8,7 @@ import os
 ///
 /// This is the whole of what Swift knows about the core. Every decision a
 /// person sees is made in Rust (`crates/screens`): this actor sends a request,
-/// hands back the answer, and streams the view-state updates the core pushes.
+/// hands back the answer, and streams the core events the shell consumes.
 /// It holds no screen state, writes no copy and names no screen.
 ///
 /// `CONTRACT.md`'s clauses, kept here: buffers are copied out and released only
@@ -20,7 +20,7 @@ actor Core {
     /// the member-facing sentence is the core's, never made up here.
     enum Failure: Error {
         case closed
-        case poisoned(diagnosticID: String)
+        case poisoned(diagnosticID: String, sentence: String)
         case malformed(String)
         /// `centraid_open` answered `CENTRAID_VAULT_DAMAGED`: the vault file is untouched and no
         /// handle exists. The shell draws the launch screen for it (`VaultDamagedView`).
@@ -69,16 +69,34 @@ actor Core {
         case bulk
     }
 
-    /// Screen updates the core pushed, in order: the stream ends when the core
-    /// closes or is poisoned.
     nonisolated let updates: AsyncStream<Centraid_Core_V1_ScreenUpdate>
     private nonisolated let updateSink: AsyncStream<Centraid_Core_V1_ScreenUpdate>.Continuation
+    nonisolated let roomUpdates: AsyncStream<Centraid_Core_V1_RoomShown>
+    private nonisolated let roomSink: AsyncStream<Centraid_Core_V1_RoomShown>.Continuation
+    nonisolated let effects: AsyncStream<Centraid_Core_V1_ShellEffect>
+    private nonisolated let effectSink: AsyncStream<Centraid_Core_V1_ShellEffect>.Continuation
+    nonisolated let changes: AsyncStream<Centraid_Core_V1_ChangeEvent>
+    private nonisolated let changeSink: AsyncStream<Centraid_Core_V1_ChangeEvent>.Continuation
+    nonisolated let notifyUpdates: AsyncStream<Centraid_Core_V1_ScheduleNotifications>
+    private nonisolated let notifySink: AsyncStream<Centraid_Core_V1_ScheduleNotifications>.Continuation
 
     private init(raw: Raw) {
         self.raw = raw
         let stream = AsyncStream<Centraid_Core_V1_ScreenUpdate>.makeStream()
         updates = stream.stream
         updateSink = stream.continuation
+        let rooms = AsyncStream<Centraid_Core_V1_RoomShown>.makeStream()
+        roomUpdates = rooms.stream
+        roomSink = rooms.continuation
+        let shellEffects = AsyncStream<Centraid_Core_V1_ShellEffect>.makeStream()
+        effects = shellEffects.stream
+        effectSink = shellEffects.continuation
+        let changes = AsyncStream<Centraid_Core_V1_ChangeEvent>.makeStream()
+        self.changes = changes.stream
+        changeSink = changes.continuation
+        let notify = AsyncStream<Centraid_Core_V1_ScheduleNotifications>.makeStream()
+        notifyUpdates = notify.stream
+        notifySink = notify.continuation
     }
 
     /// Open the front core over the vault directory. Blocking: call from a
@@ -156,7 +174,9 @@ actor Core {
         if let out { centraid_free(out, outLength) }
         let envelope = try answer.map { try Centraid_Core_V1_Envelope(serializedBytes: $0) }
         if case .error(let error)? = envelope?.body {
-            if status == CENTRAID_PANICKED { throw Failure.poisoned(diagnosticID: error.diagnosticID) }
+            if status == CENTRAID_PANICKED {
+                throw Failure.poisoned(diagnosticID: error.diagnosticID, sentence: error.sentence)
+            }
             throw Failure.refused(error)
         }
         switch status {
@@ -171,6 +191,10 @@ actor Core {
     private nonisolated func startPump() {
         let raw = self.raw
         let sink = updateSink
+        let roomSink = self.roomSink
+        let effectStream = self.effectSink
+        let changeStream = self.changeSink
+        let notifySink = self.notifySink
         let stopping = stoppingPump
         let pending = pendingCalls
         pending.enter()
@@ -186,13 +210,29 @@ actor Core {
                 guard status == CENTRAID_OK else { break }
                 if let bytes,
                     let envelope = try? Centraid_Core_V1_Envelope(serializedBytes: bytes),
-                    case .event(let event)? = envelope.body,
-                    case .screen(let update)? = event.kind
+                    case .event(let event)? = envelope.body
                 {
-                    sink.yield(update)
+                    switch event.kind {
+                    case .screen(let update)?:
+                        sink.yield(update)
+                    case .room(let shown)?:
+                        roomSink.yield(shown)
+                    case .effect(let effect)?:
+                        effectStream.yield(effect)
+                    case .change(let change)?:
+                        changeStream.yield(change)
+                    case .notify(let schedule)?:
+                        notifySink.yield(schedule)
+                    default:
+                        break
+                    }
                 }
             }
             sink.finish()
+            roomSink.finish()
+            effectStream.finish()
+            changeStream.finish()
+            notifySink.finish()
         }
         thread.name = "dev.centraid.core.events"
         thread.start()

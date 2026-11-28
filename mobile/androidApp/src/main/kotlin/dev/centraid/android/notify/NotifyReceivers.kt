@@ -5,14 +5,14 @@ import android.content.Context
 import android.content.Intent
 import centraid.core.v1.NotificationAnswered
 import centraid.core.v1.NotificationVerb
+import centraid.core.v1.ShellFact
+import dev.centraid.android.room.RoomClient
 import dev.centraid.core.Screens
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import centraid.core.v1.ShellFact
 
-/** AN ALARM FIRED (#1173): post the notification it was set for, from the record. Not exported. */
 public class NotifyAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra(Notify.EXTRA_ID) ?: return
@@ -20,20 +20,17 @@ public class NotifyAlarmReceiver : BroadcastReceiver() {
     }
 }
 
-/**
- * A BUTTON WAS PRESSED (#1173): the notification goes, and Rust hears the id and the verb as they were
- * handed over; what the verb does is Rust's. The process may have no activity, so the fact reaches the
- * core the way a background pass does (`PassHost`): the process's one session, opened here if need be.
- * Not exported.
- */
 public class NotifyActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra(Notify.EXTRA_ID) ?: return
         val verb = intent.getIntExtra(Notify.EXTRA_VERB, 0)
+        val entityId = intent.getStringExtra(Notify.EXTRA_ENTITY_ID).orEmpty()
+        val dateId = intent.getStringExtra(Notify.EXTRA_DATE_ID).orEmpty()
+        val fieldId = intent.getStringExtra(Notify.EXTRA_FIELD_ID).orEmpty()
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                Notify.answer(context, id, verb)
+                Notify.answer(context, id, verb, entityId, dateId, fieldId)
             } finally {
                 pending.finish()
             }
@@ -41,29 +38,31 @@ public class NotifyActionReceiver : BroadcastReceiver() {
     }
 }
 
-/**
- * THE CLOCK OR THE PHONE CHANGED (#1173): a reboot clears every alarm, and a new time or zone moves
- * what a wall-clock reminder means, so every recorded item is set again from its local time and zone.
- * Not exported: the system's broadcasts reach a manifest receiver regardless.
- */
 public class NotifyBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Notify.rearm(context)
     }
 }
 
-/**
- * TAPS ON A NOTIFICATION (#1173), held until a session is up. A tap opens the launcher activity (a
- * receiver may not start one from a notification), which notes the extras here and sends the fact once
- * the session exists. Each is sent once.
- */
 internal object NotifyTaps {
+    private val deepLinks = ArrayDeque<String>()
     private val waiting = ArrayDeque<NotificationAnswered>()
 
-    /** Note a launch or a new intent's tap, and take the extras off it so a recreation does not repeat it. */
     @Synchronized
     fun note(intent: Intent?) {
-        val id = intent?.getStringExtra(Notify.EXTRA_ID) ?: return
+        if (intent == null) return
+        val openUrl = intent.getStringExtra(Notify.EXTRA_OPEN_URL)
+            ?.takeIf { it.isNotBlank() }
+            ?: intent.dataString?.takeIf { it.startsWith("centraid://open/") }
+        if (openUrl != null) {
+            intent.removeExtra(Notify.EXTRA_OPEN_URL)
+            intent.removeExtra(Notify.EXTRA_ID)
+            intent.removeExtra(Notify.EXTRA_VERB)
+            if (intent.dataString == openUrl) intent.data = null
+            deepLinks.addLast(openUrl)
+            return
+        }
+        val id = intent.getStringExtra(Notify.EXTRA_ID) ?: return
         val verb = intent.getIntExtra(Notify.EXTRA_VERB, 0)
         intent.removeExtra(Notify.EXTRA_ID)
         intent.removeExtra(Notify.EXTRA_VERB)
@@ -76,10 +75,16 @@ internal object NotifyTaps {
     }
 
     @Synchronized
+    internal fun takeDeepLink(): String? = deepLinks.removeFirstOrNull()
+
+    @Synchronized
     private fun take(): NotificationAnswered? = waiting.removeFirstOrNull()
 
-    /** Send every noted tap into [screens]. */
-    suspend fun flush(screens: Screens) {
+    suspend fun flush(rooms: RoomClient, screens: Screens) {
+        while (true) {
+            val url = takeDeepLink() ?: break
+            rooms.openDeepLink(url)
+        }
         while (true) {
             val tap = take() ?: return
             screens.shellFact(ShellFact(notification_answered = tap))

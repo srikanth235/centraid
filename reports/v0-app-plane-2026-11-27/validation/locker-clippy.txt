@@ -1,0 +1,9 @@
+Locker final formatting and lint validation
+===========================================
+
+Under `flock /tmp/centraid-cargo.lock`:
+- `cargo fmt --all` completed.
+- `cargo fmt --all -- --check` passed.
+- `cargo clippy -p centraid-core -p centraid-screens -p centraid-domain -p centraid-vault -p centraid-identity -p xtask --all-targets --keep-going -- -D warnings` passed.
+
+Full log: `/tmp/centraid-locker-final-checks.log`.

@@ -124,6 +124,11 @@ message AssistRequest {
     // Both answer `settled`.
     AssistConfirmRequest confirm = 10;
     AssistDismissRequest dismiss = 11;
+    // THE MODEL'S FILES (app-plane §6, the chat's download): what to fetch, what to load and what
+    // to delete, decided here from the files on the phone and what the phone says of itself.
+    AssistPlanRequest plan = 12;
+    AssistFinishedRequest finished = 13;
+    AssistOpenedRequest opened = 14;
   }
 }
 
@@ -138,6 +143,8 @@ message AssistResponse {
     AssistDocuments documents = 9;
     // Answers `confirm` and `dismiss`.
     AssistSettled settled = 10;
+    // Answers `plan`, `finished` and `opened`.
+    AssistPlan plan = 12;
   }
 }
 
@@ -580,4 +587,126 @@ message AssistUndo {
   string app = 1;
   string action = 2;
   map<string, Value> input = 3;
+}
+
+// ---------------------------------------------------------------------------
+// The model's files: the transfer is the shell's, every decision about it is here.
+// ---------------------------------------------------------------------------
+
+enum AssistNetwork {
+  ASSIST_NETWORK_UNSPECIFIED = 0;
+  ASSIST_NETWORK_WIFI = 1;
+  ASSIST_NETWORK_CELLULAR = 2;
+  ASSIST_NETWORK_OFFLINE = 3;
+}
+
+// What the phone says of itself. A zero is "not said", never "none".
+message AssistFacts {
+  AssistNetwork network = 1;
+  uint64 free_bytes = 2;
+  uint64 memory_bytes = 3;
+}
+
+enum AssistIntent {
+  ASSIST_INTENT_UNSPECIFIED = 0;
+  // Where the files stand: what is in use, what is on offer, what goes.
+  ASSIST_INTENT_STATUS = 1;
+  // The first download, or the download of a model this release needs.
+  ASSIST_INTENT_DOWNLOAD = 2;
+  // The update row: the current model beside the one in use, or the adapter alone.
+  ASSIST_INTENT_UPDATE = 3;
+}
+
+enum AssistMobileData {
+  ASSIST_MOBILE_DATA_UNSPECIFIED = 0;
+  // Keep what the member chose before (Wi-Fi unless they allowed mobile data).
+  ASSIST_MOBILE_DATA_KEEP = 1;
+  ASSIST_MOBILE_DATA_ALLOW = 2;
+  ASSIST_MOBILE_DATA_WAIT_FOR_WIFI = 3;
+}
+
+message AssistPlanRequest {
+  string models_dir = 1;
+  AssistFacts facts = 2;
+  AssistIntent intent = 3;
+  AssistMobileData mobile_data = 4;
+}
+
+enum AssistStand {
+  ASSIST_STAND_UNSPECIFIED = 0;
+  // No model this release supports is on the phone: the current one is needed.
+  ASSIST_STAND_NEEDS_MODEL = 1;
+  ASSIST_STAND_USE_CURRENT = 2;
+  // The model before the current one still works; the chat uses it and offers the new one.
+  ASSIST_STAND_USE_PREVIOUS = 3;
+}
+
+enum AssistOffer {
+  ASSIST_OFFER_UNSPECIFIED = 0;
+  // The current model, and its adapter in the same download.
+  ASSIST_OFFER_MODEL = 1;
+  // The adapter alone: the model in use is the current one.
+  ASSIST_OFFER_ADAPTER_ONLY = 2;
+}
+
+enum AssistPlanRefusal {
+  ASSIST_PLAN_REFUSAL_UNSPECIFIED = 0;
+  ASSIST_PLAN_REFUSAL_NO_SPACE = 1;
+  ASSIST_PLAN_REFUSAL_NO_MEMORY = 2;
+  // On mobile data the member has not allowed: ask first.
+  ASSIST_PLAN_REFUSAL_ASK_MOBILE_DATA = 3;
+}
+
+// One file for the shell to fetch, resumably, checking the SHA-256 the publisher states.
+message AssistFile {
+  string url = 1;
+  string file_name = 2;
+  string sha256 = 3;
+  uint64 bytes = 4;
+  bool allow_mobile_data = 5;
+  // On mobile data or offline without permission: the transfer is held until Wi-Fi comes.
+  bool waits_for_wifi = 6;
+}
+
+message AssistPlan {
+  AssistStand stand = 1;
+  // The model to load now, as a path in `models_dir`; empty when none is to be loaded.
+  string load_path = 2;
+  AssistOffer offer = 3;
+  // What the offer quotes: the model and its adapter, or the adapter alone.
+  uint64 offer_bytes = 4;
+  // Files in `models_dir` to delete: the model before the current one once the current one is in
+  // use, an older model, and an adapter the release does not name.
+  repeated string delete = 5;
+  repeated AssistFile fetch = 6;
+  AssistPlanRefusal refusal = 7;
+  // With NO_SPACE: what is needed and what is free.
+  uint64 need_bytes = 8;
+  uint64 free_bytes = 9;
+  // The model reloads now: an adapter landed and no turn is running.
+  bool reload = 10;
+  // The chat needs the current model and an older one is still on the phone.
+  bool update_needed = 11;
+}
+
+enum AssistFinishedWhich {
+  ASSIST_FINISHED_WHICH_UNSPECIFIED = 0;
+  ASSIST_FINISHED_WHICH_MODEL = 1;
+  ASSIST_FINISHED_WHICH_ADAPTER = 2;
+  ASSIST_FINISHED_WHICH_VISION = 3;
+}
+
+// A transfer the shell ran ended. Answered with the next plan: the adapter to fetch after its
+// model, the load, a reload held back by a running turn, or the retry of a model that did not
+// arrive. A missing adapter is never an error: the model runs alone.
+message AssistFinishedRequest {
+  string models_dir = 1;
+  AssistFinishedWhich which = 2;
+  bool ok = 3;
+  AssistFacts facts = 4;
+}
+
+// The chat opened again: a reload held back by a running turn happens now.
+message AssistOpenedRequest {
+  string models_dir = 1;
 }

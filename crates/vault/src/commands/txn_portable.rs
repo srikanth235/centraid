@@ -4,20 +4,23 @@
 //!
 //! One row per transaction, newest last as the statement reads: the day, the account, the
 //! payee (the member's name for the line, else the bank's words), the bank's own words, the
-//! category, the amount as a plain decimal with its currency code in the next column (money out
-//! is negative), the status, the bank's memo and the check number. Lines in the trash, and the
-//! lines of a trashed account, are not in it. Fields holding a comma, a quote or a line break
+//! categories (a split line names each, in order), the amount as a plain decimal with its currency
+//! code (the account's) in the next column (money out is negative), the status, the memo (the
+//! member's, else the bank's), the check number, what a foreign purchase was charged and where the
+//! line came from (`statement` or `hand`). Lines in the trash, and the lines of a trashed account,
+//! are not in it. Fields holding a comma, a quote or a line break
 //! are quoted with the quote doubled; lines end in CRLF; the text is UTF-8.
 
 use rusqlite::Connection;
 use serde_json::Value as Json;
 
 use crate::commands::csv::{self, row, text_row, words};
-use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note};
+use crate::commands::note_portable::file_stem;
+use crate::commands::{CommandCtx, CommandDefinition, Idempotency};
 use crate::error::Result;
 
 /// The header row.
-const HEADER: [&str; 10] = [
+const HEADER: [&str; 13] = [
     "Date",
     "Account",
     "Payee",
@@ -28,6 +31,9 @@ const HEADER: [&str; 10] = [
     "Status",
     "Memo",
     "Check number",
+    "Original amount",
+    "Original currency",
+    "Entered",
 ];
 
 /// One transaction as the file reads it.
@@ -42,10 +48,13 @@ struct Line {
     status: String,
     memo: String,
     check_number: String,
+    original_minor: Option<i64>,
+    original_currency: String,
+    entered: String,
 }
 
 /// The ISO 4217 minor-unit exponent of the codes the product reaches (two unless listed).
-fn exponent(currency: &str) -> u32 {
+pub(crate) fn exponent(currency: &str) -> u32 {
     match currency {
         "BIF" | "CLP" | "DJF" | "GNF" | "ISK" | "JPY" | "KMF" | "KRW" | "PYG" | "RWF" | "UGX"
         | "UYI" | "VND" | "VUV" | "XAF" | "XOF" | "XPF" => 0,
@@ -78,15 +87,20 @@ fn lines(connection: &Connection, account: Option<&str>, one: Option<&str>) -> R
         "SELECT t.posted_on, a.title, e.title,
                 (SELECT s.stated_title FROM source s
                   WHERE s.entity_id = t.id ORDER BY s.seen_at DESC, s.id LIMIT 1),
-                c.title, t.amount_minor, t.currency, t.status,
-                (SELECT json_extract(s.stated, '$.line.memo') FROM source s
-                  WHERE s.entity_id = t.id ORDER BY s.seen_at DESC, s.id LIMIT 1),
+                (SELECT group_concat(title, '; ') FROM
+                   (SELECT c.title FROM txn_split s JOIN entity c ON c.id = s.category_id
+                     WHERE s.txn_id = t.id ORDER BY s.position)),
+                t.amount_minor, ac.currency, t.status,
+                COALESCE(t.memo,
+                         (SELECT json_extract(s.stated, '$.line.memo') FROM source s
+                           WHERE s.entity_id = t.id ORDER BY s.seen_at DESC, s.id LIMIT 1)),
                 (SELECT json_extract(s.stated, '$.line.check_number') FROM source s
-                  WHERE s.entity_id = t.id ORDER BY s.seen_at DESC, s.id LIMIT 1)
+                  WHERE s.entity_id = t.id ORDER BY s.seen_at DESC, s.id LIMIT 1),
+                t.original_amount_minor, t.original_currency, t.entered
            FROM txn t
            JOIN entity e ON e.id = t.id
            JOIN entity a ON a.id = t.account_id
-           LEFT JOIN entity c ON c.id = t.category_id
+           JOIN account ac ON ac.id = t.account_id
           WHERE e.deleted_at IS NULL AND a.deleted_at IS NULL
             AND (?1 IS NULL OR t.account_id = ?1)
             AND (?2 IS NULL OR t.id = ?2)
@@ -116,6 +130,9 @@ fn lines(connection: &Connection, account: Option<&str>, one: Option<&str>) -> R
                 status: row.get(7)?,
                 memo: said(8)?,
                 check_number: said(9)?,
+                original_minor: row.get(10)?,
+                original_currency: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
+                entered: row.get(12)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -125,6 +142,9 @@ fn lines(connection: &Connection, account: Option<&str>, one: Option<&str>) -> R
 fn file(rows: &[Line]) -> String {
     let mut text = text_row(&HEADER);
     for line in rows {
+        let original = line
+            .original_minor
+            .map(|minor| decimal(minor, &line.original_currency));
         text.push_str(&row(&[
             words(&line.day),
             words(&line.account),
@@ -136,6 +156,9 @@ fn file(rows: &[Line]) -> String {
             words(&line.status),
             words(&line.memo),
             words(&line.check_number),
+            original.as_deref().map_or_else(|| words(""), csv::number),
+            words(&line.original_currency),
+            words(&line.entered),
         ]));
     }
     text
@@ -143,7 +166,7 @@ fn file(rows: &[Line]) -> String {
 
 /// The spreadsheet of every transaction as text, and how many it holds. `txn.export_csv` answers
 /// the same for any scope; the whole-vault export writes this as `Money/transactions.csv`.
-pub(crate) fn transactions_csv(connection: &Connection) -> Result<(String, usize)> {
+pub fn transactions_csv(connection: &Connection) -> Result<(String, usize)> {
     let rows = lines(connection, None, None)?;
     Ok((file(&rows), rows.len()))
 }
@@ -156,7 +179,7 @@ fn export_csv(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let one = ctx.optional_str("transaction_id");
     let rows = lines(ctx.connection(), account, one)?;
     let name = if let (Some(_), Some(first)) = (one, rows.first()) {
-        format!("{} {}", note::portable_stem(&first.payee), first.day)
+        format!("{} {}", file_stem(&first.payee), first.day)
     } else if let Some(id) = account {
         let title: Option<String> = ctx
             .connection()
@@ -166,7 +189,7 @@ fn export_csv(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             .ok();
         title.map_or_else(
             || "Transactions".to_owned(),
-            |t| format!("{} transactions", note::portable_stem(&t)),
+            |t| format!("{} transactions", file_stem(&t)),
         )
     } else {
         "Transactions".to_owned()

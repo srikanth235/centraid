@@ -1,0 +1,2 @@
+    Checking centraid-screens v1.0.0-alpha.0 (/workspace/centraid/crates/screens)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.15s

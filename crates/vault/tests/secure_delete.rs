@@ -63,26 +63,21 @@ fn contains(haystack: &[u8], needle: &str) -> bool {
 #[test]
 fn a_purge_leaves_no_deleted_text_in_the_file_or_wal() {
     let scratch = common::Scratch::founded("secure-delete").expect("a vault");
-    let note = run(
-        &scratch,
-        "note.create",
-        json!({ "title": TITLE, "body": BODY }),
-    )["id"]
-        .as_str()
-        .expect("an id")
-        .to_owned();
+    let note = common::insert_note_with(&scratch.vault, TITLE, BODY).expect("a note");
     // A second item keeps the index non-empty, and shares a word: its copy must survive.
-    run(
-        &scratch,
-        "note.create",
-        json!({ "title": "Another", "body": "arrives later" }),
-    );
+    common::insert_note_with(&scratch.vault, "Another", "arrives later").expect("a note");
     // Edit once, so an earlier version holds the text too.
-    run(
-        &scratch,
-        "note.edit",
-        json!({ "id": note, "body": format!("{BODY} and more") }),
-    );
+    scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.edit");
+            tx.connection().execute(
+                "UPDATE note SET body = ?2 WHERE id = ?1",
+                rusqlite::params![note, format!("{BODY} and more")],
+            )?;
+            Ok(())
+        })
+        .expect("an edit");
 
     // THE CONTROL: before the purge the scan finds all of it, so a pass below means something.
     let before = raw_bytes(&scratch);

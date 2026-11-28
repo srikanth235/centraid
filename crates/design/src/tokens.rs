@@ -236,6 +236,14 @@ impl Icon {
     }
 }
 
+/// A colour role of the boards: one value per scheme, both designed.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BoardRole {
+    pub light: String,
+    pub dark: String,
+}
+
 /// One accent: an app, a state or the shell.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -506,6 +514,10 @@ pub struct Tokens {
     pub brand: BTreeMap<String, String>,
     /// The app icon's tiles and its tinted and themed colours (`[icon]`).
     pub icon: Icon,
+    /// The colour roles only the boards use (`[board]`): glass, scrims, washes and the
+    /// colours that keep their value in dark. The boards read every colour as `var(--role)`.
+    #[serde(default)]
+    pub board: BTreeMap<String, BoardRole>,
     #[serde(rename = "type")]
     pub scale: BTreeMap<String, ScaleStep>,
     pub radius: Radii,

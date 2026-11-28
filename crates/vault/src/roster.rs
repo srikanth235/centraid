@@ -48,7 +48,7 @@ pub fn is_app(id: &str) -> bool {
 }
 
 /// The app a stored `agenda` card or chat scope names now: the app of its entity kind, since the one
-/// app became two. A task (and a project, section or area) is Reminders'; everything else Agenda held,
+/// app became two. A task (and a task list) is Reminders'; everything else Agenda held,
 /// an event above all, is Calendar's. Any other id is returned as it is.
 #[must_use]
 pub fn legacy<'a>(app: &'a str, entity: &str) -> &'a str {
@@ -56,7 +56,7 @@ pub fn legacy<'a>(app: &'a str, entity: &str) -> &'a str {
         return app;
     }
     match entity {
-        "task" | "project" | "section" | "area" | "list" => "reminders",
+        "task" | "task_list" | "list" => "reminders",
         _ => "calendar",
     }
 }

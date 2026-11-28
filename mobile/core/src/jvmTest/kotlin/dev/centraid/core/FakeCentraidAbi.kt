@@ -33,6 +33,8 @@ internal class FakeCentraidAbi(
     private val copied = AtomicLong(0)
     private val events = LinkedBlockingQueue<AbiAnswer>()
 
+    val pendingEvents: Int get() = events.size
+
     var closes: Int = 0
         private set
 
@@ -63,6 +65,10 @@ internal class FakeCentraidAbi(
 
     fun offerRaw(answer: AbiAnswer) {
         events.put(answer)
+    }
+
+    fun offerTerminal() {
+        offerRaw(AbiAnswer(CoreStatus.CLOSED, CoreStatus.CLOSED.code, null))
     }
 
     private fun record(answer: AbiAnswer) {

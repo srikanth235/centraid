@@ -1,0 +1,176 @@
+   Compiling centraid-domain v1.0.0-alpha.0 (/workspace/centraid/crates/domain)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.79s
+     Running unittests src/lib.rs (target/debug/deps/centraid_domain-3d6c66cc0c3f6a30)
+
+running 93 tests
+test apps::health::typical_range_tests::typical_range_requires_seven_observed_whole_days ... ok
+test apps::health::typical_range_tests::typical_range_uses_the_member_local_day_not_the_utc_date ... ok
+test apps::health::typical_range_tests::typical_range_uses_prior_completed_local_days_and_ignores_an_outlier ... ok
+test apps::health::typical_range_tests::typical_range_keeps_local_calendar_dates_across_month_boundaries ... ok
+test apps::money::recurrence_tests::recurrence_candidates_are_derived_from_three_weekly_or_monthly_occurrences ... ok
+test apps::money::recurrence_tests::recurrence_requires_three_observations_and_a_regular_cadence_within_90_days ... ok
+test civil::tests::today_and_now_are_the_zones_reading_of_the_vault_clock ... ok
+test grammar::tests::a_join_with_an_alias_and_an_on_condition_is_taken_apart ... ok
+test grammar::tests::a_column_outside_the_field_mask_and_a_sealed_column_are_both_refused ... ok
+test grammar::tests::a_listed_function_and_a_literal_are_not_columns ... ok
+test grammar::tests::an_unqualified_column_two_tables_have_is_refused ... ok
+test grammar::tests::refused_shapes ... ok
+test manifest::tests::a_reserved_handler_name_is_refused_on_both_sides ... ok
+test apps::money::recurrence_tests::recurrence_accumulator_keeps_a_candidate_across_read_page_boundary ... ok
+test manifest::tests::an_action_that_declares_writes_is_refused_and_one_that_does_not_parses ... ok
+test manifest::tests::an_uncanonical_state_is_refused ... ok
+test manifest::tests::a_classification_that_contradicts_itself_is_refused ... ok
+test manifest::tests::one_name_in_both_lists_is_allowed_and_two_in_one_is_not ... ok
+test manifest::tests::states_is_a_closed_partition ... ok
+test manifest::tests::the_version_is_checked_before_the_shape ... ok
+test manifest::tests::an_action_missing_any_classification_field_is_refused ... ok
+test manifest::tests::an_alias_reaches_one_property_and_a_minted_id_is_text ... ok
+test money::tests::a_loss_keeps_its_sign_and_a_gain_gets_one_on_request ... ok
+test manifest::tests::writes_nothing_is_true_or_left_out ... ok
+test money::tests::a_stored_amount_is_typed_back_as_it_was ... ok
+test money::tests::parsing_keeps_the_exponent ... ok
+test money::tests::the_render_law_holds ... ok
+test money::tests::the_sum_law_holds ... ok
+test page::tests::a_zero_window_is_refused_by_both_ends ... ok
+test page::tests::next_is_absent_when_the_rows_ended ... ok
+test page::tests::the_probe_is_the_window_plus_one_and_the_ceiling_clamps ... ok
+test page::tests::the_probe_row_is_dropped_and_becomes_the_cursor_of_the_last_survivor ... ok
+test manifest::tests::the_chat_surface_is_derived_from_the_facts_and_never_declared ... ok
+test manifest::tests::two_direct_actions_may_not_be_the_same_verb_kind_and_qualifier ... ok
+test read::cursor::tests::nothing_else_is_a_cursor ... ok
+test read::cursor::tests::only_a_paged_list_has_a_cursor ... ok
+test read::cursor::tests::the_first_page_binds_a_value_past_every_key ... ok
+test read::door::tests::a_day_is_a_calendar_day ... ok
+test reads::tests::a_nullable_sort_key_not_declared_pinned_is_still_refused ... ok
+test read::cursor::tests::a_foreign_cursor_is_refused ... ok
+test reads::tests::a_page_boundary_between_two_parents_drops_and_repeats_nothing ... ok
+test read::cursor::tests::a_cursor_round_trips ... ok
+test reads::tests::a_parent_with_more_rows_than_a_page_holds_comes_back_whole_and_in_order ... ok
+test reads::tests::an_empty_in_list_is_not_a_read ... ok
+test reads::tests::a_pinned_nullable_key_pages_through_every_parents_rows ... ok
+test reads::tests::in_list_builds_placeholders_and_binds_together ... ok
+test reads::tests::the_stated_ceiling_is_the_reachable_one ... ok
+test reads::tests::an_order_on_the_id_alone_loses_the_rows_a_page_ended_inside ... ok
+test row::tests::a_null_sort_key_collapses_to_the_empty_string ... ok
+test row::tests::null_missing_and_value_are_three_answers ... ok
+test spelling::tests::a_failure_ends_the_pass_and_a_clean_pass_joins_the_words ... ok
+test spelling::tests::a_correction_is_the_whole_term_of_the_winning_prefix ... ok
+test spelling::tests::a_first_letter_change_counts_only_when_no_candidate_keeps_the_first_letter ... ok
+test spelling::tests::a_multibyte_term_is_cut_on_a_character ... ok
+test spelling::tests::a_fragment_inside_a_longer_word_is_the_last_resort_and_needs_four_letters ... ok
+test spelling::tests::a_prefix_one_edit_from_the_word_is_the_correction ... ok
+test spelling::tests::a_query_is_read_as_the_door_reads_it ... ok
+test spelling::tests::a_slip_anywhere_in_the_word_finds_the_word ... ok
+test spelling::tests::a_term_that_starts_with_the_word_is_a_hit_and_not_a_typo ... ok
+test spelling::tests::a_term_too_far_or_too_short_offers_nothing ... ok
+test spelling::tests::a_word_is_eligible_with_four_letters_and_nothing_else ... ok
+test spelling::tests::a_word_is_folded_before_the_vocabulary_is_asked ... ok
+test spelling::tests::a_word_is_known_when_some_word_starts_with_it ... ok
+test spelling::tests::a_word_that_is_not_eligible_is_never_asked_about ... ok
+test spelling::tests::a_word_that_is_not_eligible_has_no_candidates ... ok
+test spelling::tests::candidates_are_ranked_by_documents_then_shorter_then_sorted ... ok
+test spelling::tests::a_word_with_no_candidate_stays_as_typed ... ok
+test spelling::tests::one_edit_reads_a_slip_of_one_letter_and_a_swap ... ok
+test spelling::tests::only_the_unknown_word_changes ... ok
+test spelling::tests::punctuation_stuck_to_a_word_is_read_around_and_left_out ... ok
+test spelling::tests::the_best_prefix_has_the_most_documents_then_is_shorter_then_sorts_first ... ok
+test read::cursor::tests::a_cursor_of_the_wrong_arity_is_refused ... ok
+test spelling::tests::the_fold_is_the_ontology_s ... ok
+test spelling::tests::the_prefix_of_the_words_own_length_is_preferred ... ok
+test spelling::tests::within_one_has_no_limits_of_its_own ... ok
+test statement::tests::a_cursor_over_an_unprojected_column_is_refused ... ok
+test statement::tests::a_non_text_pk_is_refused_and_a_null_sort_key_is_not ... ok
+test statement::tests::an_integer_pk_is_a_cursor_only_for_an_order_that_says_so ... ok
+test statement::tests::bind_order_is_handler_then_door_then_keyset_then_probe ... ok
+test statement::tests::sort_equals_pk_emits_one_order_term ... ok
+test statement::tests::the_first_page_carries_no_predicate ... ok
+test statement::tests::the_keyset_is_a_row_value_comparison ... ok
+test testdoor::tests::a_held_bytes_page_carries_the_three_columns_with_no_store_behind_it ... ok
+test testdoor::tests::a_null_sort_key_at_a_boundary_is_refused_not_dropped ... ok
+test testdoor::tests::a_page_boundary_between_two_rows_sharing_a_sort_key_repeats_nothing ... ok
+test reads::tests::a_stated_window_is_walked_rather_than_clamped ... ok
+test testdoor::tests::a_projection_without_its_order_column_is_refused ... ok
+test testdoor::tests::a_walk_by_predicate_crosses_ties_over_a_nullable_sort_key ... ok
+test testdoor::tests::a_walk_past_its_bound_errors_rather_than_answering_short ... ok
+test testdoor::tests::read_by_id_answers_one_row_or_none ... ok
+test testdoor::tests::the_door_refuses_what_the_grammar_refuses ... ok
+test spelling::tests::the_cheap_filter_never_rejects_a_pair_within_one_edit ... ok
+test spelling::tests::the_fast_check_agrees_with_near_prefix ... ok
+
+test result: ok. 93 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.59s
+
+     Running unittests src/bin/export-census.rs (target/debug/deps/export_census-5c2e66804d6c758c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/census.rs (target/debug/deps/census-0abce3de33c63241)
+
+running 2 tests
+test the_committed_census_is_the_catalogue ... ok
+test no_action_is_screen_only ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/chat_catalogue.rs (target/debug/deps/chat_catalogue-0f9680c80b45d708)
+
+running 3 tests
+test every_chat_kind_is_an_entity_kind_or_a_table_with_no_kind_of_its_own ... ok
+test every_name_the_model_says_belongs_to_a_field_of_the_input ... ok
+test every_table_and_column_a_chat_kind_names_is_in_the_founded_vault ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/kind_action_registry.rs (target/debug/deps/kind_action_registry-51ea915b274264e7)
+
+running 15 tests
+test a_formatter_makes_finished_plain_text ... ok
+test an_action_with_no_inverse_and_no_class_or_that_is_screen_only_fails ... ok
+test every_action_has_an_inverse_or_asks_first_and_chat_reaches_it ... ok
+test every_command_with_an_action_verb_is_an_action_and_no_system_command_is ... ok
+test a_kind_missing_a_promise_fails_the_registry ... ok
+test pairs_take_each_other_back ... ok
+test tag_catalogue_matches_the_kinds_allowed_by_the_tagged_wildcard ... ok
+test every_actions_input_is_its_commands_own_input_type ... ok
+test the_confirm_classes_and_the_chat_surfaces_are_the_catalogues_rules ... ok
+test the_action_verbs_and_the_system_verbs_are_the_vaults_verbs ... ok
+test a_currency_change_is_its_own_inverse_and_an_earlier_version_rescales_too ... ok
+test what_chat_says_names_one_action_and_each_action_one_verb ... ok
+test every_kind_keeps_every_promise_its_row_declares ... ok
+test the_flag_tag_edge_and_task_pairs_run_both_ways ... ok
+test undo_pairs_put_a_whole_set_back_in_one_commit ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+     Running tests/read_registry.rs (target/debug/deps/read_registry-0200b3e1d7ce78a8)
+
+running 19 tests
+test a_cursorless_paged_list_fails_its_gate ... ok
+test a_full_scan_fails_its_gate ... ok
+test a_holder_counts_what_it_holds_and_its_trash_lists_only_what_was_trashed_alone ... ok
+test a_keyset_key_may_not_be_null ... ok
+test a_parameter_that_is_missing_extra_or_mistyped_is_refused ... ok
+test a_parameter_the_statement_does_not_take_is_a_declaration_error ... ok
+test a_read_only_selects_and_calls_only_the_allowed_functions ... ok
+test a_cursor_of_another_read_or_another_arity_is_refused_as_a_stale_list ... ok
+test a_table_outside_reads_and_across_fails_to_prepare ... ok
+test a_sealed_column_is_denied_to_every_module ... ok
+test a_temp_b_tree_outside_the_allowlist_fails_its_gate ... ok
+test a_reload_rereads_what_was_loaded_in_one_statement_and_caps_it ... ok
+test every_name_is_a_module_and_a_read_and_every_paged_list_has_a_cursor ... ok
+test every_declared_read_passes_its_authorizer_and_its_plan_gate ... ok
+test glance_reads_run_through_the_registered_reads ... ok
+test money_match_hands_and_candidates_are_paged_without_dropping_dense_matches ... ok
+test a_page_walk_serves_each_row_once_newest_first_and_the_extra_row_only_decides_next ... ok
+test every_index_has_a_reader ... ok
+test named_year3_shape_walks_bounded_hot_reads_for_every_domain_app ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.79s
+
+   Doc-tests centraid_domain
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

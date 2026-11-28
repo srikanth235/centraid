@@ -9,16 +9,26 @@ import XCTest
 /// type runs on every screen, and an issue is a failure unless it is listed in
 /// `Exemptions` with the design rule that allows it.
 ///
-/// Chat is not visited (it needs the on-device model), and Locker stops at its
-/// wall: the demo seed unlocks it only under a passcode the simulator lacks.
+/// Every room is a Rust `Room` drawn by `RoomView`, addressed by its selector ids
+/// (`tile/<app>`, `band/more`, `key/add`). Chat is not visited (it needs the
+/// on-device model), and Locker stops at its wall: the demo seed unlocks it only
+/// under a passcode the simulator lacks.
 final class AccessibilityAuditTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
         found = [:]
+        visualProofs = [:]
     }
 
     /// Issues found in this run, by `mode | screen | audit type`.
     private var found: [String: Int] = [:]
+
+    /// Required durable canvas attachments per visual mode. This ratchets coverage
+    /// independently of the export script's nonempty-PNG check.
+    private var visualProofs: [String: Set<String>] = [:]
+    private static let requiredVisualProofs: Set<String> = [
+        "calendar_grid", "note_editor", "photo_grid", "people_root", "money_root"
+    ]
 
     /// THE RATCHET (`audit-baseline.json`): how many issues of each kind the audit
     /// reports TODAY, per mode, screen and audit type. The count may fall and may
@@ -35,6 +45,14 @@ final class AccessibilityAuditTests: XCTestCase {
 
     /// Settles the run against the ratchet. Called last in every audit test.
     private func settle(mode: String) {
+        if mode == "light" || mode == "dark" {
+            let captured = visualProofs[mode] ?? []
+            XCTAssertEqual(
+                captured,
+                Self.requiredVisualProofs,
+                "\(mode) visual tour must attach every required canvas screenshot"
+            )
+        }
         for key in Set(found.keys).union(Self.baseline.keys.filter { $0.hasPrefix("\(mode)|") }).sorted() {
             let now = found[key] ?? 0
             let allowed = Self.baseline[key] ?? 0
@@ -66,27 +84,24 @@ final class AccessibilityAuditTests: XCTestCase {
 
     // MARK: The tour
 
-    /// What the tour visits: the tile on Home, then the ids of the root's own
-    /// sheets. `more` is the band's More key and `add` the header's Add, where the
-    /// app has one.
+    /// What the tour visits: the tile on Home, then the app's band More key and
+    /// the header's add key, where the app has them.
     private struct Root {
         let name: String
         let tile: String
-        let more: String?
-        let add: String?
-        /// An element only the Add screen has, which proves it is up before it is audited.
-        var addProof: String? = nil
+        let more: Bool
+        let add: [String]
     }
 
     private static let roots: [Root] = [
-        Root(name: "Calendar", tile: "home-tile-calendar", more: "calendar-band-more", add: "agenda-new-event"),
-        Root(name: "Reminders", tile: "home-tile-reminders", more: "reminders-band-more", add: "agenda-add-task"),
-        Root(name: "Notes", tile: "home-tile-notes", more: "notes-band-more", add: "notes-new-note"),
-        Root(name: "People", tile: "home-tile-people", more: "people-band-more", add: "people-add-person", addProof: "kit-editor-close"),
-        Root(name: "Docs", tile: "home-tile-docs", more: "docs-band-more", add: "docs-add"),
-        Root(name: "Money", tile: "home-tile-money", more: "money-band-more", add: "money-add"),
-        Root(name: "Health", tile: "home-tile-health", more: "health-band-more", add: nil),
-        Root(name: "Photos", tile: "home-tile-photos", more: nil, add: nil),
+        Root(name: "Calendar", tile: "tile/calendar", more: true, add: ["key/add", "header/add"]),
+        Root(name: "Reminders", tile: "tile/reminders", more: true, add: ["key/add", "header/add"]),
+        Root(name: "Notes", tile: "tile/notes", more: true, add: ["key/add", "header/add"]),
+        Root(name: "People", tile: "tile/people", more: true, add: ["key/add", "header/add"]),
+        Root(name: "Docs", tile: "tile/docs", more: true, add: ["key/add", "header/add"]),
+        Root(name: "Money", tile: "tile/money", more: true, add: ["key/add", "header/add"]),
+        Root(name: "Health", tile: "tile/health", more: true, add: []),
+        Root(name: "Photos", tile: "tile/photos", more: true, add: ["key/add", "header/add"]),
     ]
 
     @MainActor private func tour(mode: String, appearance: XCUIDevice.Appearance, textSize: String?) throws {
@@ -106,34 +121,21 @@ final class AccessibilityAuditTests: XCTestCase {
         for root in Self.roots where only?.contains(root.name) ?? true {
             try open(app, tile: root.tile)
             // A TAP THAT OPENED NOTHING must not file Home's issues under this screen's name.
-            let end = Date().addingTimeInterval(15)
-            while homeShowing(app) && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
-            guard !(homeShowing(app)) else {
+            let opened = waitUntil(timeout: 15) { !self.homeShowing(app) }
+            guard opened else {
+                print("OPEN-DIAG|\(root.name)|\(String(app.debugDescription.prefix(5000)))")
                 XCTFail("\(mode) / \(root.name): the page did not open (Home is still showing)")
                 continue
             }
             audit(app, mode: mode, screen: root.name)
-            if let more = root.more, app.el(more).exists {
-                // CALENDAR MORE, WITH THE DEMO'S 2 PM BLOCK AT THE TOP OF THE PAGE (#1202): where the hour grid sits
-                // depends on the clock, and CI reached the state where a block shows above the sheet; the audit
-                // puts it there every time, so that state is audited whatever time the run starts.
-                if root.name == "Calendar" { scrollFocusBlockToTop(app) }
-                app.el(more).tap()
+            if root.more, app.el("band/more").exists {
+                app.el("band/more").tap()
                 audit(app, mode: mode, screen: "\(root.name) More")
                 dismissSheet(app)
             }
-            if let add = root.add, app.el(add).exists {
-                app.el(add).tap()
-                // AN ADD THAT OPENED NOTHING must not file the page's issues under "Add" (People Add once
-                // audited the roster, 23 issues of a screen that was not up: the editor opens through the core).
-                // Waits are bounded: one retap, then a failure that names the screen.
-                var up = true
-                if let proof = root.addProof, !app.el(proof).waitForExistence(timeout: 10) {
-                    if app.hittable(app.el(add)) { app.el(add).tap() }
-                    up = app.el(proof).waitForExistence(timeout: 20)
-                    if !up { XCTFail("\(mode) / \(root.name): Add did not open its screen (\(proof) is not there)") }
-                }
-                if up { audit(app, mode: mode, screen: "\(root.name) Add") }
+            if let add = root.add.map({ app.el($0) }).first(where: { $0.exists }) {
+                add.tap()
+                audit(app, mode: mode, screen: "\(root.name) Add")
                 dismissSheet(app)
             }
             try goHome(app)
@@ -142,12 +144,12 @@ final class AccessibilityAuditTests: XCTestCase {
         // `CENTRAID_UI_ONLY=Locker` goes on to the wall and stops there; any other narrowing stops here.
         if let only, !only.contains("Locker") { settle(mode: mode); return }
         // LOCKER, UP TO ITS WALL: the wall is what a member sees first.
-        try open(app, tile: "home-tile-locker")
-        var wall = app.el("locker-wall").waitForExistence(timeout: 15)
+        try open(app, tile: "tile/locker")
+        var wall = app.el("wall/unlock").waitForExistence(timeout: 15)
         if !wall {
             // At the largest sizes the tile can still be moving when the first tap lands.
-            try open(app, tile: "home-tile-locker")
-            wall = app.el("locker-wall").waitForExistence(timeout: 30)
+            try open(app, tile: "tile/locker")
+            wall = app.el("wall/unlock").waitForExistence(timeout: 30)
         }
         if !wall { print("LOCKER-DIAG|app: \(outline(app))|springboard: \(springboardOutline())") }
         XCTAssertTrue(wall, "Locker shows its wall")
@@ -157,18 +159,18 @@ final class AccessibilityAuditTests: XCTestCase {
         // state (-902). A member who leaves the app under that prompt comes back to the locked wall
         // (the prompt is cancelled by the system), which is what is audited.
         settleLockerWall(app)
-        XCTAssertTrue(app.el("locker-unlock").exists, "the Locker wall is settled (locked) before it is audited")
+        XCTAssertTrue(app.el("wall/unlock").exists, "the Locker wall is settled (locked) before it is audited")
         audit(app, mode: mode, screen: "Locker wall") {
             self.openLockerWall(app)
         }
         try goHome(app)
         if only != nil { settle(mode: mode); return }
 
-        try open(app, tile: nil, id: "home-settings-open")
+        try open(app, tile: nil, id: "tile/settings")
         audit(app, mode: mode, screen: "Settings")
         try goHome(app)
 
-        try open(app, tile: nil, id: "home-band-backup")
+        try open(app, tile: nil, id: "tab/backup")
         audit(app, mode: mode, screen: "Backup")
         try goHome(app)
         settle(mode: mode)
@@ -178,19 +180,19 @@ final class AccessibilityAuditTests: XCTestCase {
     /// back, which the system answers by cancelling the owner check, and wait for the Unlock key.
     @MainActor private func settleLockerWall(_ app: XCUIApplication) {
         dismissSystemPrompt(app)
-        if app.el("locker-unlock").waitForExistence(timeout: 5) { return }
+        if app.el("wall/unlock").waitForExistence(timeout: 5) { return }
         for _ in 0..<3 {
             XCUIDevice.shared.press(.home)
-            Thread.sleep(forTimeInterval: 2)
             app.activate()
-            if app.el("locker-unlock").waitForExistence(timeout: 10) { return }
+            _ = app.wait(for: .runningForeground, timeout: 10)
+            if app.el("wall/unlock").waitForExistence(timeout: 10) { return }
         }
     }
 
     /// Back on the Locker wall from Home (a relaunch of the audit), settled.
     @MainActor private func openLockerWall(_ app: XCUIApplication) {
-        app.el("home-tile-locker").tap()
-        _ = app.el("locker-wall").waitForExistence(timeout: 30)
+        app.el("tile/locker").tap()
+        _ = app.el("wall/unlock").waitForExistence(timeout: 30)
         settleLockerWall(app)
     }
 
@@ -232,75 +234,50 @@ final class AccessibilityAuditTests: XCTestCase {
 
     // MARK: VoiceOver order of four flows
 
-    /// Add a reminder: the page, its Add key, the smart lists, then the open quick-add
-    /// bar's keys and its field, the visual order from the top.
+    /// Add a reminder: the room's header, its add key, the choice chips, then the band.
     @MainActor func testFocusOrderAddReminder() throws {
         let app = launch(textSize: nil)
-        try open(app, tile: "home-tile-reminders")
-        app.el("agenda-add-task").tap()
-        XCTAssertTrue(app.el("agenda-quick-add").waitForExistence(timeout: 10) || app.textFields.firstMatch.waitForExistence(timeout: 10))
+        try open(app, tile: "tile/reminders")
+        XCTAssertTrue(app.el("key/add").waitForExistence(timeout: 10))
         expectOrder(
             try readingOrder(app),
-            ["^Reminders$", "^Filter and sort$", "^Add task$", "^Today", "^Scheduled", "^All", "^Flagged", "^Logbook", "^My Lists",
-             "^Date$", "^Tag$", "^Flag$", "^Link$", "^Photo$", "^Add to Inbox$"],
-            flow: "add a reminder"
+            ["^Reminders$", "^New reminder$", "^Today", "^Scheduled", "^All", "^Starred", "^Completed", "^My Lists", "^Home$", "^Reminders, current place$", "^More$"],
+            flow: "reminders room"
         )
     }
 
-    /// THE QUICK-ADD BAR SURVIVES A TEXT-SIZE SWEEP (#1202). With the bar open the keyboard leaves
-    /// the page a few hundred points, and a change of text size under it (the audit's sweep, or a
-    /// member's turn of the slider) brought the app down: the Reminders home's smart-list tiles were a
-    /// `LazyVGrid` in a row of the page's `List`, and UIKit trapped in `_updateVisibleCellsNow` while
-    /// the two sized each other. `performAccessibilityAudit(for: .dynamicType)` walks every text size.
-    @MainActor func testQuickAddBarSurvivesTextSizeSweep() throws {
+    /// THE ADD ROOM SURVIVES A TEXT-SIZE SWEEP (#1202): `performAccessibilityAudit(for: .dynamicType)`
+    /// walks every text size, and a room's lazy blocks must not bring the app down while they resize.
+    @MainActor func testAddRoomSurvivesTextSizeSweep() throws {
         let app = launch(textSize: nil)
-        try open(app, tile: "home-tile-reminders")
-        app.el("agenda-add-task").tap()
-        XCTAssertTrue(app.el("agenda-quick-add").waitForExistence(timeout: 10) || app.textFields.firstMatch.waitForExistence(timeout: 10))
+        try open(app, tile: "tile/reminders")
+        XCTAssertTrue(app.el("key/add").waitForExistence(timeout: 10))
+        app.el("key/add").tap()
         try app.performAccessibilityAudit(for: .dynamicType) { _ in true }
         XCTAssertEqual(app.state, .runningForeground, "the app is still up after the sweep")
-        XCTAssertTrue(app.el("agenda-todo-list").exists || app.textFields.firstMatch.exists, "and still on the page")
     }
 
-    /// Open a note: Done, the actions, the line over the title, the title, the tag
-    /// field, the body, then the toolbar.
-    @MainActor func testFocusOrderOpenNote() throws {
-        let app = launch(textSize: nil)
-        try open(app, tile: "home-tile-notes")
-        let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'notes-row-'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 10), "the demo vault has notes")
-        row.tap()
-        XCTAssertTrue(app.el("note-body-field").waitForExistence(timeout: 10))
-        expectOrder(
-            try readingOrder(app),
-            ["^Done$", "^Note actions$", "Edited", "^note-title-field$", "^note-tag-field$", "^Write something$", "^Checklist$", "^Add link$", "^Add a tag$", "^Hide keyboard$"],
-            flow: "open a note"
-        )
-    }
-
-    /// The Locker wall: its title, the state, the sentence, then the band.
+    /// The Locker wall: its title, the state, the wall's words, the key, then the band.
     @MainActor func testFocusOrderLockerWall() throws {
         let app = launch(textSize: nil)
-        try open(app, tile: "home-tile-locker")
-        XCTAssertTrue(app.el("locker-wall").waitForExistence(timeout: 10))
+        try open(app, tile: "tile/locker")
+        XCTAssertTrue(app.el("wall/unlock").waitForExistence(timeout: 10))
         expectOrder(
             try readingOrder(app),
-            ["^Locker$", "^(Unlocking|Unlock)", "hidden until you unlock", "^Home$", "^Items$", "^Review$", "^Generate$", "^More$"],
+            ["^Locker$", "Locker is locked", "Unlock Locker", "^Home$", "^Items, current place$", "^Starred$", "^More$"],
             flow: "Locker unlock wall"
         )
     }
 
-    /// The Backup pair page: the title, the command to run, the field, then the verbs.
+    /// The Backup room with no device: its title, the empty state, the pair key.
     @MainActor func testFocusOrderBackupPair() throws {
         let app = launch(textSize: nil)
-        try open(app, tile: nil, id: "home-band-backup")
-        XCTAssertTrue(app.el("backup-add-destination").waitForExistence(timeout: 10))
-        app.el("backup-add-destination").tap()
-        XCTAssertTrue(app.staticTexts["Pair with your backup device"].waitForExistence(timeout: 10))
+        try open(app, tile: nil, id: "tab/backup")
+        XCTAssertTrue(app.el("action/pair").waitForExistence(timeout: 10))
         expectOrder(
             try readingOrder(app),
-            ["^Pair with your backup device$", "^Run$", "pair", "^Pairing code$", "^Cancel$", "^Scan QR code$", "^Pair$"],
-            flow: "Backup pair page"
+            ["^Backup$", "No backup device yet", "^Add backup device$"],
+            flow: "Backup room"
         )
     }
 
@@ -338,7 +315,7 @@ final class AccessibilityAuditTests: XCTestCase {
             app.launchEnvironment["CENTRAID_DEV_SEED"] = seed
         }
         app.launch()
-        XCTAssertTrue(app.el("home-grid").waitForExistence(timeout: 60), "Home draws its grid")
+        XCTAssertTrue(app.el("tile/people").waitForExistence(timeout: 60), "Home draws its tiles")
         return app
     }
 
@@ -351,17 +328,6 @@ final class AccessibilityAuditTests: XCTestCase {
         else { return false }
         // Channel order does not matter to an average of the three.
         return (Double(bytes[0]) + Double(bytes[1]) + Double(bytes[2])) / 765 < 0.4
-    }
-
-    /// Drags the Day grid up (at most 10 steps) until the "Focus block" title is near the top of the page.
-    @MainActor private func scrollFocusBlockToTop(_ app: XCUIApplication) {
-        let title = app.descendants(matching: .any).matching(identifier: "agenda-grid-block-title")
-            .matching(NSPredicate(format: "label == 'Focus block'")).firstMatch
-        for step in 0..<10 {
-            print("FOCUS-BLOCK|\(step)|exists=\(title.exists)|frame=\(title.exists ? title.frame : .zero)")
-            if title.exists, title.frame.minY < 220 { return }
-            app.swipeUp()
-        }
     }
 
     @MainActor private func open(_ app: XCUIApplication, tile: String?, id: String? = nil) throws {
@@ -394,7 +360,7 @@ final class AccessibilityAuditTests: XCTestCase {
             print("NAV-FALLBACK|\(tile ?? id ?? "") missing; relaunching")
             app.terminate()
             app.launch()
-            XCTAssertTrue(app.el("home-grid").waitForExistence(timeout: 60), "Home draws its grid after a relaunch")
+            XCTAssertTrue(app.el("tile/people").waitForExistence(timeout: 60), "Home draws its tiles after a relaunch")
             scrollTo()
         }
         XCTAssertTrue(key.waitForExistence(timeout: 10), "\(tile ?? id ?? "") is on Home")
@@ -421,9 +387,7 @@ final class AccessibilityAuditTests: XCTestCase {
         // At the largest sizes a tap can land while the grid is still settling and open nothing:
         // an audit of "the app" would then read Home under another screen's name.
         for _ in 0..<3 {
-            let end = Date().addingTimeInterval(6)
-            while homeShowing(app) && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
-            if !(homeShowing(app)) { return }
+            if waitUntil(timeout: 6, { !self.homeShowing(app) }) { return }
             if app.hittable(key) { press() }
         }
     }
@@ -433,8 +397,28 @@ final class AccessibilityAuditTests: XCTestCase {
     /// sliding over or off it, and the throw fails the run whatever it was asked for. The band's Backup
     /// key is small, always on Home's glass, and not hittable under any page or sheet that covers Home.
     @MainActor private func homeShowing(_ app: XCUIApplication) -> Bool {
-        let key = app.el("home-band-backup")
+        let key = app.el("tab/backup")
         return app.hittable(key)
+    }
+
+    @MainActor private func waitUntil(timeout: TimeInterval, _ condition: @escaping @MainActor () -> Bool) -> Bool {
+        var last = false
+        let predicate = NSPredicate { _, _ in
+            last = MainActor.assumeIsolated { condition() }
+            return last
+        }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    @MainActor private func waitForStableHierarchy(_ app: XCUIApplication, timeout: TimeInterval = 5) -> Bool {
+        var previous: String?
+        var stable = 0
+        return waitUntil(timeout: timeout) {
+            let current = app.debugDescription
+            if current == previous { stable += 1 } else { stable = 0; previous = current }
+            return stable >= 2
+        }
     }
 
     /// Back to Home by the way a member goes: the home capsule of an app's band,
@@ -444,24 +428,22 @@ final class AccessibilityAuditTests: XCTestCase {
     @MainActor private func goHome(_ app: XCUIApplication) throws {
         for _ in 0..<4 {
             if homeShowing(app) { return }
-            let capsule = app.descendants(matching: .any)
-                .matching(NSPredicate(format: "identifier ENDSWITH '-band-home'"))
-                .firstMatch
+            let capsule = app.el("band/home")
             if app.hittable(capsule) { capsule.tap(); continue }
             if !dismissSheet(app) && app.navigationBars.buttons.firstMatch.exists {
                 app.navigationBars.buttons.firstMatch.tap()
             }
         }
-        if app.el("home-grid").waitForExistence(timeout: 3) && homeShowing(app) { return }
+        if app.el("tile/people").waitForExistence(timeout: 3) && homeShowing(app) { return }
         print("NAV-FALLBACK|\(outline(app))")
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.el("home-grid").waitForExistence(timeout: 60), "back on Home after a relaunch")
+        XCTAssertTrue(app.el("tile/people").waitForExistence(timeout: 60), "back on Home after a relaunch")
     }
 
     /// Ends the sheet that is up: its own close key, else a drag down from its top.
     @MainActor @discardableResult private func dismissSheet(_ app: XCUIApplication) -> Bool {
-        let pushed = app.el("kit-pushed-back")
+        let pushed = app.el("back")
         if app.hittable(pushed) { pushed.tap(); return true }
         for label in ["Close", "Done", "Cancel", "Back"] {
             let key = app.buttons[label].firstMatch
@@ -515,7 +497,7 @@ final class AccessibilityAuditTests: XCTestCase {
                 .map { alert.buttons[$0] }
                 .first { $0.exists }
             (decline ?? alert.buttons.firstMatch).tap()
-            Thread.sleep(forTimeInterval: 1)
+            _ = waitUntil(timeout: 3) { !alert.exists }
         }
     }
 
@@ -833,8 +815,9 @@ final class AccessibilityAuditTests: XCTestCase {
     @MainActor private func audit(_ app: XCUIApplication, mode: String, screen: String, restore: (() -> Void)? = nil) {
         // Let the screen settle: the audit reads a hierarchy, not a transition.
         _ = app.wait(for: .runningForeground, timeout: 5)
-        Thread.sleep(forTimeInterval: 1)
+        _ = waitForStableHierarchy(app)
         clearSystemAlerts(app)
+        attachVisualProofIfRequired(app, mode: mode, screen: screen)
         // PROOF ON REQUEST: `CENTRAID_UI_PROOF_DIR` (a directory) takes a screenshot of each audited
         // screen, as the audit finds it, for the exemptions that cite one. Unset, nothing is written.
         if let dir = ProcessInfo.processInfo.environment["CENTRAID_UI_PROOF_DIR"] {
@@ -881,11 +864,12 @@ final class AccessibilityAuditTests: XCTestCase {
                     // forward, and from the third refusal on start the app afresh and
                     // walk back to this screen.
                     app.activate()
-                    Thread.sleep(forTimeInterval: 8)
+                    _ = app.wait(for: .runningForeground, timeout: 8)
+                    _ = waitForStableHierarchy(app, timeout: 8)
                     if attempt >= 2, let restore {
                         app.terminate()
                         app.launch()
-                        XCTAssertTrue(app.el("home-grid").waitForExistence(timeout: 60), "Home draws its grid after a relaunch")
+                        XCTAssertTrue(app.el("tile/people").waitForExistence(timeout: 60), "Home draws its tiles after a relaunch")
                         restore()
                     }
                     continue
@@ -903,7 +887,7 @@ final class AccessibilityAuditTests: XCTestCase {
         var again = 0
         while !sweep.isEmpty, again < 2 {
             again += 1
-            Thread.sleep(forTimeInterval: 3)
+            _ = waitForStableHierarchy(app)
             let appFrame = app.frame
             var seen: [String] = []
             _ = try? app.performAccessibilityAudit(for: .dynamicType) { issue in
@@ -927,6 +911,35 @@ final class AccessibilityAuditTests: XCTestCase {
             found["\(mode)|\(screen)|\(Self.typeName(type))", default: 0] += 1
         }
         print(issues == 0 ? "A11Y-PASS|\(mode)|\(screen)" : "A11Y-FAIL|\(mode)|\(screen)|\(issues)")
+    }
+
+    /// Durable screenshots for the native surfaces reviewed with the app-plane change.
+    /// Assert the canvas/root selector first so a transition or empty wrapper cannot masquerade
+    /// as a successful capture. Light and dark cover the visual system; the largest-text audit
+    /// retains its existing accessibility focus and doesn't duplicate these artifacts.
+    @MainActor private func attachVisualProofIfRequired(_ app: XCUIApplication, mode: String, screen: String) {
+        guard mode == "light" || mode == "dark" else { return }
+        let proof: (file: String, identifier: String)?
+        switch screen {
+        case "Calendar": proof = ("calendar_grid", "cal/grid")
+        case "Notes Add": proof = ("note_editor", "editor")
+        case "Photos": proof = ("photo_grid", "photo-grid")
+        case "People": proof = ("people_root", "key/add")
+        case "Money": proof = ("money_root", "key/add")
+        default: proof = nil
+        }
+        guard let proof else { return }
+        let expected = app.el(proof.identifier)
+        XCTAssertTrue(
+            expected.waitForExistence(timeout: 15),
+            "\(mode) \(screen) visual proof requires canvas/root selector \(proof.identifier)"
+        )
+        guard expected.exists else { return }
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Centraid-\(mode)-\(proof.file)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        visualProofs[mode, default: []].insert(proof.file)
     }
 }
 

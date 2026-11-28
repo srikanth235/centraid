@@ -1,0 +1,16 @@
+room pushed_page key="photos/place/01900000-0000-7000-8000-000000003050"
+  header title="Baker Beach"
+    back "Places" #back
+    key menu sym="MoreHoriz" "More" #header/more
+      menu #header/menu
+        section
+          item "Rename" #header/menu/rename
+          item "Merge" #header/menu/merge
+  ready
+    section #section/details "Details"
+      facts
+        fact "Address" "Gibson Rd, San Francisco" kind=address
+    section #section/photos "Photos"
+      row #photo/01900000-0000-7000-8000-000000003010 "Golden Gate Fog" meta="2026-11-26" mark=thumb:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    section #section/events "Events"
+      row #event/01900000-0000-7000-8000-000000003070 "Sunset Picnic" meta="2026-11-26" mark=glyph:Calendar

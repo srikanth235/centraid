@@ -654,14 +654,7 @@ impl Session {
             tz: tz.to_owned(),
         };
         let world = World::load_in(&*door, Some(&standing))?;
-        let me_name = if me.is_empty() {
-            world
-                .row(&world.me_key())
-                .map(|row| row.name.clone())
-                .unwrap_or_default()
-        } else {
-            me.to_owned()
-        };
+        let me_name = me.to_owned();
         let park = crate::native::park::ParkState {
             world: (flags.writes != crate::native::park::Writes::Run).then(|| world.clone()),
             ..Default::default()
@@ -776,8 +769,8 @@ impl Session {
             _ => Kind::ALL.to_vec(),
         };
         let mut found: Vec<String> = Vec::new();
-        for (entity, kind) in crate::native::search::FTS {
-            if !kinds.contains(kind) || !self.world.older.contains(kind) {
+        for (entity, kind) in crate::native::search::fts() {
+            if !kinds.contains(&kind) || !self.world.older.contains(&kind) {
                 continue;
             }
             for text in &words {
@@ -785,7 +778,7 @@ impl Session {
                     continue;
                 };
                 for target in targets {
-                    if self.world.row(&(*kind, target.id.clone())).is_none()
+                    if self.world.row(&(kind, target.id.clone())).is_none()
                         && !found.contains(&target.id)
                     {
                         found.push(target.id);
@@ -841,14 +834,6 @@ impl Session {
             .copied()
             .filter(|kind| self.world.older.contains(kind))
         {
-            // A repeating event is expanded only for the days the world reads occurrences for:
-            // outside them it reads as stored, once. A read that reaches past them is not exact.
-            if kind == Kind::Event {
-                if !self.event_window_holds(selector) {
-                    inexact.insert(kind);
-                }
-                continue;
-            }
             let Some(plan) = reach_plan(kind, selector) else {
                 inexact.insert(kind);
                 continue;
@@ -890,24 +875,6 @@ impl Session {
         inexact
     }
 
-    /// Whether the days an event read asks for lie inside the window the world reads occurrences
-    /// for, where every repeating series is already expanded.
-    fn event_window_holds(&self, selector: &Selector) -> bool {
-        use crate::native::world::{EVENT_DAYS_AHEAD, EVENT_DAYS_BACK};
-        let Some(when) = selector.when else {
-            return false;
-        };
-        let span = |days: i64| jiff::Span::new().days(days);
-        let (Ok(from), Ok(to)) = (
-            self.now.date().checked_sub(span(EVENT_DAYS_BACK)),
-            self.now.date().checked_add(span(EVENT_DAYS_AHEAD)),
-        ) else {
-            return false;
-        };
-        let (start, end) = when.ends();
-        !when.is_open() && from <= start.date() && end.date() <= to
-    }
-
     /// How many rows of each of `selector`'s kinds the store holds, when the selector asks for
     /// nothing but the kind and whether it is trashed; `None` when the store cannot say.
     fn store_count(&self, selector: &Selector) -> Option<u64> {
@@ -921,21 +888,12 @@ impl Session {
         }
         let mut total = 0_u64;
         for kind in &selector.kinds {
-            if *kind == Kind::Event {
-                return None;
-            }
             let vault_kind = crate::native::world::vault_kind_of(*kind)?;
             // THE CONDITIONS THE STORE CAN COUNT: a fixed list on a real column of the kind's own
             // row (`status = open`), each one clause of one statement. Any other condition is not
             // counted by the store, and the count is refused.
             let (own, all_pushed) = pushable_enums(*kind, &selector.conds);
             if !all_pushed {
-                return None;
-            }
-            // A photograph is not a video or a scan, nor a person an organisation: the `form`
-            // that says so has no index, so the store counts neither without a scan, and the
-            // count is refused rather than read off the window.
-            if matches!(kind, Kind::Photo | Kind::Person) {
                 return None;
             }
             if !own.is_empty() && kind.spec().table == "container" {
@@ -970,7 +928,7 @@ impl Session {
             .kinds
             .iter()
             .copied()
-            .filter(|kind| self.inexact.contains(kind) && *kind != Kind::Event)
+            .filter(|kind| self.inexact.contains(kind))
             .collect();
         let mut notes: Vec<String> = Vec::new();
         if !kinds.is_empty() {
@@ -979,9 +937,6 @@ impl Session {
                 crate::native::world::WINDOW_ROWS,
                 render::plural_list(&kinds)
             ));
-        }
-        if self.inexact.contains(&Kind::Event) && selector.kinds.contains(&Kind::Event) {
-            notes.push(events_window_note());
         }
         (!notes.is_empty()).then(|| notes.join("; "))
     }
@@ -1344,20 +1299,6 @@ impl Session {
         Ok(selector)
     }
 
-    /// A date expression as the model wrote it, read with the lexical leniency of
-    /// `dates::lenient` (a note per form read) and then strictly (`dates::parse`; a refusal quotes
-    /// the example of the key that failed).
-    pub(crate) fn date_expr(&mut self, value: &Value) -> Result<dates::Expr, String> {
-        let (fixed, notes) = if self.flags.normalize {
-            dates::lenient(value)
-        } else {
-            (value.clone(), Vec::new())
-        };
-        let expr = dates::parse(&fixed).map_err(|why| dates::rejection(&why))?;
-        self.pending_notes.extend(notes);
-        Ok(expr)
-    }
-
     /// The currencies the vault holds: its base currency and the currency of every row that holds an amount (what a
     /// currency symbol in an amount is settled against, `whr::settle_currencies`).
     pub(crate) fn vault_currencies(&self) -> Vec<String> {
@@ -1443,12 +1384,7 @@ impl Session {
     /// tasks) are exact, and the small hours are no part of the day here. The widened selector,
     /// the rows it reaches (not empty) and `note: read 19:00 as the evening`.
     fn part_of_day_reading(&self, selector: &Selector) -> Option<(Selector, Vec<Key>, String)> {
-        if !self.flags.normalize
-            || selector
-                .kinds
-                .iter()
-                .any(|kind| matches!(kind, Kind::Event | Kind::Task))
-        {
+        if !self.flags.normalize {
             return None;
         }
         let when = selector.when?;
@@ -1848,15 +1784,7 @@ impl Session {
                     .map(Row::key)
                     .take(ROW_CAP)
                     .collect();
-                // (a task's notes are its description only for the generic reading: a call that
-                // names a note row has no use of the sentence, nt15 R1a)
-                let fix = self.link_call(*kind, selector).unwrap_or_else(|| {
-                    if matches!(*kind, Kind::Task | Kind::Event) && target.0 == Kind::Note {
-                        String::new()
-                    } else {
-                        whr::link_fix(*kind, target.0)
-                    }
-                });
+                let fix = whr::link_fix(*kind, target.0);
                 let mut text = format!(
                     "{} are not linked to {}.{fix}{}",
                     kind.plural(),
@@ -3106,37 +3034,6 @@ impl Session {
             let short: String = body.chars().take(600).collect();
             lines.push((Vec::new(), format!("body: \"{short}\"")));
         }
-        if row.kind == Kind::Event
-            && let (Some(start), Some(Val::Num(minutes))) = (row.date, row.field("duration"))
-            && let Ok(end) = jiff::Span::new()
-                .try_minutes(*minutes)
-                .and_then(|span| start.at().checked_add(span))
-        {
-            lines.push((
-                Vec::new(),
-                format!(
-                    "ends {} {}",
-                    dates::day_label(end.date()),
-                    dates::clock(end.time())
-                ),
-            ));
-        }
-        if row.kind == Kind::LockerItem {
-            let sealed: Vec<&str> = meta::REVEAL_FIELDS
-                .iter()
-                .filter(|(_, column)| row.extra.contains_key(column))
-                .map(|(name, _)| *name)
-                .collect();
-            if !sealed.is_empty() {
-                lines.push((
-                    Vec::new(),
-                    format!(
-                        "sealed: {} (reveal offers it to the member)",
-                        sealed.join(", ")
-                    ),
-                ));
-            }
-        }
         let parent = self.world.parent_of(&key);
         if let Some(parent) = &parent {
             let n = self.number(parent);
@@ -3144,9 +3041,6 @@ impl Session {
                 vec![n],
                 format!("parent: {}", render::named(&self.world, n, parent)),
             ));
-        }
-        if key == self.world.me_key() {
-            lines.push((Vec::new(), "this is you (me)".to_owned()));
         }
         lines.push((
             Vec::new(),
@@ -3613,11 +3507,6 @@ impl Session {
                     self.store_count(selector),
                 ) {
                     ("count", None, Some(total)) => Some(total),
-                    _ if selector.kinds.contains(&Kind::Event)
-                        && self.inexact.contains(&Kind::Event) =>
-                    {
-                        return Err(events_window_error(&op));
-                    }
                     _ => {
                         return Err(format!(
                             "error: there are more {} than can be {} exactly; narrow it with a date.",
@@ -3636,7 +3525,9 @@ impl Session {
                 "error: {op} needs exactly one kind; fields are per kind."
             ));
         }
-        let kind = kinds.first().copied().unwrap_or(Kind::Task);
+        let Some(kind) = kinds.first().copied() else {
+            return Err(format!("error: {op} needs a kind."));
+        };
         let rows: Vec<Row> = keys
             .iter()
             .filter_map(|key| self.world.row(key).cloned())
@@ -3933,13 +3824,14 @@ fn reach_plan(kind: Kind, selector: &Selector) -> Option<ReachPlan> {
     let hydrate = crate::native::world::HYDRATE_ROWS;
     let vault_kind = crate::native::world::vault_kind_of(kind)?;
     // the date column each kind's `date` is read from, and where it lives
-    let (table, sort, kind_scoped): (&'static str, &'static str, bool) = match kind {
-        Kind::Task => ("task", "due", false),
-        Kind::Photo => ("photo", "taken_at", false),
-        Kind::Note | Kind::Document => ("entity", "created_at", true),
-        _ => ("entity", "created_at", true),
+    let own = kind.spec();
+    let (table, sort, kind_scoped, dated): (&'static str, &'static str, bool, bool) = match own.date
+    {
+        Some(date) if date.source.table == own.table && own.table != "entity" => {
+            (own.table, date.source.column, false, true)
+        }
+        _ => ("entity", "created_at", true, false),
     };
-    let dated = matches!(kind, Kind::Task | Kind::Photo | Kind::Note | Kind::Document);
     let mut clauses: Vec<String> = Vec::new();
     let mut binds: Vec<String> = Vec::new();
     if kind_scoped {
@@ -3997,7 +3889,7 @@ fn reach_plan(kind: Kind, selector: &Selector) -> Option<ReachPlan> {
         }
         _ => None,
     };
-    if matches!(kind, Kind::Task | Kind::Photo) && ordered.is_some() {
+    if !kind_scoped && ordered.is_some() {
         clauses.push(format!("{sort} IS NOT NULL"));
     }
     // a nullable date cannot carry a keyset past its first page: it orders a read only when the
@@ -4050,26 +3942,6 @@ fn pushable_enums(kind: Kind, conds: &[Cond]) -> (Vec<OwnTest>, bool) {
         }
     }
     (tests, all)
-}
-
-/// The sentence a list over events carries when the days it reaches are not all inside the window
-/// the world reads occurrences for.
-fn events_window_note() -> String {
-    format!(
-        "note: events are read from {} days back to {} days ahead; a day outside that is not read",
-        crate::native::world::EVENT_DAYS_BACK,
-        crate::native::world::EVENT_DAYS_AHEAD
-    )
-}
-
-/// The refusal of a number over events the window does not hold.
-fn events_window_error(op: &str) -> String {
-    format!(
-        "error: events can only be {} for the days from {} back to {} ahead; ask about a day in that range.",
-        if op == "count" { "counted" } else { "added up" },
-        crate::native::world::EVENT_DAYS_BACK,
-        crate::native::world::EVENT_DAYS_AHEAD
-    )
 }
 
 #[cfg(test)]

@@ -1,182 +1,99 @@
-//! Docs' sentences (`docs.*` screens): the words the drive, a document, its
-//! versions, its editor and the add flow are made of. The trash's and the
-//! autosave line's are the kit's (`strings::shared`).
-
 catalog! {
-    plain player_pause = ("Pause", "Pause");
-    plain player_play = ("Play", "Play");
-    plain player_position = ("Position", "Position");
-    plain player_position_value = ("{position} of {duration}", "{position} of {duration}");
-    plain action_edit = ("Edit", "Edit");
-    plain action_labels = ("Labels", "Labels");
-    plain action_move = ("Move", "Move");
-    plain about_added = ("Person added", "Person added");
-    plain about_removed = ("Person removed", "Person removed");
-    plain link_added = ("Linked", "Linked");
-    plain link_removed = ("Link removed", "Link removed");
-    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
-    plain links_unread = (
-        "Couldn’t read what this document is linked to.",
-        "Couldn’t read what this document is linked to."
-    );
-    plain folder_created_said = ("Folder created", "Folder created");
-    plain label_added_said = ("Label added", "Label added");
-    plain label_removed_said = ("Label removed", "Label removed");
-    plain moved_said = ("Document moved", "Document moved");
-    plain starred_said = ("Document starred", "Document starred");
-    plain unstarred_said = ("Star removed", "Star removed");
-    plain action_rename = ("Rename", "Rename");
-    plain action_restore = ("Restore", "Restore");
-    plain action_share = ("Share", "Share");
-    plain action_star = ("Star", "Star");
-    plain share_missing = ("This document isn't on this phone yet.", "This document isn't on this phone yet.");
-    plain share_title = ("Share a copy", "Share a copy");
-    plain subtitle_root = ("Docs", "Docs");
-    plain subtitle_in = ("{root} › {folder}", "{root} › {folder}");
-    plain action_trash = ("Move to trash", "Move to trash");
-    plain action_unstar = ("Unstar", "Unstar");
-    plain add = ("Add", "Add");
-    plain add_folder = ("New folder", "New folder");
-    plain add_follow = ("Follow a folder", "Follow a folder");
-    plain add_scan = ("Scan a document", "Scan a document");
-    plain add_text = ("New text document", "New text document");
-    plain add_title = ("Add to Docs", "Add to Docs");
-    plain add_upload = ("Upload a file", "Upload a file");
-    plain app_title = ("Docs", "Docs");
-    plain band_browse = ("Browse", "Browse");
-    plain band_recents = ("Recents", "Recents");
-    plain band_home = ("Home", "Home");
-    plain band_more = ("More", "More");
-    plain band_starred = ("Starred", "Starred");
-    plain changed = ("Changed", "Changed");
-    plain clear_filters = ("Clear filters", "Clear filters");
-    plain close = ("Close", "Close");
-    plain create = ("Create", "Create");
-    plain deleted = ("Deleted", "Deleted");
-    plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
-    plain denied_title = ("Docs cannot read your documents", "Docs cannot read your documents");
-    plain details_heading = ("Details", "Details");
-    plain done = ("Done", "Done");
-    plain edited = ("Edited", "Edited");
-    plain editor_body_placeholder = ("Start writing", "Start writing");
-    plain editor_title_placeholder = ("Title", "Title");
-    plain empty_all_action = ("Add a document", "Add a document");
-    plain empty_body = ("This document is empty.", "This document is empty.");
-    plain empty_filtered = ("Nothing matches these filters.", "Nothing matches these filters.");
-    plain empty_folder = ("This folder is empty.", "This folder is empty.");
-    plain empty_folders = ("No folders yet.", "No folders yet.");
-    plain empty_folders_action = ("New folder", "New folder");
-    plain empty_search = ("Nothing matches that.", "Nothing matches that.");
-    plain empty_search_body = ("Try fewer words.", "Try fewer words.");
-    plain empty_starred = ("Nothing starred yet.", "Nothing starred yet.");
-    plain empty_starred_body = ("Star a document to keep it here.", "Star a document to keep it here.");
-    plain export_all = ("All documents", "All documents");
-    plain export_lede = (
-        "Your original files in one .zip archive, in your folders.",
-        "Your original files in one .zip archive, in your folders."
-    );
-    plain export_nothing = (
-        "There are no documents on this phone to export.",
-        "There are no documents on this phone to export."
-    );
-    plain export_title = ("Export documents", "Export documents");
-    plain facts_only = ("Docs can't show this file, so here are its details.", "Docs can't show this file, so here are its details.");
-    plain fact_added = ("Added", "Added");
-    plain fact_changed = ("Changed", "Changed");
-    plain fact_folder = ("Folder", "Folder");
-    plain fact_kind = ("Kind", "Kind");
-    plain fact_labels = ("Labels", "Labels");
-    plain fact_format = ("Format", "Format");
-    plain format_text = ("Text document", "Text document");
-    plain fact_size = ("Size", "Size");
-    plain fact_versions = ("Versions", "Versions");
-    plain filter_label = ("Label", "Label");
-    plain filter_modified = ("Modified", "Modified");
-    plain filter_type = ("Type", "Type");
-    plain first_open = ("Documents you own, kept in your vault.", "Documents you own, kept in your vault.");
-    plain folder_empty_count = ("Empty", "Empty");
-    plain folder_placeholder = ("Folder name", "Folder name");
-    plain followed_footer = ("Files added, changed or removed in these folders reach Docs. Stopping keeps every document.", "Files added, changed or removed in these folders reach Docs. Stopping keeps every document.");
-    plain followed_kept = ("documents", "documents");
+    plain title = ("Docs", "Docs");
+    plain folders_title = ("Folders", "Folders");
     plain followed_title = ("Followed folders", "Followed folders");
-    plain follow_failed = ("That folder couldn't be followed. Try again.", "That folder couldn't be followed. Try again.");
-    plain follow_no_vault = ("Make a vault first, then follow a folder.", "Make a vault first, then follow a folder.");
-    plain gone = ("This document is no longer here.", "This document is no longer here.");
-    plain ingest_added = ("{title} added", "{title} added");
-    plain ingest_adding = ("Adding {title}", "Adding {title}");
-    plain ingest_dismiss = ("Dismiss", "Dismiss");
-    plain ingest_no_file = ("Centraid could not read that file.", "Centraid could not read that file.");
-    plain ingest_no_picker = ("This phone cannot open a file picker here.", "This phone cannot open a file picker here.");
-    plain ingest_no_vault = ("No vault is open on this phone.", "No vault is open on this phone.");
-    plain ingest_scan_title = ("Scanned document", "Scanned document");
-    plain ingest_text_title = ("Untitled document", "Untitled document");
-    plain in_trash_lapsed = ("In trash · emptied when Centraid next opens", "In trash · emptied when Centraid next opens");
-    plain in_trash_until = ("In trash · restorable until", "In trash · restorable until");
-    plain labels_title = ("Labels", "Labels");
-    plain label_add = ("Add", "Add");
-    plain label_any = ("Any label", "Any label");
-    plain label_placeholder = ("New label", "New label");
-    plain label_remove = ("Remove", "Remove");
-    plain loading = ("Loading documents", "Loading documents");
-    plain modified_any = ("Any time", "Any time");
-    plain modified_last_30_days = ("Last 30 days", "Last 30 days");
-    plain modified_last_7_days = ("Last 7 days", "Last 7 days");
-    plain modified_this_year = ("This year", "This year");
-    plain modified_today = ("Today", "Today");
-    plain more = ("More actions", "More actions");
-    plain more_export_meta = ("Your originals as one archive", "Your originals as one archive");
-    plain more_followed = ("Followed folders", "Followed folders");
-    plain more_recent = ("Recently added", "Recently added");
-    plain more_title = ("More", "More");
-    plain more_trash = ("Trash", "Trash");
-    plain move_title = ("Move to", "Move to");
-    plain move_top = ("Top level", "Top level");
-    plain name_required = ("A document needs a name.", "A document needs a name.");
     plain new_folder_title = ("New folder", "New folder");
-    plain not_editable = ("This document has no text to edit.", "This document has no text to edit.");
-    plain not_starred = ("Not starred", "Not starred");
-    plain no_text = ("No text preview is available for this file.", "No text preview is available for this file.");
-    plain recent_rule = ("Most recently added documents.", "Most recently added documents.");
-    plain remote_changed = ("Changed elsewhere; your next save will ask to reload.", "Changed elsewhere; your next save will ask to reload.");
-    plain rename_placeholder = ("Document name", "Document name");
-    plain retry = ("Try again", "Try again");
-    plain saved = ("Saved", "Saved");
-    plain saving = ("Saving", "Saving");
-    plain search_close = ("Close search", "Close search");
-    plain search_label = ("Search titles and contents", "Search titles and contents");
-    plain search_placeholder = ("Search titles and contents", "Search titles and contents");
-    plain sort = ("Sort", "Sort");
-    plain sort_a_to_z = ("A to Z", "A to Z");
-    plain sort_changed = ("Date changed", "Date changed");
-    plain sort_kind = ("Kind", "Kind");
-    plain sort_largest = ("Largest first", "Largest first");
-    plain sort_name = ("Name", "Name");
-    plain sort_newest = ("Newest first", "Newest first");
-    plain sort_oldest = ("Oldest first", "Oldest first");
-    plain sort_size = ("Size", "Size");
-    plain sort_z_to_a = ("Z to A", "Z to A");
-    plain starred = ("Starred", "Starred");
-    plain trashed_not_editable = ("Restore this document to edit it.", "Restore this document to edit it.");
-    plain truncated = ("Older documents aren't listed; search finds them.", "Older documents aren't listed; search finds them.");
-    plain type_any = ("Any type", "Any type");
-    plain type_audio = ("Audio", "Audio");
-    plain type_image = ("Images", "Images");
-    plain type_markdown = ("Markdown", "Markdown");
-    plain type_pdf = ("PDFs", "PDFs");
-    plain type_spreadsheet = ("Spreadsheets", "Spreadsheets");
-    plain type_text = ("Plain text", "Plain text");
-    plain type_video = ("Video", "Video");
-    plain type_word = ("Documents", "Documents");
-    plain untitled = ("Untitled", "Untitled");
-    plain version = ("Version", "Version");
-    plain view_grid = ("Grid", "Grid");
-    plain view_list = ("List", "List");
-    plain view_title = ("View", "View");
-    plain where_in = ("In", "In");
-    plain where_top = ("At the top level", "At the top level");
-    counted recents_subtitle = ("Changed lately · {n} document in Docs", "Changed lately · {n} documents in Docs");
-    counted document_count = ("{n} document", "{n} documents");
-    counted followed_detail = ("{n} document stays in Docs", "{n} documents stay in Docs");
-    // What the "folder says" line calls the name, to a screen reader (#1183).
-    plain says_noun_name = ("name", "name");
+    plain new_text_title = ("New text document", "New text document");
+    plain edit_text_title = ("Edit document", "Edit document");
+    plain versions_title = ("Earlier versions", "Earlier versions");
+
+    plain tab_docs = ("Docs", "Docs");
+    plain tab_folders = ("Folders", "Folders");
+
+    plain more_followed = ("Followed folders", "Followed folders");
+    plain more_export = ("Export", "Export");
+
+    plain search_placeholder = ("Search docs", "Search docs");
+    plain add_menu = ("Add", "Add");
+    plain add_scan = ("Scan", "Scan");
+    plain add_choose_file = ("Choose file", "Choose file");
+    plain add_text_doc = ("New text document", "New text document");
+    plain add_folder = ("New folder", "New folder");
+
+    plain filter_section_show = ("Show", "Show");
+    plain filter_starred = ("Starred", "Starred");
+    plain filter_section_sort = ("Sort", "Sort");
+    plain sort_updated = ("Recently updated", "Recently updated");
+    plain sort_title = ("Name", "Name");
+
+    plain section_folders = ("Folders", "Folders");
+    plain section_documents = ("Documents", "Documents");
+    plain section_details = ("Details", "Details");
+    plain section_versions = ("Versions", "Versions");
+    plain section_followed = ("Followed folders", "Followed folders");
+
+    plain empty_docs_title = ("No documents yet", "No documents yet");
+    plain empty_docs_body = ("Scan a page or choose a file to keep it here.", "Scan a page or choose a file to keep it here.");
+    plain empty_folders_title = ("No folders yet", "No folders yet");
+    plain empty_folders_body = ("Group documents into folders.", "Group documents into folders.");
+    plain empty_folder_title = ("Folder is empty", "Folder is empty");
+    plain empty_folder_body = ("Scan a page or choose a file to file it here.", "Scan a page or choose a file to file it here.");
+    plain empty_followed_title = ("No followed folders", "No followed folders");
+    plain empty_followed_body = ("Follow a folder on this phone to keep its files here.", "Follow a folder on this phone to keep its files here.");
+    plain empty_search_title = ("Nothing matches", "Nothing matches");
+    plain empty_search_body = ("No document matches “{term}”.", "No document matches “{term}”.");
+    plain empty_versions_title = ("No earlier versions", "No earlier versions");
+    plain empty_versions_body = ("Earlier versions appear after replacements or edits.", "Earlier versions appear after replacements or edits.");
+
+    plain not_found = ("This document isn't here.", "This document isn't here.");
+    plain folder_not_found = ("This folder isn't here.", "This folder isn't here.");
+
+    plain starred_chip = ("Starred", "Starred");
+    counted docs_count = ("1 document", "{n} documents");
+    counted folders_count = ("1 folder", "{n} folders");
+    counted selected_count = ("1 selected", "{n} selected");
+    counted versions_summary = ("1 earlier version", "{n} earlier versions");
+
+    plain menu_more = ("More", "More");
+    plain menu_open = ("Open", "Open");
+    plain menu_edit = ("Edit", "Edit");
+    plain menu_star = ("Star", "Star");
+    plain menu_unstar = ("Unstar", "Unstar");
+    plain menu_share = ("Share", "Share");
+    plain menu_select = ("Select", "Select");
+    plain menu_download = ("Download original", "Download original");
+    plain menu_versions = ("Earlier versions", "Earlier versions");
+    plain menu_restore_version = ("Restore", "Restore");
+    plain menu_stop_following = ("Stop following", "Stop following");
+
+    plain fact_type = ("Type", "Type");
+    plain fact_size = ("Size", "Size");
+    plain fact_updated = ("Updated", "Updated");
+    plain fact_created = ("Added", "Added");
+
+    plain footer_linked = ("Linked", "Linked");
+    plain footer_add_link = ("Add link", "Add link");
+    plain footer_mentioned = ("Mentioned in", "Mentioned in");
+
+    plain field_name = ("Name", "Name");
+    plain field_name_required = ("Enter a name", "Enter a name");
+    plain discard_title = ("Discard changes?", "Discard changes?");
+    plain discard_body = ("Your unsaved edits to this form will be lost.", "Your unsaved edits to this form will be lost.");
+    plain discard_confirm = ("Discard", "Discard");
+    plain discard_keep = ("Keep editing", "Keep editing");
+    plain field_body = ("Text", "Text");
+    plain field_folder_name = ("Folder name", "Folder name");
+
+    plain folder_created = ("Folder created", "Folder created");
+    plain doc_created = ("Document saved", "Document saved");
+    plain doc_saved = ("Document saved", "Document saved");
+    plain version_restored = ("Version restored", "Version restored");
+    plain shared = ("Ready to share", "Ready to share");
+    plain followed_active = ("Following", "Following");
+    plain followed_stopped = ("Stopped", "Stopped");
+
+    plain trash_folder_title = ("Move folder to trash?", "Move folder to trash?");
+    counted trash_folder_body = ("“{title}” and its 1 item move to trash. Restore brings them back.", "“{title}” and its {n} items move to trash. Restore brings them back.");
+    plain trash_folder_empty_body = ("“{title}” moves to trash.", "“{title}” moves to trash.");
+    plain trash_folder_confirm = ("Move to trash", "Move to trash");
 }

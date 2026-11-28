@@ -1,0 +1,24 @@
+room pushed_page key="docs/doc/01900000-0000-7000-8000-000000002030"
+  header title="Lease Summary"
+    back "Docs" #back
+    key menu sym="MoreHoriz" "More" #header/more
+      menu #header/menu
+        section
+          item "Edit" #header/menu/edit
+          item "Star" #header/menu/star
+          item "Move or tag" #header/menu/organize
+          item "Download original" #header/menu/download
+          item "Earlier versions" #header/menu/versions
+          item "Share" #header/menu/share
+          item "Move to trash" destructive #header/menu/trash
+  ready
+    section #section/details "Details"
+      facts
+        fact "Type" "text/plain" kind=text
+        fact "Size" "1 KB" kind=text
+        fact "Updated" "2026-11-26" kind=date
+        fact "Added" "2026-11-26" kind=date
+    prose "Monthly rent due on the first. Renewal in May."
+    earlier_versions "1 earlier version" count=1 #earlier
+    linked "Linked"
+      add "Add link" #footer/linked/add

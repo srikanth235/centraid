@@ -1,3 +1,5 @@
+Historical: archived handoff notes; implementation paths in this snapshot may no longer exist.
+
 # The scheduler host, and exactly what it must call (#1020, lane automations)
 
 `crates/automations` decides what should run. **Nothing in it decides when**: there is no timer, no task and no process, because a seat that is asleep must simply not tick rather than tick into a queue nobody drains. This is the list of calls the gateway owes, in order, with the reason each order matters.

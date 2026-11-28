@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Hero</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Hero</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">Title, finished facts, chips and the one primary action.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">A PERSON</div>
+  <div>
+    <!-- variant:person -->
+    <div style="display: flex; flex-direction: column; align-items: center;">
+      <span data-slot="t0" style="width: 96px; height: 96px; border-radius: 48px; background: var(--glass-bar); border: 1px solid var(--glass-solid); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 600; color: var(--app-people);">AL</span>
+      <div data-slot="t1" style="font-size: 26px; font-weight: 700; margin-top: 10px;">Ada Lovelace</div><div style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-meta);"><span data-slot="t2">Phone says Ada Lovelase</span><button data-slot="t3" aria-label="Use the name your phone has, Ada Lovelase" style="border: none; background: none; padding: 0; min-height: 44px; font-size: 13px; font-weight: 600; color: var(--app-people); flex-shrink: 0;">Use phone’s</button></div>
+      <div data-slot="t4" style="font-size: 14px; color: var(--text-body);">Friend · London</div>
+      <div data-slot="t5" style="font-size: 13px; color: var(--text-meta); margin-top: 4px;">Every 14 days · last touch 12 days ago</div>
+    </div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">A LOCKER ITEM</div>
+  <div>
+    <!-- variant:item -->
+    <div style="display: flex; flex-direction: column; align-items: center; margin-top: 6px;">
+      <span data-slot="t0" style="width: 64px; height: 64px; border-radius: 16px; background: var(--surface-tile); display: flex; align-items: center; justify-content: center; color: var(--on-fill); font-weight: 700; font-size: 28px;">G</span>
+      <div style="font-size: 24px; font-weight: 700; margin-top: 8px; display: flex; align-items: center; gap: 6px;">GitHub <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--app-locker)" aria-label="Starred" role="img"><path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"></path></svg></div>
+      <div data-slot="t1" style="font-size: 14px; color: var(--text-meta);">Login · last used today</div>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

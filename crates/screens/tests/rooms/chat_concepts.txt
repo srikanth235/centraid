@@ -1,0 +1,26 @@
+room pushed_page key="chat/concepts"
+  header title="Kinds and relations"
+    back "Chat" #back
+  ready
+    section #section/touch_kinds "Catch-up kinds"
+      row #concept/touch_kind:call "Call"
+        menu #concept/touch_kind:call/menu
+          section
+            item "Rename" #concept/touch_kind:call/rename
+            item "Merge into…" #concept/touch_kind:call/merge
+      row #concept/touch_kind:message "Message"
+        menu #concept/touch_kind:message/menu
+          section
+            item "Rename" #concept/touch_kind:message/rename
+            item "Merge into…" #concept/touch_kind:message/merge
+      row #concept/touch_kind:met-up "Met up"
+        menu #concept/touch_kind:met-up/menu
+          section
+            item "Rename" #concept/touch_kind:met-up/rename
+            item "Merge into…" #concept/touch_kind:met-up/merge
+    section #section/relations "Relations"
+      row #concept/relation:related "Related"
+        menu #concept/relation:related/menu
+          section
+            item "Rename" #concept/relation:related/rename
+            item "Merge into…" #concept/relation:related/merge

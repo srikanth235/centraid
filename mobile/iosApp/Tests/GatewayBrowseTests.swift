@@ -60,8 +60,8 @@ final class GatewayBrowseTests: XCTestCase {
         let result = await XCTWaiter.fulfillment(of: [answer], timeout: 2)
         XCTAssertEqual(result, .completed)
         // A late sighting and a second window end change nothing.
+        XCTAssertTrue(run.isFinished)
         finder.show([service("centraid-gateway-late", txt: ["gw": id], interface: "late")])
-        try await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(answers.count, 1)
         XCTAssertEqual(answers[0], [ResolvedService(
             serviceName: "centraid-gateway-abababab",

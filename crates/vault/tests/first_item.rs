@@ -54,11 +54,12 @@ fn a_second_person_counts_and_the_founding_one_does_not() {
     let scratch = Scratch::founded("first-item-person").expect("a founded vault");
     scratch.clock.advance_days(1);
     let at = scratch.vault.clock().now_text();
+    let id = scratch.vault.ids().next();
     scratch
         .vault
         .commit(|tx| {
             tx.set_producer("test.add_person");
-            add_person(tx, "person-2", "Dana Reyes", &at)
+            add_person(tx, &id, "Dana Reyes", &at)
         })
         .expect("a second person");
     assert_eq!(first_item_at(&scratch.vault, &STARTERS), Some(at));
@@ -77,7 +78,7 @@ fn a_workout_alone_is_a_first_item() {
         .vault
         .commit(|tx| {
             tx.set_producer("test.activity");
-            tx.insert_entity(&id, Kind::Activity, "Morning run", &at)
+            tx.insert_entity(&id, Kind::Workout, "Morning run", &at)
         })
         .expect("a workout");
     assert_eq!(first_item_at(&scratch.vault, &STARTERS), Some(at));

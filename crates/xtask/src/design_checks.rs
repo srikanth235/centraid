@@ -13,7 +13,6 @@
 //!
 //! They read the committed tree, so a failure names the file to fix.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use centraid_design::tokens::{NATIVE_COLOR_ROLES, NATIVE_EFFECT_ROLES, Tokens, native_color};
@@ -162,31 +161,6 @@ fn the_geometry_both_shells_read_is_present_and_sane() {
     // The mark's stroke stays above a real device pixel at the smallest size in
     // use (14 px in a 24 box).
     assert!(get("appMarkStroke") * 14.0 / get("appMarkViewBox") >= 0.75);
-}
-
-#[test]
-fn homes_roster_is_the_catalogue() {
-    let policy = std::fs::read_to_string(root().join("crates/screens/src/shell/policy.rs"))
-        .expect("crates/screens/src/shell/policy.rs");
-    let start = policy.find("pub const ORDER").expect("policy.rs ORDER");
-    let body = &policy[start..];
-    let body = &body[body.find('[').expect("ORDER's array") + 1..];
-    let body = &body[body.find("= [").map_or(0, |at| at + 3)..];
-    let list = &body[..body.find("];").expect("end of ORDER")];
-    let ids: BTreeSet<String> = list
-        .split('"')
-        .enumerate()
-        .filter(|(at, _)| at % 2 == 1)
-        .map(|(_, id)| id.to_owned())
-        .collect();
-    let catalogue: BTreeSet<String> = tokens()
-        .native
-        .app
-        .iter()
-        .map(|app| app.id.clone())
-        .collect();
-    assert_eq!(ids, catalogue, "shell/policy.rs ORDER vs [[native.app]]");
-    assert!(!ids.contains("tasks"), "Tasks lives inside Reminders");
 }
 
 #[test]

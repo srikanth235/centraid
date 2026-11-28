@@ -1,0 +1,4 @@
+room sheet key="person/01900000-0000-7000-8000-000000000030/merge/01900000-0000-7000-8000-000000000010"
+  header title="Merge person"
+  ready
+    confirm outlined "Merge Priya N. into Priya Nair?" body="Contact points, dates, catch-ups and captures move to Priya Nair. Priya N. is removed. This cannot be undone." yes="Merge"#confirm/yes no="Cancel"#confirm/no

@@ -1,0 +1,25 @@
+room app_place key="photos"
+  header title="Library" subtitle="0 photos"
+    key add sym="Plus" "Add photo" #header/add
+    key tool sym="Check" "Select" #header/select
+    filter clear=#filter/clear
+      menu #photos-filter-menu
+        section "Show"
+          item "Videos" #filter/videos
+          item "Scans" #filter/scans
+          item "Starred" #filter/starred
+  band home=#band/home search=#band/search more=#band/more
+    tab "Library" sym="Image" selected #tab/library
+    tab "Albums" sym="Layers" #tab/albums
+    tab "Places" sym="MapPin" #tab/places
+    menu #band/more/menu
+      section
+        item "Camera roll is off" secondary="Photo access is off. Turn it on in Settings." #more/follow-camera-roll
+        item "Follow Camera roll" #more/follow-camera-roll-again
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    empty glyph="Image" "Photo access is off." body="Turn it on in Settings to import your camera roll."
+      action "Open Settings" #first/photos/settings
+  search placeholder="Search photos" #search
+  selection

@@ -91,7 +91,7 @@ internal object OwnerPrompt {
             EffectResult(owner_checked = OwnerChecked(available = available, biometry = biometry, outcome = outcome))
         if (!ask.ask) return answer(OwnerChecked.Outcome.OUTCOME_NOT_ASKED)
         if (!available) return answer(OwnerChecked.Outcome.OUTCOME_UNAVAILABLE)
-        val activity = activityOf(context) ?: return answer(OwnerChecked.Outcome.OUTCOME_FAILED)
+        val activity = activityOf(context) ?: return answer(OwnerChecked.Outcome.OUTCOME_UNAVAILABLE)
         val outcome = CompletableDeferred<OwnerChecked.Outcome>()
         val callback = object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -112,11 +112,12 @@ internal object OwnerPrompt {
         var prompt: BiometricPrompt? = null
         val raised = runCatching {
             // The prompt is the main thread's: this effect is performed from composition's scope.
-            prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback)
-            pending = prompt
-            prompt?.authenticate(info)
+            val current = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback)
+            prompt = current
+            pending = current
+            current.authenticate(info)
         }
-        if (raised.isFailure) outcome.complete(OwnerChecked.Outcome.OUTCOME_FAILED)
+        if (raised.isFailure) outcome.complete(OwnerChecked.Outcome.OUTCOME_UNAVAILABLE)
         try {
             return answer(outcome.await())
         } finally {
@@ -138,8 +139,14 @@ internal object OwnerPrompt {
             OwnerChecked.Outcome.OUTCOME_CANCELLED
         BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL, BiometricPrompt.ERROR_HW_NOT_PRESENT ->
             OwnerChecked.Outcome.OUTCOME_UNAVAILABLE
+        BiometricPrompt.ERROR_HW_UNAVAILABLE,
+        BiometricPrompt.ERROR_UNABLE_TO_PROCESS,
+        BiometricPrompt.ERROR_TIMEOUT,
+        BiometricPrompt.ERROR_NO_BIOMETRICS,
+        BiometricPrompt.ERROR_VENDOR,
+        -> OwnerChecked.Outcome.OUTCOME_UNAVAILABLE
         BiometricPrompt.ERROR_LOCKOUT, BiometricPrompt.ERROR_LOCKOUT_PERMANENT ->
             OwnerChecked.Outcome.OUTCOME_LOCKED_OUT
-        else -> OwnerChecked.Outcome.OUTCOME_FAILED
+        else -> OwnerChecked.Outcome.OUTCOME_UNAVAILABLE
     }
 }

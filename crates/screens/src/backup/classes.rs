@@ -183,7 +183,7 @@ fn counted(locale: Locale, class: Class, count: u64) -> String {
 }
 
 /// What waits in a class: with several devices and some already holding it, one line per device
-/// that does not ("184 waiting for Office NAS"); otherwise the core's reasons.
+/// that does not ("184 waiting for Office Mac"); otherwise the core's reasons.
 fn waiting_notes(
     locale: Locale,
     fed: &[&Destination],

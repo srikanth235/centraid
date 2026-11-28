@@ -1,0 +1,9 @@
+   Compiling centraid-screens v1.0.0-alpha.0 (/workspace/centraid/crates/screens)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.37s
+     Running tests/room_runtime_vault_boundary.rs (target/debug/deps/room_runtime_vault_boundary-75f52185c0a8d694)
+
+running 1 test
+test vault_changes_drop_old_drafts_and_never_reuse_room_instances ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+

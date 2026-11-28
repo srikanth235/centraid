@@ -146,7 +146,7 @@ impl Driver {
     /// When the scratch vault cannot be made; this is test support.
     #[must_use]
     pub fn with_runtime(runtime: Runtime) -> Self {
-        Self::opened(runtime, false, centraid_core::example::now_ms())
+        Self::opened(runtime, false, now_ms())
     }
 
     /// [`Self::with_runtime`] with the example scenario seeded as of `now_ms`
@@ -187,7 +187,7 @@ impl Driver {
     /// When the scratch vault cannot be made.
     #[must_use]
     pub fn keyed(runtime: Runtime) -> Self {
-        Self::opened(runtime, true, centraid_core::example::now_ms())
+        Self::opened(runtime, true, now_ms())
     }
 
     /// A FIRST VAULT, as a member's first launch founds it: the starter rows of
@@ -279,7 +279,7 @@ impl Driver {
     fn opened_on(
         runtime: Runtime,
         keyed: bool,
-        seeded_at_ms: i64,
+        _seeded_at_ms: i64,
         clock: Option<std::sync::Arc<centraid_vault::clock::FixedClock>>,
     ) -> Self {
         let dir = centraid_ontology::scratch::scratch_dir();
@@ -315,18 +315,6 @@ impl Driver {
             })
             .expect("the vault founds");
         assert!(matches!(found.kind, Some(wire::response::Kind::Found(_))));
-        let report = handle
-            .with_vault(|vault| {
-                centraid_core::example::seed(
-                    vault,
-                    handle.registry(),
-                    &handle.owner(),
-                    &|_| true,
-                    seeded_at_ms,
-                )
-            })
-            .expect("the scenario seeds");
-        assert!(report.is_whole(), "the scenario seeds whole: {report:?}");
         handle.attach_screens(std::sync::Arc::new(runtime));
         Self {
             handle,
@@ -626,4 +614,12 @@ impl Driver {
             other => panic!("instance {instance} is not a counter: {other:?}"),
         }
     }
+}
+
+/// The wall clock, in milliseconds.
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or_default()
 }

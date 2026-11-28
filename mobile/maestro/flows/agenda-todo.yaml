@@ -1,107 +1,52 @@
-# Reminders' root, the lists page (#1128, R-1128-1, #1173): the smart lists, then My Lists with the Inbox.
-# The Plus opens the quick-add bar on the keyboard (R-CHROME-1, #1130): an add
-# lands in the Inbox and the bar stays for the next; an empty bar closes when
-# the keyboard leaves. More holds the Tasks places, and a page pushed from it
-# names Reminders as its back.
+# Reminders' room: the smart lists over the lists of My Lists, a new reminder from the header's plus,
+# the task's own page, and More's places.
 #
-# A VAULT-HOLDING INSTALL, as `home.yaml`. Re-runnable, but each run leaves one
-# task titled "Flow task" in the Inbox (the flow does not touch the starters).
+# THE DEMO VAULT (`mobile/scripts/demo-vault.sh`), as `home.yaml`. Re-runnable, but each run leaves
+# one task titled "Flow task" (the flow does not touch the seeded rows). Ids are the room's own
+# (`crates/screens/tests/rooms/reminders_today.txt`, `reminders_task_detail.txt`).
 appId: dev.centraid.Centraid
 name: agenda-todo
 ---
 - launchApp
 - tapOn:
-    id: "home-tile-reminders"
+    id: "tile/reminders"
+- assertVisible:
+    id: "room-reminders"
+- assertVisible:
+    id: "tab/reminders"
+- assertVisible:
+    id: "choice/smart"
+- assertVisible:
+    id: "key/add"
+# The plus opens the new-reminder form; saving it adds the task and returns to the room.
 - tapOn:
-    id: "reminders-band-reminders"
-# A day-zero vault has no list rows yet: the page is the smart lists over an empty state, and the
-# Plus is there either way (`agenda-todo-list` is drawn once a task exists).
-- extendedWaitUntil:
-    visible:
-      id: "agenda-add-task"
-    timeout: 5000
-# The bar is not drawn until the Plus opens it.
-- assertNotVisible:
-    id: "agenda-quick-add"
+    id: "key/add"
+- assertVisible:
+    id: "field/title"
 - tapOn:
-    id: "agenda-add-task"
-- extendedWaitUntil:
-    visible:
-      id: "agenda-quick-add"
-    timeout: 5000
+    id: "field/title"
 - inputText: "Flow task"
 - tapOn:
-    id: "agenda-quick-add-verb"
-# THE ROOT IS THE LISTS PAGE (Today, Scheduled, All, Flagged, then My Lists, #1173): a task added
-# to the Inbox is a row of the Inbox's own page, which the Inbox list opens. The status line says
-# where it went.
-- extendedWaitUntil:
-    visible:
-      id: "agenda-status-action"
-    timeout: 5000
-# Maestro's hideKeyboard needs a dismiss key the iOS keyboard does not have; its blue key (Return on an
-# empty bar) closes the quick-add bar and puts the keyboard away, so iOS presses it.
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - hideKeyboard
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - pressKey: Enter
-- scrollUntilVisible:
-    element:
-      id: "agenda-project-inbox"
-    direction: DOWN
+    id: "form/save"
 - tapOn:
-    id: "agenda-project-inbox"
+    id: "choice/smart-all"
 - extendedWaitUntil:
     visible: "Flow task"
     timeout: 5000
-# A task's row opens its page; Done returns to the list.
+# A task's row opens its page: the hero's Done and the subtasks section.
 - tapOn: "Flow task"
 - extendedWaitUntil:
     visible:
-      id: "tasks-title-field"
+      id: "hero/done"
     timeout: 5000
-# iOS closes the page with Done, Android with back.
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - tapOn: "Done"
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - back
 - assertVisible:
-    id: "tasks-list-title"
-# The Inbox's back control returns to the lists page.
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - tapOn:
-          id: "kit-pushed-back"
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - tapOn:
-          id: "room-back"
+    id: "section/subtasks"
+- tapOn:
+    id: "back"
 - assertVisible:
-    id: "agenda-todo-list"
-# More: the Tasks places, then back to Reminders.
+    id: "choice/smart"
+# More holds the room's places.
 - tapOn:
-    id: "reminders-band-more"
-- tapOn:
-    id: "agenda-more-anytime"
-- extendedWaitUntil:
-    visible:
-      id: "tasks-list"
-    timeout: 5000
-# The page pushed from More names Reminders as its back (Calendar and Reminders are two apps, #1173).
-- assertVisible: "Back to Reminders"
+    id: "band/more"
+- assertVisible:
+    id: "more/trash"

@@ -1,0 +1,27 @@
+room system_place key="settings"
+  header title="Settings"
+    back "Home" #back
+  ready
+    section #section/appearance "Appearance"
+      choice segmented "Appearance" #choice/appearance
+        option "System" id="system" selected
+        option "Light" id="light"
+        option "Dark" id="dark"
+      prose "System follows your phone. Text follows your phone's text size."
+    section #section/units "Units"
+      choice segmented "Units" #choice/units
+        option "Phone's setting" id="phone" selected
+        option "Metric" id="metric"
+        option "Imperial" id="imperial"
+      prose "Distances, weights and temperatures. Phone's setting follows your region."
+    section #section/notifications "Notifications"
+      choice segmented "Show details on the lock screen" #choice/details
+        option "On" id="on" selected
+        option "Off" id="off"
+      prose "Off shows only that a reminder or an event is due."
+    section #section/backup "Backup"
+      row #row/backup "Backup" meta="Backed up 5 minutes ago."
+      row #row/recovery-key "Recovery key" meta="Show recovery key"
+    section #section/about "About"
+      facts
+        fact "Version" "Centraid" kind=text

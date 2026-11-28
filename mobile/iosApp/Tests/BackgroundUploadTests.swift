@@ -248,8 +248,6 @@ final class BackgroundUploadTests: XCTestCase {
 
     @MainActor
     func testFinishAndGraceWaitUntilAsyncReportCompletes() async {
-        let oldWatcher = LibraryWatcher.shared.onChange
-        defer { LibraryWatcher.shared.onChange = oldWatcher }
 
         let core = UploadTestCore()
         defer { core.finish() }

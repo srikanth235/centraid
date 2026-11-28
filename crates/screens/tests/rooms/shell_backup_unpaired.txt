@@ -1,0 +1,7 @@
+room system_place key="backup"
+  header title="Backup"
+  ready
+    section #section/line "Backup"
+      row #row/line "Not backed up. Pair a backup device." chips="Not backed up. Pair a backup device.":seam
+    empty glyph="Backup" "No backup device yet" body="Connect a backup device to keep a copy it can't open."
+      action "Add backup device" sym="Add" #action/pair

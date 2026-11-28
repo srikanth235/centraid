@@ -300,24 +300,26 @@ pub unsafe extern "C" fn centraid_call(
         Ok(marshal::encode_response(response.1, response.0))
     }));
 
-    match outcome {
+    let status = match outcome {
         Ok(Ok(encoded)) => {
             // SAFETY: both out-pointers were checked non-null above.
             unsafe { marshal::hand_over(encoded, out_buf, out_len) };
             CENTRAID_OK
         }
         Ok(Err(error)) => {
-            // A TYPED REFUSAL IS STILL AN ANSWER. The bytes carry the closed
-            // `ErrorCode` the shell branches on; the status code says only that
-            // the call itself ran.
             let code = code_for(&error);
             let encoded = marshal::encode_error(answer_id, &error);
             // SAFETY: as above.
             unsafe { marshal::hand_over(encoded, out_buf, out_len) };
             code
         }
-        Err(_) => unsafe { poison(&core, "call", answer_id, out_buf, out_len) },
-    }
+        Err(_) => std::panic::catch_unwind(AssertUnwindSafe(|| unsafe {
+            poison(&core, "call", answer_id, out_buf, out_len)
+        }))
+        .unwrap_or(CENTRAID_PANICKED),
+    };
+    let _ = std::panic::catch_unwind(AssertUnwindSafe(|| drop(core)));
+    status
 }
 
 /// Wait for the next event, up to `timeout_ms`.
@@ -343,9 +345,6 @@ pub unsafe extern "C" fn centraid_next_event(
     if out_buf.is_null() || out_len.is_null() {
         return CENTRAID_BAD_ARGUMENT;
     }
-    // Own the shared state before waiting. `centraid_close` may release the
-    // caller's boxed Handle while this entered event read is still running;
-    // a reference borrowed from that box cannot survive the wait.
     // SAFETY: the caller's promise; `handle_of` refuses null. The raw borrow
     // ends after this clone, before any wait or screen callback runs.
     let Some(core) = (unsafe { marshal::handle_of(handle) }).cloned() else {
@@ -354,21 +353,29 @@ pub unsafe extern "C" fn centraid_next_event(
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
         core.next_event(std::time::Duration::from_millis(u64::from(timeout_ms)))
     }));
-    match outcome {
+    let status = match outcome {
         Ok(Ok(Some(event))) => {
             let encoded = marshal::encode_event(event);
             // SAFETY: both out-pointers were checked non-null above.
             unsafe { marshal::hand_over(encoded, out_buf, out_len) };
             CENTRAID_OK
         }
-        // NOTHING IS ALLOCATED on a timeout, so there is nothing to free. A
-        // caller that called `free` on the untouched pointers would free
-        // whatever was in them, which is why this is a clause and not a note.
         Ok(Ok(None)) => CENTRAID_TIMEOUT,
+        Ok(Err(error @ CoreError::Poisoned { .. })) => {
+            let encoded = marshal::encode_error(0, &error);
+            // SAFETY: both out-pointers were checked non-null on entry.
+            unsafe { marshal::hand_over(encoded, out_buf, out_len) };
+            CENTRAID_PANICKED
+        }
         Ok(Err(error)) => code_for(&error),
         // SAFETY: both out-pointers were checked non-null on entry.
-        Err(_) => unsafe { poison(&core, "next_event", 0, out_buf, out_len) },
-    }
+        Err(_) => std::panic::catch_unwind(AssertUnwindSafe(|| unsafe {
+            poison(&core, "next_event", 0, out_buf, out_len)
+        }))
+        .unwrap_or(CENTRAID_PANICKED),
+    };
+    let _ = std::panic::catch_unwind(AssertUnwindSafe(|| drop(core)));
+    status
 }
 
 /// Release a buffer this library allocated.
@@ -425,11 +432,9 @@ pub unsafe extern "C" fn centraid_close(handle: *mut Handle) -> i32 {
     // the only thing that produces one, and that it has not been closed.
     let boxed = unsafe { Box::from_raw(handle) };
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
-        // CLOSE FIRST, then drop: the waiters have to be released before the
-        // queue they are parked on goes away.
         boxed.close();
+        drop(boxed);
     }));
-    drop(boxed);
     if outcome.is_err() {
         return CENTRAID_PANICKED;
     }

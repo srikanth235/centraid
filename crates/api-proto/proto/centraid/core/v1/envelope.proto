@@ -25,11 +25,11 @@ import "centraid/core/v1/change.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
-import "centraid/core/v1/locker.proto";
-import "centraid/core/v1/money.proto";
+import "centraid/core/v1/notify_screens.proto";
 import "centraid/core/v1/originals.proto";
 import "centraid/core/v1/phone.proto";
 import "centraid/core/v1/query.proto";
+import "centraid/core/v1/room.proto";
 import "centraid/core/v1/screens.proto";
 import "centraid/core/v1/vault.proto";
 
@@ -97,10 +97,6 @@ message Request {
     // AN APP'S OWN QUERY, RUN IN THE CORE (#1046). See `app_query.proto` for
     // why a query that joins and expands cannot be a page read a shell writes.
     AppQueryRequest app_query = 20;
-    // THE LOCKER SESSION (#1047, D-5): unlock after the OS prompt, relock,
-    // the state, and one reveal. See `locker.proto` for why the
-    // prompt is the shell's and the key is the core's.
-    LockerSessionRequest locker = 21;
     // THE 24 WORDS (#1047 E1): minted, judged and turned into a seed in Rust,
     // with no vault. See `phone.proto`.
     PhraseRequest phrase = 22;
@@ -128,10 +124,6 @@ message Request {
     // THE ON-DEVICE CHAT: a session, a question, and the model's file. Reads
     // only; nothing a turn does is written. See `assist.proto`.
     AssistRequest assist = 31;
-    // MONEY'S IMPORT PLAN AND HOME'S TILE (#1099). Neither is an app screen's
-    // read: the plan carries a statement's bytes, the tile is Home's. See
-    // `money.proto`.
-    MoneyRequest money = 32;
     // A PAIRED GATEWAY FOUND AGAIN AT NEW ADDRESSES (#1080, Q-1080-D3): the
     // shell's foreground browse hands the core candidates, and the core keeps
     // those that answer as the pinned gateway. See `phone.proto`.
@@ -156,6 +148,13 @@ message Request {
     VaultExportRequest vault_export = 48;
     // WHICH GATEWAYS HOLD ONE ORIGINAL WHOLE (#1209, R4): the delete warning's read.
     HeldWholeRequest held_whole = 49;
+    // THE APP PLANE (`room.proto`, `notify_screens.proto`): a room by key and a room's events;
+    // the notification service's launch, presses and permission.
+    RoomRequest room = 50;
+    NotifyRequest notify = 51;
+    DeviceRequest device = 52;
+    FollowRequest follow = 53;
+    ShareInRequest share_in = 54;
   }
 }
 
@@ -182,7 +181,6 @@ message Response {
     BackupStatusResponse backup_status = 18;
     OriginalsResponse originals = 19;
     AppQueryResponse app_query = 20;
-    LockerSessionResponse locker = 21;
     PhraseResponse phrase = 22;
     // The answers to the backup plane's doors (#1080), at their requests'
     // numbers like the phone's four.
@@ -195,7 +193,6 @@ message Response {
     ReleasableResponse releasable = 29;
     ReleasedResponse released = 30;
     AssistResponse assist = 31;
-    MoneyResponse money = 32;
     RefreshDestinationResponse refresh_destination = 33;
     LibraryAssetsResponse library_assets = 34;
     LoadResponse load = 35;
@@ -206,6 +203,11 @@ message Response {
     UndoHeldResponse undo_held = 47;
     VaultExportResponse vault_export = 48;
     HeldWholeResponse held_whole = 49;
+    RoomResponse room = 50;
+    NotifyResponse notify = 51;
+    DeviceResponse device = 52;
+    FollowResponse follow = 53;
+    ShareInResponse share_in = 54;
   }
 }
 
@@ -225,6 +227,12 @@ message Event {
     // A screen's off-thread job finished. Handled by the core inside
     // `next_event`, like `wake`; a shell never sees it.
     ScreenJobDone job_done = 7;
+    // A room Rust shows on its own (a commit reached its reads, a timer fired): `room.proto`.
+    RoomShown room = 8;
+    // The notification set the phone should hold, whole, each time it changes: `notify_screens.proto`.
+    ScheduleNotifications notify = 9;
+    // What the core asks a shell to do on the phone: `room.proto`, app-plane §17.
+    ShellEffect effect = 10;
   }
 }
 

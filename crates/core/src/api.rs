@@ -1,19 +1,4 @@
-//! The v1 twin of v0's `VaultApi` — the surface a handler sees.
-//!
-//! Eight verbs, and the honest state of each. A stub here is a **typed
-//! refusal**, never an empty answer: an empty page reads as "no data" and the
-//! truth is "this build cannot answer yet", and those produce different
-//! screens (#1020, D-1020-C11).
-//!
-//! | Verb | State | Why |
-//! |---|---|---|
-//! | [`page`] | live | D1's `page_raw` plus the access plane's filters and mask |
-//! | `invoke` | live | D1's command plane, gate order and all, behind `act` and [`crate::Handle::command`] |
-//! | [`describe`] | live | the registered definition, so a shell can render a form |
-//! | [`parked`] | live | the outcomes waiting on somebody's decision |
-//! | [`search`] | **stub** | the FTS plane is wave 4 |
-//! | [`resolve`] | **stub** | entity resolution is wave 4 |
-//! | [`content`] | **stub** | content path minting is wave 3 |
+//! The typed read and command operations exposed by the core.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::commands::{Command, Registry};
@@ -290,7 +275,7 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                 // AND THE CURRENCY'S EXPONENT AFTER EVERYTHING ELSE, when it is
                 // asked for. Same positional contract as the three above. It is
                 // computed HERE and not by the vault because the one table of
-                // minor units is the kit's (`centraid_apps_kit::money`), and
+                // minor units is the kit's (`centraid_domain::money`), and
                 // `Money.exponent` says where it comes from: "From the kit's
                 // table through the core, never guessed and never assumed to be
                 // 2" — a shell that kept its own copy would be the second table
@@ -302,7 +287,7 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                             centraid_vault::value::Value::Text(code) => Some(code.as_str()),
                             _ => None,
                         })
-                        .map_or(0, centraid_apps_kit::money::minor_units);
+                        .map_or(0, centraid_domain::money::minor_units);
                     values.push(wire::Value {
                         kind: Some(wire::value::Kind::Integer(i64::from(exponent))),
                     });
@@ -345,7 +330,7 @@ fn local_day_of(zone: &centraid_vault::time::zone::FireZone, text: &str) -> Opti
     if is_date {
         return Some(text.to_owned());
     }
-    centraid_apps_kit::civil::today(zone, text)
+    centraid_domain::civil::today(zone, text)
 }
 
 /// The column whose code `PageQuery.with_minor_units` states the exponent of.
@@ -417,35 +402,17 @@ pub(crate) fn invoke(
     invoke_raw(vault, registry, principal, call, changes, None)
 }
 
-/// THE ONE WRITE PATH OF A COMMAND THE MEMBER OR THE CHAT MAKES (#1135): a secret typed into the
-/// input is sealed under the open Locker session
-/// ([`crate::locker::phone::seal_command`], which refuses while the session is shut), then
-/// [`invoke_raw`] runs it. A screen's `act`, the chat's confirmed card (`assist::door`) and
-/// [`crate::Handle::command`] all come through here, so a secret is sealed the same way whoever
-/// typed it and the chat holds no second sealing call.
+/// THE ONE WRITE PATH OF A COMMAND THE MEMBER OR THE CHAT MAKES (#1135): a screen's `act`, the
+/// chat's confirmed card (`assist::door`) and [`crate::Handle::command`] all come through here.
 pub(crate) fn command(
     vault: &Vault,
-    locker: &crate::locker::phone::Cell,
     registry: &Registry,
     principal: &centraid_vault::Principal,
     call: &Invocation,
     changes: &crate::events::ChangeFeed,
     keyed: Option<&centraid_vault::action_key::KeyMark<'_>>,
 ) -> Result<centraid_vault::commands::CommandOutcome> {
-    match crate::locker::phone::seal_command(vault, locker, &call.name, &call.input)? {
-        Some(input) => invoke_raw(
-            vault,
-            registry,
-            principal,
-            &Invocation {
-                input,
-                ..call.clone()
-            },
-            changes,
-            keyed,
-        ),
-        None => invoke_raw(vault, registry, principal, call, changes, keyed),
-    }
+    invoke_raw(vault, registry, principal, call, changes, keyed)
 }
 
 /// [`invoke`]'s gate order and change feed, with the key mark an
@@ -514,57 +481,7 @@ pub fn describe(registry: &Registry, name: &str) -> Result<serde_json::Value> {
     }))
 }
 
-/// Full-text search. **Stub**: the FTS plane is wave 4.
-pub fn search(_query: &str) -> Result<Vec<wire::Row>> {
-    Err(CoreError::NotYetAvailable {
-        what: "search",
-        lands_in: "wave 4 (the FTS plane)",
-    })
-}
-
-/// Entity resolution. **Stub**: wave 4.
-pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
-    Err(CoreError::NotYetAvailable {
-        what: "resolve",
-        lands_in: "wave 4 (entity resolution)",
-    })
-}
-
-// THE REVEAL ROUTER IS GONE, AND THE RULE IT ENCODED SURVIVES IN THE COMMAND
-// (#1029 §1). `reveal` answered "who performs this reveal" — the gateway for a
-// sealed column, the seat for a Locker cell — and the answer was the trust
-// premise: a Locker key must never be on a host the member does not hold.
-// There is one host (#1029 §6), so the question has one answer and nothing
-// ever called this function: a Locker reveal runs in `crate::locker::phone`,
-// behind the unlock, after `locker.mark_used` stamps the item, and
-// the SEALED-COLUMN arm served connector tokens, which leave with the
-// connectors. The access plane's reveal judgement went with that arm
-// (R-1047-D2): `centraid_vault::Verb` is `read` and `act`, so no access path
-// can be written that opens a Locker cell even by mistake.
-
-/// MAKE THIS FILE A VAULT (#1029 W5, hand-off 1).
-///
-/// The door `Core::open` with `create` left missing. `Vault::create` lays the
-/// migrations down; `Vault::found` writes the two rows that make those tables a
-/// vault — the `vault` row and its owner's person — inside one commit, and
-/// until this function existed nothing over the C ABI could reach it. A phone
-/// could create a file that could never say which vault it was, which is
-/// exactly what `Shelf.FoundRefusal.NOT_FOUNDED` was refusing honestly.
-///
-/// **A SECOND FOUND IS REFUSED, AND THE VAULT THAT IS HERE IS LEFT ALONE.**
-/// `Vault::found` mints a fresh id and inserts unconditionally, so running it
-/// twice would write a second self person beside the first — and `vault` holds
-/// one row (`CHECK (id = 1)`), so the insert would fail half-way into a file
-/// the shell took for founded. The refusal carries `ERROR_CODE_VAULT_ALREADY_HELD` and names the id already
-/// here, so a shell that raced itself can tell "I founded it" from "something
-/// is wrong".
-///
-/// **WHAT THE NEW VAULT HOLDS is the request's `content`** (`vault.proto`'s
-/// `FoundContent`). `UNSPECIFIED` — a found that names no content — is the
-/// found and nothing else. `STARTERS` adds the teaching rows of
-/// [`crate::starters`] to the member's own vault through the command plane, and
-/// a refused starter leaves the vault founded rather than failing it. A
-/// content this build does not know is refused before the file is read.
+/// Found a vault file and optionally add starter rows.
 pub fn found(
     vault: &Vault,
     registry: &Registry,
@@ -578,9 +495,6 @@ pub fn found(
                 request.content
             ),
         })?;
-    // A vault has a name (`vault.name` is `CHECK (length(trim(name)) > 0)`), so a
-    // blank one is refused here, before the file is touched. The shells found
-    // with `Shelf.DEFAULT_VAULT_NAME` and the member renames it afterwards.
     if request.display_name.trim().is_empty() {
         return Err(CoreError::InvalidRequest {
             detail: "a vault needs a name".to_owned(),
@@ -602,18 +516,9 @@ pub fn found(
     })
 }
 
-/// Mint a path for content. **Stub**: wave 3.
-pub fn content(_content_id: &str) -> Result<String> {
-    Err(CoreError::NotYetAvailable {
-        what: "content",
-        lands_in: "wave 3 (content path minting)",
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use centraid_vault::commands::CommandStatus;
 
     /// [`found`] with the registry and the owner a handle would pass.
     fn found_here(vault: &Vault, request: &wire::FoundRequest) -> Result<wire::FoundResponse> {
@@ -673,7 +578,7 @@ mod tests {
             };
             assert_eq!(
                 row.values[2].kind,
-                centraid_apps_kit::civil::today(&zone, created).map(wire::value::Kind::Text),
+                centraid_domain::civil::today(&zone, created).map(wire::value::Kind::Text),
                 "the day {created} falls on at UTC+14"
             );
         }
@@ -751,82 +656,6 @@ mod tests {
         .expect_err("an unprojected order column is refused");
         assert_eq!(unprojected.code(), wire::ErrorCode::InvalidRequest);
         assert!(unprojected.to_string().contains("created_at"));
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    /// The exponent is the KIT's, per row, appended last — and a select with no
-    /// `currency` to state it of is refused rather than answered with 2s.
-    #[test]
-    fn the_minor_units_column_is_the_kits_exponent_of_each_rows_currency() {
-        let scratch = centraid_ontology::scratch::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = Registry::with_system_commands().expect("the registry");
-        let owner = centraid_vault::Principal::owner("test-device");
-        for (name, currency) in [("Tokyo", "JPY"), ("Kuwait", "KWD")] {
-            let outcome = vault
-                .execute(
-                    &registry,
-                    &owner,
-                    &Command::new(
-                        "account.add",
-                        serde_json::json!({
-                            "id": name, "title": name, "type": "cash", "currency": currency,
-                        }),
-                    ),
-                )
-                .expect("an account");
-            assert_eq!(
-                outcome.status,
-                CommandStatus::Executed,
-                "{:?}",
-                outcome.reason
-            );
-        }
-
-        let mut asked = query(&["id", "currency"], "id", "id");
-        asked.from = "account".to_owned();
-        asked.with_minor_units = true;
-        let answer = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(asked.clone()),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("a page");
-        // Ordered by the pk, so the pair is sorted before it is compared: the
-        // claim is one exponent per row and each the kit's, not an order.
-        let mut exponents: Vec<_> = answer
-            .rows
-            .iter()
-            .map(|row| {
-                assert_eq!(row.values.len(), 3, "one computed column, appended last");
-                row.values[2].kind.clone()
-            })
-            .collect();
-        exponents.sort_by_key(|kind| format!("{kind:?}"));
-        assert_eq!(
-            exponents,
-            vec![
-                Some(wire::value::Kind::Integer(0)),
-                Some(wire::value::Kind::Integer(3)),
-            ]
-        );
-
-        asked.select = vec!["id".to_owned()];
-        let refused = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(asked),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect_err("no currency, no exponent");
-        assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
@@ -1043,232 +872,5 @@ mod tests {
         }
         assert_eq!(vault.self_id().expect("read"), None);
         let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    /// A LOCKER ITEM IS AN ENTITY, AND THE WIRE'S PAGE SERVES IT ONLY TO A READ
-    /// NAMED FOR LOCKER (#1135, L4). A page over `entity` or `edge` under any
-    /// other name is given the page without the item's row or its edges; the
-    /// kind's own tables are not tables a screen pages at all.
-    #[test]
-    fn a_page_serves_a_locker_item_only_to_a_read_named_for_locker() {
-        let scratch = centraid_ontology::scratch::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = Registry::with_system_commands().expect("the registry builds");
-        let owner = Principal::owner("test-device");
-        for (name, input) in [
-            (
-                "locker.add_item",
-                serde_json::json!({"item_id": "lk1", "type": "login", "title": "Bank login"}),
-            ),
-            (
-                "flag.set",
-                serde_json::json!({"id": "lk1", "flag": "starred"}),
-            ),
-        ] {
-            let ran = vault
-                .execute(
-                    &registry,
-                    &owner,
-                    &centraid_vault::commands::Command::new(name, input),
-                )
-                .expect("the command is answered");
-            assert_eq!(
-                ran.status,
-                centraid_vault::CommandStatus::Executed,
-                "{name}: {:?}",
-                ran.reason
-            );
-        }
-        let ask = |name: &str, from: &str, select: &[&str], sort: &str, pk: &str| {
-            let mut asked = query(select, sort, pk);
-            asked.name = name.to_owned();
-            asked.from = from.to_owned();
-            page(
-                &vault,
-                &wire::PageRequest {
-                    query: Some(asked),
-                    limit: 100,
-                    after: None,
-                },
-            )
-        };
-        let titles = |answer: &wire::Page| -> Vec<String> {
-            answer
-                .rows
-                .iter()
-                .filter_map(|row| match &row.values[1].kind {
-                    Some(wire::value::Kind::Text(text)) => Some(text.clone()),
-                    _ => None,
-                })
-                .collect()
-        };
-        for name in ["test", "home.people", "reminders.trash", "assist.native"] {
-            let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
-            assert!(
-                !titles(&answer).contains(&"Bank login".to_owned()),
-                "{name}"
-            );
-            let edges =
-                ask(name, "edge", &["from_id", "to_id"], "from_id", "to_id").expect("a page");
-            assert!(edges.rows.is_empty(), "{name} saw a Locker edge");
-        }
-        for name in [
-            "home.locker",
-            "locker.trash",
-            "locker.phone.shelves",
-            "assist.native.entity",
-        ] {
-            let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
-            assert!(titles(&answer).contains(&"Bank login".to_owned()), "{name}");
-        }
-        let edges = ask(
-            "locker.phone.tags",
-            "edge",
-            &["from_id", "to_id"],
-            "from_id",
-            "to_id",
-        )
-        .expect("a page");
-        assert_eq!(edges.rows.len(), 1);
-        // The kind's own table is not a table any screen pages.
-        let refused = ask("locker.phone.rows", "locker_item", &["id"], "id", "id")
-            .expect_err("`locker_item` is not a paged table");
-        assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    /// THE NEW LOCKER LINKS ARE EDGES THAT START AT THE ITEM, AND STAY BEHIND THE
-    /// WALL (#1173, O2/O4). A Locker item that is `about` an account, a place or a
-    /// person, or `with` one, is hidden from every page not named for Locker, from
-    /// the edge's start as from its end: People's read of the edges that end at a
-    /// person must not see the item.
-    #[test]
-    fn a_locker_items_links_to_a_person_an_account_and_a_place_stay_behind_the_wall() {
-        let scratch = centraid_ontology::scratch::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = Registry::with_system_commands().expect("the registry builds");
-        let owner = Principal::owner("test-device");
-        let run = |name: &str, input: serde_json::Value| -> serde_json::Value {
-            let ran = vault
-                .execute(
-                    &registry,
-                    &owner,
-                    &centraid_vault::commands::Command::new(name, input),
-                )
-                .expect("the command is answered");
-            assert_eq!(
-                ran.status,
-                centraid_vault::CommandStatus::Executed,
-                "{name}: {:?}",
-                ran.reason
-            );
-            ran.output
-        };
-        let id = |output: serde_json::Value| output["id"].as_str().expect("an id").to_owned();
-        let person = id(run("person.add", serde_json::json!({"title": "Maya"})));
-        let account = id(run(
-            "account.add",
-            serde_json::json!({"title": "Everyday", "type": "checking", "currency": "USD"}),
-        ));
-        let place = id(run("place.add", serde_json::json!({"title": "Home"})));
-        run(
-            "locker.add_item",
-            serde_json::json!({"item_id": "lk1", "type": "login", "title": "Bank login"}),
-        );
-        for (rel, to) in [
-            ("about", &person),
-            ("with", &person),
-            ("about", &account),
-            ("about", &place),
-        ] {
-            run(
-                "edge.add",
-                serde_json::json!({"from": "lk1", "rel": rel, "to": to}),
-            );
-        }
-        // A link the item starts to a note (an item may start one and is never the end of one,
-        // #1185): Notes does not follow it, because the edge and the item are not served to Notes.
-        let note = id(run(
-            "note.create",
-            serde_json::json!({"title": "Banking", "body": "see the login"}),
-        ));
-        run(
-            "edge.add",
-            serde_json::json!({"from": "lk1", "rel": "links", "to": note}),
-        );
-        let ask = |name: &str, to: Option<&str>| {
-            let mut asked = query(&["from_id", "to_id"], "from_id", "to_id");
-            asked.name = name.to_owned();
-            asked.from = "edge".to_owned();
-            if let Some(to) = to {
-                asked.r#where = Some("to_id = ?".to_owned());
-                asked.bind = vec![wire::Value {
-                    kind: Some(wire::value::Kind::Text(to.to_owned())),
-                }];
-            }
-            page(
-                &vault,
-                &wire::PageRequest {
-                    query: Some(asked),
-                    limit: 100,
-                    after: None,
-                },
-            )
-            .expect("a page")
-        };
-        for name in [
-            "home.people",
-            "people.vault.in",
-            "notes.library",
-            "assist.native",
-        ] {
-            for to in [
-                None,
-                Some(person.as_str()),
-                Some(account.as_str()),
-                Some(place.as_str()),
-            ] {
-                assert!(
-                    ask(name, to).rows.is_empty(),
-                    "{name} saw a Locker link ({to:?})"
-                );
-            }
-        }
-        assert_eq!(
-            ask("locker.phone.tags", None).rows.len(),
-            5,
-            "Locker's own read sees its four links and the link it started to the note"
-        );
-        assert!(
-            ask("notes.library", Some(note.as_str())).rows.is_empty(),
-            "a link from the Locker is not followed from Notes"
-        );
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    #[test]
-    fn the_stubs_are_typed_refusals_and_never_empty_answers() {
-        assert!(matches!(
-            search("anything"),
-            Err(CoreError::NotYetAvailable { what: "search", .. })
-        ));
-        assert!(matches!(
-            resolve("anything"),
-            Err(CoreError::NotYetAvailable {
-                what: "resolve",
-                ..
-            })
-        ));
-        assert!(matches!(
-            content("anything"),
-            Err(CoreError::NotYetAvailable {
-                what: "content",
-                ..
-            })
-        ));
     }
 }

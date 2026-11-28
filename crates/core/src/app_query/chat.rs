@@ -15,9 +15,12 @@
 //! words or a card.
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_assist::native::member::qualifier_of_code;
+use centraid_assist::native::meta::KINDS;
+use centraid_assist::native_turn::cards::card_kind;
 use centraid_search::{Answer as Found, Principal, Search, SearchError, SearchRequest};
 use centraid_vault::Vault;
-use centraid_vault::chat::{StoredAttachment, StoredMessage, ThreadRow};
+use centraid_vault::chat::{StoredAttachment, StoredCard, StoredMessage, ThreadRow};
 
 use super::{RecordingSearch, VaultDoor, corrected_search, filled, settle};
 use crate::error::{CoreError, Result};
@@ -99,24 +102,30 @@ fn message_to_wire(message: StoredMessage) -> wire::ChatStoredMessage {
             .filter(|word| word.as_str() == "doc_truncated")
             .map(|_| wire::AssistNotice::DocTruncated as i32)
             .collect(),
-        cards: message
-            .cards
-            .into_iter()
-            .map(|card| wire::ChatStoredCard {
-                app: card.app,
-                entity: card.entity,
-                id: card.row_id,
-                qualifier: card.qualifier,
-                title: card.title,
-                subtitle: card.subtitle,
-                meta: card.meta,
-            })
-            .collect(),
+        cards: message.cards.into_iter().map(card_to_wire).collect(),
         attachments: message
             .attachments
             .into_iter()
             .map(attachment_to_wire)
             .collect(),
+    }
+}
+
+/// A stored card as the wire draws it: the app and the entity word of its kind, the title read now,
+/// and no second line (a card keeps no word of its item). A card whose item is gone names no app.
+fn card_to_wire(card: StoredCard) -> wire::ChatStoredCard {
+    let how = KINDS
+        .iter()
+        .find(|spec| spec.entity == card.kind)
+        .and_then(|spec| card_kind(spec.kind));
+    wire::ChatStoredCard {
+        app: how.map(|how| how.app.id().to_owned()).unwrap_or_default(),
+        entity: how.map(|how| how.entity.to_owned()).unwrap_or_default(),
+        id: card.row_id,
+        qualifier: qualifier_of_code(&card.qualifier).unwrap_or(card.qualifier),
+        title: card.title,
+        subtitle: String::new(),
+        meta: String::new(),
     }
 }
 
@@ -200,7 +209,7 @@ pub(crate) fn threads(
                     Ok(Found::Denied(denial)) => {
                         return Ok((
                             Vec::new(),
-                            Some(centraid_apps_kit::Denial {
+                            Some(centraid_domain::Denial {
                                 code: denial.code,
                                 message: denial.message,
                                 revoked_at: denial.revoked_at,

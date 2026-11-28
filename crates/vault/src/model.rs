@@ -51,7 +51,8 @@ impl KindSpec {
     }
 }
 
-/// What an entity is. The `entity.kind` CHECK, in the same order.
+/// What an entity is: the rows of the `entity_kind` lookup, in the same order (`tests/lookups.rs`
+/// holds the two equal, attribute by attribute).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(usize)]
 pub enum Kind {
@@ -59,28 +60,27 @@ pub enum Kind {
     Place,
     Event,
     Task,
-    Activity,
+    Workout,
+    Touch,
+    Reading,
     Note,
     Document,
     Photo,
     Account,
     Txn,
     Thread,
+    LockerItem,
     Tag,
-    Flag,
     Category,
     WorkoutKind,
-    ActivityKind,
+    TouchKind,
     Relation,
     Notebook,
     Folder,
     Album,
     List,
-    Project,
-    Section,
-    Area,
+    TaskList,
     Calendar,
-    LockerItem,
 }
 
 const fn spec(
@@ -103,8 +103,10 @@ const fn spec(
     }
 }
 
-/// The single declarative registry for all 26 entity kinds, in `entity.kind` CHECK order.
-pub const KIND_SPECS: [KindSpec; 26] = [
+/// The single declarative registry for all 25 entity kinds, in `entity_kind` order.
+/// `link_end` is `entity_kind.linkable`: a kind a hand-made link, a `[[title]]` and a wildcard edge
+/// may end at (a reading, a chat, a container and a label are not).
+pub const KIND_SPECS: [KindSpec; 25] = [
     // Own host tables (items & threads).
     spec(
         Kind::Person,
@@ -119,13 +121,24 @@ pub const KIND_SPECS: [KindSpec; 26] = [
     spec(Kind::Event, "event", KindGroup::Own, true, true, true, true),
     spec(Kind::Task, "task", KindGroup::Own, true, true, true, true),
     spec(
-        Kind::Activity,
-        "activity",
+        Kind::Workout,
+        "workout",
         KindGroup::Own,
         true,
         true,
         true,
         true,
+    ),
+    spec(Kind::Touch, "touch", KindGroup::Own, true, true, true, true),
+    // A reading is an item with a trash and nothing else (F1): not a link end, not in search.
+    spec(
+        Kind::Reading,
+        "reading",
+        KindGroup::Own,
+        true,
+        false,
+        true,
+        false,
     ),
     spec(Kind::Note, "note", KindGroup::Own, true, true, true, true),
     spec(
@@ -148,28 +161,30 @@ pub const KIND_SPECS: [KindSpec; 26] = [
         false,
     ),
     spec(Kind::Txn, "txn", KindGroup::Own, true, true, true, true),
+    // A chat has the same trash as every kind (L5).
     spec(
         Kind::Thread,
         "thread",
         KindGroup::Own,
         true,
         false,
-        false,
+        true,
+        true,
+    ),
+    // A Locker item is an item like any other (K1): a link end.
+    spec(
+        Kind::LockerItem,
+        "locker_item",
+        KindGroup::Own,
+        true,
+        true,
+        true,
         true,
     ),
     // Hosted in `concept`.
     spec(
         Kind::Tag,
         "tag",
-        KindGroup::Concept,
-        false,
-        false,
-        false,
-        false,
-    ),
-    spec(
-        Kind::Flag,
-        "flag",
         KindGroup::Concept,
         false,
         false,
@@ -195,8 +210,8 @@ pub const KIND_SPECS: [KindSpec; 26] = [
         false,
     ),
     spec(
-        Kind::ActivityKind,
-        "activity_kind",
+        Kind::TouchKind,
+        "touch_kind",
         KindGroup::Concept,
         false,
         false,
@@ -250,31 +265,13 @@ pub const KIND_SPECS: [KindSpec; 26] = [
         false,
     ),
     spec(
-        Kind::Project,
-        "project",
+        Kind::TaskList,
+        "task_list",
         KindGroup::Container,
         true,
         false,
         true,
         true,
-    ),
-    spec(
-        Kind::Section,
-        "section",
-        KindGroup::Container,
-        false,
-        false,
-        true,
-        false,
-    ),
-    spec(
-        Kind::Area,
-        "area",
-        KindGroup::Container,
-        true,
-        false,
-        true,
-        false,
     ),
     spec(
         Kind::Calendar,
@@ -284,16 +281,6 @@ pub const KIND_SPECS: [KindSpec; 26] = [
         false,
         true,
         false,
-    ),
-    // Locker item: own host table, never a link target (owner ruling D11).
-    spec(
-        Kind::LockerItem,
-        "locker_item",
-        KindGroup::Own,
-        true,
-        false,
-        true,
-        true,
     ),
 ];
 
@@ -351,8 +338,8 @@ const fn const_str_eq(a: &str, b: &str) -> bool {
     true
 }
 
-const fn collect_host_tables() -> [&'static str; 14] {
-    let mut out = [""; 14];
+const fn collect_host_tables() -> [&'static str; 16] {
+    let mut out = [""; 16];
     let mut write = 0;
     let mut i = 0;
     while i < KIND_SPECS.len() {
@@ -372,38 +359,37 @@ const fn collect_host_tables() -> [&'static str; 14] {
         }
         i += 1;
     }
-    assert!(write == 14, "distinct host table count mismatch");
+    assert!(write == 16, "distinct host table count mismatch");
     out
 }
 
-/// The 14 distinct host tables across [`KIND_SPECS`], matching `history::shape::TABLES`'s `Role::Host` entries.
-pub const HOST_TABLES: [&str; 14] = collect_host_tables();
+/// The 16 distinct host tables across [`KIND_SPECS`], matching `history::shape::TABLES`'s `Role::Host` entries.
+pub const HOST_TABLES: [&str; 16] = collect_host_tables();
 
 impl Kind {
     /// Every kind, in the CHECK's order.
-    pub const ALL: [Self; 26] = collect_kinds(KindFilter::All);
+    pub const ALL: [Self; 25] = collect_kinds(KindFilter::All);
 
     /// The kinds a general link (`links`) may END at: the items of the nine apps and the three
     /// things items are about (#1185). A Locker item is never here: it may start a link and can
     /// never be the target of one (owner ruling D11).
-    pub const LINK_ENDS: [Self; 10] = collect_kinds(KindFilter::LinkEnd);
+    pub const LINK_ENDS: [Self; 12] = collect_kinds(KindFilter::LinkEnd);
 
     /// THE KINDS A MEMBER CAN ADD OR IMPORT, one definition for "the member holds something": every
     /// app's items and the containers they make (a workout, a place, an assistant thread, a notebook,
-    /// folder, album, list, project, area or calendar included). Not the concepts (a tag, a flag, a
-    /// category, a kind of workout or activity, a relation) and not a section, which only exists in
-    /// a project. `person` and `calendar` are here, but the founding person and the default Calendar the
+    /// folder, album, list, task list or calendar included). Not the concepts (a tag, a flag, a
+    /// category, a kind of workout or activity, a relation). `person` and `calendar` are here, but the founding person and the default Calendar the
     /// vault is founded with never count (see [`crate::first_item`]).
-    pub const MEMBER_ITEMS: [Self; 19] = collect_kinds(KindFilter::MemberItem);
+    pub const MEMBER_ITEMS: [Self; 20] = collect_kinds(KindFilter::MemberItem);
 
     /// The kinds `concept` hosts: the `concept.kind` CHECK.
-    pub const CONCEPTS: [Self; 6] = collect_kinds(KindFilter::Concept);
+    pub const CONCEPTS: [Self; 5] = collect_kinds(KindFilter::Concept);
 
     /// The kinds `container` hosts: the `container.kind` CHECK.
-    pub const CONTAINERS: [Self; 8] = collect_kinds(KindFilter::Container);
+    pub const CONTAINERS: [Self; 6] = collect_kinds(KindFilter::Container);
 
     /// The kinds [`crate::index::text::text_of`] indexes directly in `search`.
-    pub const SEARCHABLE: [Self; 15] = collect_kinds(KindFilter::Searchable);
+    pub const SEARCHABLE: [Self; 16] = collect_kinds(KindFilter::Searchable);
 
     /// This kind's declarative [`KindSpec`].
     #[must_use]
@@ -427,10 +413,10 @@ impl Kind {
         self.spec().link_end
     }
 
-    /// Whether a general link (`links`) may START at this kind: every end, and a Locker item.
+    /// Whether a general link may START at this kind: a link has no direction, so the same ends (K1).
     #[must_use]
     pub const fn is_link_start(self) -> bool {
-        self.is_link_end() || matches!(self, Self::LockerItem)
+        self.is_link_end()
     }
 
     #[must_use]
@@ -467,28 +453,25 @@ impl Kind {
     }
 }
 
-/// How two entities are joined. The `edge.rel` CHECK, in the same order.
+/// How two entities are joined by an `edge`: the relations `edge_shape` holds. A hand-made link is
+/// the `link` table (A4), a note's `[[title]]` a `mention` (A5), an invitee an `event_guest` (A6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Rel {
     Contains,
     Tagged,
     About,
-    Links,
     Attached,
-    Attendee,
     With,
     Related,
     Depicts,
 }
 
 impl Rel {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 7] = [
         Self::Contains,
         Self::Tagged,
         Self::About,
-        Self::Links,
         Self::Attached,
-        Self::Attendee,
         Self::With,
         Self::Related,
         Self::Depicts,
@@ -500,9 +483,7 @@ impl Rel {
             Self::Contains => "contains",
             Self::Tagged => "tagged",
             Self::About => "about",
-            Self::Links => "links",
             Self::Attached => "attached",
-            Self::Attendee => "attendee",
             Self::With => "with",
             Self::Related => "related",
             Self::Depicts => "depicts",
@@ -514,50 +495,33 @@ impl Rel {
         Self::ALL.into_iter().find(|rel| rel.as_str() == word)
     }
 
-    /// Whether the note at the edge's start is the one whose text the edge is
-    /// part of (`about` and `links`): adding or removing one touches the note.
+    /// Whether the note at the edge's start is the one whose text the edge is part of (`about`):
+    /// adding or removing one touches the note.
     #[must_use]
     pub const fn belongs_to_note(self) -> bool {
-        matches!(self, Self::About | Self::Links)
+        matches!(self, Self::About)
     }
 }
 
-/// The three flags the vault is founded with.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Flag {
-    Starred,
-    Pinned,
-    Archived,
-}
-
-impl Flag {
-    pub const ALL: [Self; 3] = [Self::Starred, Self::Pinned, Self::Archived];
-
-    #[must_use]
-    pub const fn key(self) -> &'static str {
-        match self {
-            Self::Starred => "starred",
-            Self::Pinned => "pinned",
-            Self::Archived => "archived",
-        }
-    }
-
-    /// The seeded entity id, `flag:<key>`.
-    #[must_use]
-    pub fn id(self) -> String {
-        concept_id(Kind::Flag, self.key())
-    }
-
-    #[must_use]
-    pub fn parse(word: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|flag| flag.key() == word)
-    }
-}
-
-/// The id of a seeded concept, or of a member's tag: `<kind>:<key>`.
+/// The id of a SEEDED concept: `<kind>:<key>`. A concept the member makes has a minted id and is
+/// found by `concept(kind, key)`, never by this.
 #[must_use]
 pub fn concept_id(kind: Kind, key: &str) -> String {
     format!("{}:{key}", kind.as_str())
+}
+
+/// Whether `id` is a canonical lowercase UUIDv7: the id grammar of every row a command makes
+/// (`entity.id`'s CHECK, A17). A seeded `kind:key` slug is founding's and is not one.
+#[must_use]
+pub fn is_minted_id(id: &str) -> bool {
+    let bytes = id.as_bytes();
+    bytes.len() == 36
+        && bytes.iter().enumerate().all(|(at, byte)| match at {
+            8 | 13 | 18 | 23 => *byte == b'-',
+            14 => *byte == b'7',
+            19 => matches!(byte, b'8'..=b'b'),
+            _ => matches!(byte, b'0'..=b'9' | b'a'..=b'f'),
+        })
 }
 
 /// The id of the calendar every vault is founded with.

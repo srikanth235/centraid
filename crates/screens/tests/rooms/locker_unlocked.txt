@@ -1,0 +1,44 @@
+room app_place key="locker" secure
+  header title="Locker" subtitle="Unlocked"
+    key add sym="Add" "Add item" #key/add
+    filter clear=#filter/clear
+      menu #locker-filter-menu
+        section "Type"
+          item "All types" checked #filter/type/all
+          item "Login" #filter/type/login
+          item "Card" #filter/type/card
+          item "Private note" #filter/type/note
+          item "Identity" #filter/type/identity
+          item "Wi-Fi" #filter/type/wifi
+          item "Password" #filter/type/password
+          item "SSH key" #filter/type/ssh_key
+          item "API credential" #filter/type/api_credential
+          item "Passport" #filter/type/passport
+          item "Bank account" #filter/type/bank_account
+          item "Driving licence" #filter/type/driving_licence
+          item "Software licence" #filter/type/software_licence
+          item "Crypto wallet" #filter/type/crypto_wallet
+          item "Membership" #filter/type/membership
+          item "Document" #filter/type/document
+  band home=#band/home search=#band/search more=#band/more
+    tab "Items" sym="Lock" selected #tab/items
+    tab "Starred" sym="Star" #tab/starred
+    menu #band/more/menu
+      section
+        item "Lock" #more/lock
+        item "Expiry alerts" #more/alerts
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    section #section/items "Items"
+      row #row/019a1111-1111-7111-8111-111111111111 "GitHub" meta="Login" swipe="Move to trash" #row/019a1111-1111-7111-8111-111111111111/swipe
+        menu #row/019a1111-1111-7111-8111-111111111111/menu
+          section
+            item "Open" #row/019a1111-1111-7111-8111-111111111111/menu/open
+            item "Edit" #row/019a1111-1111-7111-8111-111111111111/menu/edit
+            item "Change type" #row/019a1111-1111-7111-8111-111111111111/menu/type
+            item "Star" #row/019a1111-1111-7111-8111-111111111111/menu/star
+            item "Select" #row/019a1111-1111-7111-8111-111111111111/menu/select
+            item "Move or tag" #row/019a1111-1111-7111-8111-111111111111/menu/organize
+            item "Move to trash" destructive #row/019a1111-1111-7111-8111-111111111111/menu/trash
+  search placeholder="Search titles and usernames" #search
+  selection

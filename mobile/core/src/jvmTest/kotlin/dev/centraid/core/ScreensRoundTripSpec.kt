@@ -31,30 +31,27 @@ import kotlinx.coroutines.withTimeout
  */
 class ScreensRoundTripSpec : StringSpec({
 
-    "the runtime opens home, chat and backup, Home selected and rooted at Home, framed by a band" {
+    "the room runtime opens the home shell room through centraid_call" {
         val core = openRealCore()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         try {
             core.startReader()
-            val screens = Screens(core, scope)
-            screens.attach()
-            screens.start()
-            val navigation = screens.navigation.value!!
-            navigation.tabs.map { it.tab } shouldBe
-                listOf("home", "chat", "backup", "imports-camera-roll", "imports-files", "imports-made")
-            navigation.selected_tab shouldBe "home"
-            val root = navigation.tab("home").entries.single()
-            root.route!!.screen shouldBe "home.springboard"
-            // The band is Rust's: only the places whose tabs exist, Home lit.
-            navigation.band!!.tabs.map { it.tab to it.selected } shouldBe
-                listOf("home" to true, "chat" to false, "backup" to false)
-            // Home's widgets sit in the board's order (`CONTENT_ORDER`, crates/screens/src/shell/policy.rs):
-            // Calendar and Reminders are two apps with a tile each.
-            val home = screens.views.value[root.instance]!!.home!!
-            home.data_!!.tiles.map { it.app_id } shouldBe
-                listOf(
-                    "calendar", "reminders", "photos", "money", "health", "people", "locker", "notes", "docs",
-                )
+            val outcome = core.call(
+                centraid.core.v1.Envelope(
+                    request_id = 0,
+                    request = centraid.core.v1.Request(
+                        room = centraid.core.v1.RoomRequest(
+                            open_ = centraid.core.v1.RoomOpen(key = "home", tab = "home", root = true),
+                        ),
+                    ),
+                ),
+            )
+            val answered = outcome as CoreOutcome.Answered
+            val shown = answered.value.response!!.room!!.shown.single()
+            shown.tab shouldBe "home"
+            shown.room!!.key shouldBe "home"
+            shown.room!!.kind shouldBe centraid.core.v1.RoomKind.ROOM_KIND_HOME
+            shown.room!!.ready!!.blocks.isNotEmpty() shouldBe true
         } finally {
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
             core.close()

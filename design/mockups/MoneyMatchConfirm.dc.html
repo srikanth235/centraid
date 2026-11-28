@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Confirm transaction match</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<style>body{margin:0}button{font:inherit;color:inherit}</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:var(--surface-page);color:var(--text-ink);">
+<header style="display:flex;align-items:center;justify-content:space-between;padding:56px 18px 10px;"><h1 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.5px;">Review match</h1><a href="Money.dc.html" aria-label="Back to Money" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:22px;background:var(--glass-bar);border:1px solid var(--surface-border);color:var(--text-ink);text-decoration:none;">‹</a></header>
+<div style="margin:8px 14px 12px;background:var(--surface-card);border-radius:16px;overflow:hidden;">
+<div style="display:flex;align-items:center;gap:12px;padding:14px;border-bottom:1px solid var(--surface-line);"><div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:500;">Corner shop</div><div style="font-size:13px;color:var(--text-meta);margin-top:3px;">Hand entered · 14 Nov</div></div><div style="font-size:15px;font-weight:600;white-space:nowrap;">−$18.40</div></div>
+<div style="display:flex;align-items:center;gap:12px;padding:14px;border-bottom:1px solid var(--surface-line);"><div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:500;">Market Stall</div><div style="font-size:13px;color:var(--text-meta);margin-top:3px;">Statement line · 14 Nov</div></div><div style="font-size:15px;font-weight:600;white-space:nowrap;">−$18.40</div></div>
+</div>
+<p style="margin:0 18px 18px;color:var(--text-meta);font-size:14px;">The statement line will replace the hand entry after you confirm.</p>
+<div style="margin:0 18px;display:flex;flex-direction:column;gap:10px;"><button style="height:48px;border:0;border-radius:12px;background:var(--app-money-fill);color:var(--surface-page);font-size:16px;font-weight:600;">Confirm match</button><button style="height:48px;border:1px solid var(--surface-border);border-radius:12px;background:var(--surface-card);font-size:16px;font-weight:600;">Dismiss pair</button></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

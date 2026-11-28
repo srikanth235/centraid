@@ -13,16 +13,15 @@ name = "centraid_screens"
 path = "src/lib.rs"
 
 [dependencies]
+centraid-domain = { path = "../domain" }
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }
 # Quick add reads a typed date with the app's own `nl_date` parser (#1173).
-centraid-apps-calendar = { path = "../apps/calendar" }
-centraid-apps-reminders = { path = "../apps/reminders" }
 # The folder walk: a document's path, a folder page's crumbs and a Move sheet's labels are
 # the docs crate's one `folder_path` (#1135).
-centraid-apps-docs = { path = "../apps/docs" }
 # The chat's scopes are the assistant's apps (`App::ALL`) and a scope's name is the app's own.
 centraid-assist = { path = "../assist" }
+centraid-search = { path = "../search" }
 prost.workspace = true
 serde_json.workspace = true
 base64.workspace = true
@@ -30,7 +29,6 @@ base64.workspace = true
 centraid-design = { path = "../design" }
 # Locker's one-time-code seed rule is the app crate's (`totp::seed_of`): the
 # editor says why a seed is refused with the core's own sentence, not a copy.
-centraid-apps-locker = { path = "../apps/locker" }
 # The generator draws from the operating system's CSPRNG.
 rand.workspace = true
 zeroize = "1"

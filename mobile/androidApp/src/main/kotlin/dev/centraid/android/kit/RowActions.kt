@@ -31,7 +31,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.invisibleToUser
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -120,7 +120,7 @@ public fun KitSwipeRow(
                         // the row's own custom actions below, and the row's long press is the same menu.
                         .semantics {
                             role = Role.Button
-                            if (offset.value > -1f) invisibleToUser()
+                            if (offset.value > -1f) hideFromAccessibility()
                         },
                     contentAlignment = Alignment.Center,
                 ) {

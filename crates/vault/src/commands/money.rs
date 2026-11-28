@@ -1,55 +1,51 @@
-//! Money's verbs: an account, the lines of its statement, a month's plan, a
-//! balance the bank stated, and the member's categories
-//! ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
+//! Money's verbs for accounts, categories, budgets and checkpoints, and the reads a screen makes
+//! of them ([#1135](https://github.com/srikanth235/centraid/issues/1135), #1214).
 //!
-//! Money reads a bank or card statement the member imported and says where it
-//! went. **Nothing stored is a figure**: no balance, total or rollup is written;
-//! a screen derives them at read time. What is written is a decision (a name, a
-//! category, a plan, a rule) or a fact the bank stated (a line, a checkpoint).
+//! Money says where the member's money went. **Nothing stored is a figure**: no balance, total or
+//! rollup is written; a screen derives them at read time ([`balance_on`], [`spending_in_month`],
+//! [`budgets_of_month`]). What is written is a decision (a name, a category, a budget, a rule) or a
+//! fact the bank stated (a line, a checkpoint).
 //!
-//! - **An account** is an entity with a currency, a type and the balance it
-//!   opened with on a day (`opening_on`: lines on or before it are already in that balance). Its bank number, when it has one, and the column layout its
-//!   statements were last read with live on the **statement origin** that fills
-//!   it (`origin.ref`, `origin.config`); with no number the origin's `ref` is the
-//!   account's own id, so every account has exactly one origin from birth.
-//!   Closing is the `archived` flag and a rename is `entity.retitle`: nothing
-//!   here duplicates a shared verb.
-//! - **A line** is `follow.statement`'s: the vault adds a line once, a re-import
-//!   writes nothing, and a line is never edited (the schema refuses it). Money's
-//!   own verbs on a line are a category, a void and a transfer. **The amount is
-//!   signed: money out is negative.**
-//! - **A category** is a concept; a group is a category with no parent. Its id is
-//!   its key, so asking for a category that exists is the same ask.
-//! - **A plan** (`budget`) is a category's amount for a month, and a checkpoint is
-//!   a balance the bank stated that a derived balance is compared with.
+//! - **An account** is an entity with a type (a lookup: `account_type`), a currency (changing it
+//!   rescales every figure kept in it, and is refused when one would lose a fraction), and the
+//!   balance it opened with on a day (`opening_on`: lines on or before it
+//!   are already in that balance). A statement origin fills it only once a statement is read or its
+//!   bank number or column layout is remembered (`origin.ref`, `origin.config`): an account kept by
+//!   hand has none. Closing is the `archived` flag, a rename is `entity.retitle`, and trashing an
+//!   account takes its lines with it, as a holder takes what it holds (`entity.trash`).
+//! - **A line** is [`super::txn`]'s: entered by hand on any account or stated by a bank, with its
+//!   categories in `txn_split` (one place, E3). **The amount is signed: money out is negative.**
+//! - **A category** is a concept; a group is a category with no parent. Its position in the
+//!   hierarchy is its home (`entity.parent_id`).
+//! - **A budget** is a category's amount for a month in the vault's currency (it has no currency of
+//!   its own), and a checkpoint is a balance the bank stated that a derived balance is compared with.
+//!   Neither is part of a category's snapshot (B1): setting one writes no copy of the others.
+
+use std::collections::BTreeMap;
 
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
-use crate::commands::entity::{self, STALE_GUARD, with_rev};
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
+use crate::commands::entity::{STALE_GUARD, with_rev};
+use crate::commands::txn_portable::exponent;
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::Result;
-use crate::model::{Flag, Kind, concept_id, fold_label};
-
-/// The vocabulary of `account.type`, held equal to the CHECK by a test.
-pub const ACCOUNT_TYPES: [&str; 4] = ["checking", "savings", "credit_card", "cash"];
-
-/// The vocabulary of `txn.status`, held equal to the CHECK by a test.
-pub const TXN_STATUSES: [&str; 3] = ["pending", "posted", "void"];
-
-/// The most lines one `txn.categorize` names.
-pub const CATEGORIZE_MAX: usize = 2_000;
+use crate::model::{Kind, fold_label};
 
 // ---------------------------------------------------------------------------
 // Small helpers. SQL lives in `crates/vault` by construction.
 // ---------------------------------------------------------------------------
 
-/// Every month a category has a plan for, read when two categories merge: a seek by the primary
-/// key `(category_id, month)`. `index_walks.rs` plans it.
+/// Every month a category has a budget for: a seek by the primary
+/// key `(category_id, month)`. `money_walks.rs` plans it.
 pub const PLANS_OF_CATEGORY: &str =
-    "SELECT month, amount_minor, currency, carry FROM budget WHERE category_id = ?1";
+    "SELECT month, amount_minor, carry FROM budget WHERE category_id = ?1";
 
-fn unless(ok: bool, sentence: &str) -> Option<String> {
+/// A category's budgets of one month, across every category: a seek by `budget_by_month`.
+pub const BUDGETS_OF_MONTH: &str =
+    "SELECT category_id, amount_minor, carry FROM budget WHERE month = ?1 ORDER BY category_id";
+
+pub(crate) fn unless(ok: bool, sentence: &str) -> Option<String> {
     (!ok).then(|| sentence.to_owned())
 }
 
@@ -62,15 +58,7 @@ pub(crate) fn is_live(connection: &Connection, id: &str, kind: Kind) -> Result<b
     )?)
 }
 
-fn is_archived(connection: &Connection, id: &str) -> Result<bool> {
-    Ok(connection.query_row(
-        "SELECT EXISTS (SELECT 1 FROM edge WHERE from_id = ?1 AND rel = 'tagged' AND to_id = ?2)",
-        [id, &Flag::Archived.id()],
-        |row| row.get(0),
-    )?)
-}
-
-fn is_free(connection: &Connection, id: &str) -> Result<bool> {
+pub(crate) fn is_free(connection: &Connection, id: &str) -> Result<bool> {
     Ok(!connection.query_row(
         "SELECT EXISTS (SELECT 1 FROM entity WHERE id = ?1)",
         [id],
@@ -92,17 +80,34 @@ fn integer(ctx: &CommandCtx<'_, '_>, key: &str) -> Option<i64> {
 }
 
 /// A name with its runs of whitespace collapsed.
-fn squash(text: &str) -> String {
+pub(crate) fn squash(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Whether a category, live and not archived, is there to file a line under.
+/// A sentence when a category, live and not archived, is not there to file a line under.
 pub(crate) fn fileable(connection: &Connection, id: &str) -> Result<Option<String>> {
-    if !is_live(connection, id, Kind::Category)? {
-        return Ok(Some("There is no such category.".to_owned()));
-    }
-    Ok(is_archived(connection, id)?
-        .then(|| "That category is archived. Unarchive it first.".to_owned()))
+    let held: Option<bool> = connection
+        .query_row(
+            "SELECT archived_at IS NOT NULL FROM entity
+              WHERE id = ?1 AND kind = 'category' AND deleted_at IS NULL",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(match held {
+        None => Some("There is no such category.".to_owned()),
+        Some(true) => Some("That category is archived. Unarchive it first.".to_owned()),
+        Some(false) => None,
+    })
+}
+
+/// Whether the text names a kind of account (a row of the `account_type` lookup).
+fn is_account_type(connection: &Connection, code: &str) -> Result<bool> {
+    Ok(connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM vocab WHERE domain = 'account_type' AND code = ?1)",
+        [code],
+        |row| row.get(0),
+    )?)
 }
 
 // ---------------------------------------------------------------------------
@@ -129,12 +134,43 @@ fn number_is_taken(connection: &Connection, number: &str, except: Option<&str>) 
 
 fn name_is_taken(connection: &Connection, name: &str, except: Option<&str>) -> Result<bool> {
     Ok(connection.query_row(
-        "SELECT EXISTS (SELECT 1 FROM account a JOIN entity e ON e.id = a.id
-                         WHERE e.deleted_at IS NULL AND a.id IS NOT ?2
+        "SELECT EXISTS (SELECT 1 FROM entity e
+                         WHERE e.kind = 'account' AND e.deleted_at IS NULL AND e.id IS NOT ?2
                            AND lower(trim(e.title)) = lower(trim(?1)))",
         rusqlite::params![name, except],
         |row| row.get(0),
     )?)
+}
+
+/// The statement origin that fills an account, made when there is none (a bank number or a
+/// remembered layout is a fact about it, and an import finds it by its home).
+fn ensure_origin(ctx: &CommandCtx<'_, '_>, account_id: &str, number: Option<&str>) -> Result<()> {
+    let connection = ctx.connection();
+    let held: bool = connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM origin WHERE fills = ?1)",
+        [account_id],
+        |row| row.get(0),
+    )?;
+    if held {
+        return Ok(());
+    }
+    let title: String = connection.query_row(
+        "SELECT title FROM entity WHERE id = ?1",
+        [account_id],
+        |row| row.get(0),
+    )?;
+    connection.execute(
+        "INSERT INTO origin (id, system, ref, label, fills, fills_kind, created_at)
+         VALUES (?1, 'statement', ?2, ?3, ?4, 'account', ?5)",
+        rusqlite::params![
+            ctx.next_id(),
+            origin_ref(account_id, number),
+            title,
+            account_id,
+            ctx.now
+        ],
+    )?;
+    Ok(())
 }
 
 fn pre_new_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -153,8 +189,11 @@ fn pre_new_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             "You already have an account with that name.".to_owned(),
         ));
     }
+    if !is_account_type(connection, ctx.required_str("type")?)? {
+        return Ok(Some("That is not a kind of account.".to_owned()));
+    }
     if let Some(currency) = ctx.optional_str("currency")
-        && currency.trim().len() != 3
+        && !is_currency(currency)
     {
         return Ok(Some(
             "A currency is a three-letter code like USD.".to_owned(),
@@ -169,6 +208,12 @@ fn pre_new_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         ));
     }
     opening_sentence(ctx)
+}
+
+/// A currency code: three letters. It is kept upper-case.
+fn is_currency(text: &str) -> bool {
+    let text = text.trim();
+    text.len() == 3 && text.chars().all(|c| c.is_ascii_alphabetic())
 }
 
 /// An opening balance is as of a real day; one that is not nothing needs its day, or no
@@ -226,27 +271,14 @@ fn add_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             i64::from(input.on_budget.unwrap_or(true)),
         ],
     )?;
-    connection.execute(
-        "INSERT INTO origin (id, system, ref, label, fills, created_at)
-         VALUES (?1, 'statement', ?2, ?3, ?4, ?5)",
-        rusqlite::params![
-            ctx.next_id(),
-            origin_ref(&id, input.external_ref.as_deref()),
-            title,
-            id,
-            ctx.now
-        ],
-    )?;
-    Ok(json!({ "id": id, "currency": currency }))
-}
-
-/// checking and savings are one class; a card and cash are others.
-fn class(account_type: &str) -> u8 {
-    match account_type {
-        "credit_card" => 1,
-        "cash" => 2,
-        _ => 0,
+    if let Some(number) = input
+        .external_ref
+        .as_deref()
+        .filter(|number| !number.trim().is_empty())
+    {
+        ensure_origin(ctx, &id, Some(number))?;
     }
+    Ok(json!({ "id": id, "currency": currency }))
 }
 
 fn pre_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -255,6 +287,96 @@ fn pre_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         is_live(ctx.connection(), id, Kind::Account)?,
         "There is no such account.",
     ))
+}
+
+/// The tables that keep a figure in an account's currency, each with the filter that reaches the
+/// account's rows. `original_*` (another currency) and a budget (per category) are not among them.
+const FIGURES: [(&str, &str, &str); 4] = [
+    ("account", "opening_minor", "id = ?1"),
+    ("txn", "amount_minor", "account_id = ?1"),
+    (
+        "txn_split",
+        "amount_minor",
+        "txn_id IN (SELECT id FROM txn WHERE account_id = ?1)",
+    ),
+    ("checkpoint", "balance_minor", "account_id = ?1"),
+];
+
+/// How an account's figures scale when its currency changes: `Some((true, f))` multiplies by `f`,
+/// `Some((false, f))` divides, `None` leaves them be.
+fn scale(connection: &Connection, id: &str, currency: &str) -> Result<Option<(bool, i64)>> {
+    let held: String =
+        connection.query_row("SELECT currency FROM account WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })?;
+    let (old, new) = (exponent(&held), exponent(currency));
+    let factor = 10_i64.pow(old.abs_diff(new));
+    Ok((old != new).then_some((new > old, factor)))
+}
+
+/// A sentence when changing the account to `currency` would lose a fraction of a figure or
+/// overflow one.
+fn rescale_sentence(connection: &Connection, id: &str, currency: &str) -> Result<Option<String>> {
+    let Some((up, factor)) = scale(connection, id, currency)? else {
+        return Ok(None);
+    };
+    for (table, column, filter) in FIGURES {
+        if up {
+            let widest: Option<i64> = connection.query_row(
+                &format!("SELECT MAX(ABS({column})) FROM {table} WHERE {filter}"),
+                [id],
+                |row| row.get(0),
+            )?;
+            if widest.is_some_and(|widest| widest.checked_mul(factor).is_none()) {
+                return Ok(Some(format!(
+                    "A figure in this account is too large to hold in {currency}."
+                )));
+            }
+        } else {
+            let lost: i64 = connection.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM {table} WHERE {filter} AND {column} % {factor} <> 0"
+                ),
+                [id],
+                |row| row.get(0),
+            )?;
+            if lost > 0 {
+                return Ok(Some(format!(
+                    "{currency} has no cents, and {lost} figure{} in this account {}.",
+                    if lost == 1 { "" } else { "s" },
+                    if lost == 1 { "has some" } else { "have some" },
+                )));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Give the account `currency`, keeping every figure in the account's currency worth what it was:
+/// the digits scale by the change of the currencies' minor units. Whether anything changed.
+fn relabel(connection: &Connection, id: &str, currency: &str) -> Result<bool> {
+    let Some(scaled) = scale(connection, id, currency)? else {
+        return Ok(connection.execute(
+            "UPDATE account SET currency = ?2 WHERE id = ?1 AND currency IS NOT ?2",
+            [id, currency],
+        )? > 0);
+    };
+    let (up, factor) = scaled;
+    let operator = if up { '*' } else { '/' };
+    for (table, column, filter) in FIGURES.iter().skip(1) {
+        connection.execute(
+            &format!("UPDATE {table} SET {column} = {column} {operator} {factor} WHERE {filter}"),
+            [id],
+        )?;
+    }
+    connection.execute(
+        &format!(
+            "UPDATE account SET currency = ?2, opening_minor = opening_minor {operator} {factor}
+              WHERE id = ?1"
+        ),
+        [id, currency],
+    )?;
+    Ok(true)
 }
 
 fn pre_edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -274,16 +396,19 @@ fn pre_edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             ));
         }
     }
-    if let Some(wanted) = ctx.optional_str("type") {
-        let current: String =
-            connection.query_row("SELECT type FROM account WHERE id = ?1", [id], |row| {
-                row.get(0)
-            })?;
-        if class(wanted) != class(&current) {
+    if let Some(wanted) = ctx.optional_str("type")
+        && !is_account_type(connection, wanted)?
+    {
+        return Ok(Some("That is not a kind of account.".to_owned()));
+    }
+    if let Some(currency) = ctx.optional_str("currency") {
+        if !is_currency(currency) {
             return Ok(Some(
-                "An account can change between checking and savings; a card or cash is its own kind of account."
-                    .to_owned(),
+                "A currency is a three-letter code like USD.".to_owned(),
             ));
+        }
+        if let Some(sentence) = rescale_sentence(connection, id, &currency.trim().to_uppercase())? {
+            return Ok(Some(sentence));
         }
     }
     if let Some(number) = ctx.optional_str("external_ref")
@@ -303,6 +428,7 @@ struct EditAccountInput {
     title: Option<String>,
     #[serde(rename = "type")]
     account_type: Option<String>,
+    currency: Option<String>,
     on_budget: Option<bool>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
     external_ref: Option<Option<String>>,
@@ -319,7 +445,7 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             "UPDATE entity SET title = ?2 WHERE id = ?1 AND title IS NOT ?2",
             [id, &name],
         )? > 0;
-        // The origin is labelled by the account's name.
+        // The origin, when there is one, is labelled by the account's name.
         connection.execute(
             "UPDATE origin SET label = ?2 WHERE system = 'statement' AND fills = ?1",
             [id, &name],
@@ -331,6 +457,17 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             [id, account_type],
         )? > 0;
     }
+    let mut replaced = None;
+    if let Some(currency) = input.currency.as_deref() {
+        let held: String =
+            connection.query_row("SELECT currency FROM account WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })?;
+        if relabel(connection, id, &currency.trim().to_uppercase())? {
+            changed = true;
+            replaced = Some(held);
+        }
+    }
     if let Some(budget) = input.on_budget {
         changed |= connection.execute(
             "UPDATE account SET on_budget = ?2 WHERE id = ?1 AND on_budget IS NOT ?2",
@@ -338,6 +475,10 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         )? > 0;
     }
     if let Some(number) = input.external_ref {
+        let number = number.filter(|number| !number.trim().is_empty());
+        if number.is_some() {
+            ensure_origin(ctx, id, number.as_deref())?;
+        }
         changed |= connection.execute(
             "UPDATE origin SET ref = ?2 WHERE system = 'statement' AND fills = ?1 AND ref IS NOT ?2",
             rusqlite::params![id, origin_ref(id, number.as_deref())],
@@ -346,7 +487,11 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     if changed {
         ctx.touch(id)?;
     }
-    with_rev(ctx, id, json!({ "id": id, "changed": changed }))
+    let mut answer = json!({ "id": id, "changed": changed });
+    if let Some(held) = replaced {
+        answer["replaced"] = json!({ "currency": held });
+    }
+    with_rev(ctx, id, answer)
 }
 
 fn pre_set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -398,15 +543,22 @@ struct RememberLayoutInput {
     layout: Option<Json>,
 }
 
-/// Remember how the account's statements are laid out, for the next one. A `null` layout forgets
-/// it. The answer names the layout it replaced (`null` when none was remembered), which is how
-/// the act is taken back.
+/// Remember how the account's statements are laid out, for the next one: the layout is the
+/// statement origin's `config` (a JSON object the vault defines, so it carries `"v":1`). A `null`
+/// layout forgets it. The answer names the layout it replaced (`null` when none was remembered),
+/// which is how the act is taken back.
 fn remember_layout(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: RememberLayoutInput = ctx.parse_input()?;
-    let stored = input
-        .layout
-        .filter(|layout| !layout.is_null())
-        .map(|layout| layout.to_string());
+    let layout = input.layout.filter(|layout| !layout.is_null());
+    if layout.is_some() {
+        ensure_origin(ctx, &input.id, None)?;
+    }
+    let stored = layout.map(|mut layout| {
+        if let Some(object) = layout.as_object_mut() {
+            object.insert("v".to_owned(), json!(1));
+        }
+        layout.to_string()
+    });
     let held: Option<String> = ctx
         .connection()
         .query_row(
@@ -427,240 +579,179 @@ fn remember_layout(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let replaced = held
         .as_deref()
         .and_then(|text| serde_json::from_str::<Json>(text).ok())
+        .map(|mut layout| {
+            if let Some(object) = layout.as_object_mut() {
+                object.remove("v");
+            }
+            layout
+        })
         .unwrap_or(Json::Null);
     Ok(json!({ "saved": true, "replaced": { "layout": replaced } }))
 }
 
 // ---------------------------------------------------------------------------
-// Lines
+// What an account stood at, derived
 // ---------------------------------------------------------------------------
 
-/// A live line that is not void: what a category or a transfer can be set on.
-struct Line {
-    account_id: String,
-    currency: String,
-    amount_minor: i64,
-    status: String,
-    transfer_id: Option<String>,
+/// The statement behind [`balance_on`]: one range of the account's lines by day. `money.rs`'s plan
+/// test reads it.
+pub const POSTED_BETWEEN: &str = "SELECT COALESCE(SUM(t.amount_minor), 0)
+   FROM txn t CROSS JOIN entity e ON e.id = t.id
+  WHERE t.account_id = ?1 AND t.posted_on > ?2 AND t.posted_on <= ?3
+    AND t.status = 'posted' AND e.deleted_at IS NULL";
+
+/// The statement behind [`spending_in_month`]: the month's lines by day, each line's parts by key.
+pub const SPENDING_OF_MONTH: &str =
+    "SELECT a.currency, s.category_id, COALESCE(s.amount_minor, t.amount_minor)
+   FROM txn t
+   CROSS JOIN entity e ON e.id = t.id
+   CROSS JOIN account a ON a.id = t.account_id
+   LEFT JOIN txn_split s ON s.txn_id = t.id
+  WHERE t.posted_on >= ?1 AND t.posted_on < ?2 AND t.status = 'posted'
+    AND e.deleted_at IS NULL AND a.on_budget = 1
+    AND NOT EXISTS (SELECT 1 FROM transfer x WHERE x.a = t.id OR x.b = t.id)";
+
+/// The sum of an account's posted lines after `after` (exclusive; `None` is the start of time) and
+/// up to `until` (inclusive), the lines in the trash left out: a range of the account's lines by
+/// day (`txn_by_account_day`).
+fn posted_between(
+    connection: &Connection,
+    account_id: &str,
+    after: Option<&str>,
+    until: &str,
+) -> Result<i64> {
+    Ok(connection.query_row(
+        POSTED_BETWEEN,
+        rusqlite::params![account_id, after.unwrap_or(""), until],
+        |row| row.get(0),
+    )?)
 }
 
-fn line(connection: &Connection, id: &str) -> Result<Option<Line>> {
-    Ok(connection
+/// What the account stood at on `day`: the balance it opened with plus the posted lines after the
+/// day it opened on, up to `day`; before that day, the balance it opened with less the lines in
+/// between. Derived at read time and written nowhere. `None` when there is no such account.
+///
+/// # Errors
+/// A database error.
+pub fn balance_on(connection: &Connection, account_id: &str, day: &str) -> Result<Option<i64>> {
+    let Some((opening, opening_on)) = connection
         .query_row(
-            "SELECT t.account_id, t.currency, t.amount_minor, t.status,
-                    (SELECT CASE WHEN x.a = t.id THEN x.b ELSE x.a END FROM transfer x
-                      WHERE x.a = t.id OR x.b = t.id)
-               FROM txn t JOIN entity e ON e.id = t.id
-              WHERE t.id = ?1 AND e.deleted_at IS NULL",
-            [id],
-            |row| {
-                Ok(Line {
-                    account_id: row.get(0)?,
-                    currency: row.get(1)?,
-                    amount_minor: row.get(2)?,
-                    status: row.get(3)?,
-                    transfer_id: row.get(4)?,
-                })
-            },
-        )
-        .optional()?)
-}
-
-fn ids_of(ctx: &CommandCtx<'_, '_>) -> Vec<String> {
-    let mut seen = std::collections::BTreeSet::new();
-    ctx.input
-        .get("ids")
-        .and_then(Json::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Json::as_str)
-        .filter(|id| seen.insert(*id))
-        .map(str::to_owned)
-        .collect()
-}
-
-fn pre_categorize(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let connection = ctx.connection();
-    for id in ids_of(ctx) {
-        match line(connection, &id)? {
-            None => return Ok(Some("One of those is not a transaction.".to_owned())),
-            Some(found) if found.status == "void" => {
-                return Ok(Some("A removed transaction cannot be filed.".to_owned()));
-            }
-            Some(_) => {}
-        }
-    }
-    match ctx.optional_str("category_id") {
-        Some(category) => fileable(connection, category),
-        None => Ok(None),
-    }
-}
-
-#[derive(serde::Deserialize)]
-struct CategorizeInput {
-    ids: Vec<String>,
-    category_id: Option<String>,
-}
-
-fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let input: CategorizeInput = ctx.parse_input()?;
-    let mut seen = std::collections::BTreeSet::new();
-    let ids: Vec<String> = input
-        .ids
-        .into_iter()
-        .filter(|id| seen.insert(id.clone()))
-        .collect();
-    let category = input.category_id.as_deref();
-    let mut changed = Vec::new();
-    // The category each changed line held, kept only while they all held the same one: then the
-    // act is taken back by filing those lines under it again. Lines that held different ones are
-    // not put back by one act, so none is named.
-    let mut held: Option<Option<String>> = None;
-    let mut uniform = true;
-    for id in &ids {
-        let before: Option<String> = ctx.connection().query_row(
-            "SELECT category_id FROM txn WHERE id = ?1",
-            [id.as_str()],
-            |row| row.get(0),
-        )?;
-        if ctx.connection().execute(
-            "UPDATE txn SET category_id = ?2 WHERE id = ?1 AND category_id IS NOT ?2",
-            rusqlite::params![id, category],
-        )? > 0
-        {
-            if held.as_ref().is_some_and(|first| *first != before) {
-                uniform = false;
-            }
-            held.get_or_insert(before);
-            changed.push(id.clone());
-        }
-    }
-    let replaced = match held {
-        Some(category) if uniform => Some(json!({ "ids": changed, "category_id": category })),
-        _ => None,
-    };
-    let answer = json!({ "changed": changed.len(), "replaced": replaced });
-    // One line named is the record a revision is of: the answer carries the one the next save names.
-    match ids.as_slice() {
-        [only] => with_rev(ctx, only, answer),
-        _ => Ok(answer),
-    }
-}
-
-/// Let go of a line's transfer, and of the other half's.
-fn end_transfer(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<usize> {
-    let removed = ctx
-        .connection()
-        .execute("DELETE FROM transfer WHERE a = ?1 OR b = ?1", [id])?;
-    Ok(removed * 2)
-}
-
-fn pre_line(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    Ok(unless(
-        line(ctx.connection(), ctx.required_str("id")?)?.is_some(),
-        "That is not a transaction.",
-    ))
-}
-
-#[derive(serde::Deserialize)]
-struct TxnIdInput {
-    id: String,
-}
-
-fn void(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let input: TxnIdInput = ctx.parse_input()?;
-    // A removed line is no half of a transfer.
-    let ended = end_transfer(ctx, &input.id)?;
-    let voided = ctx.connection().execute(
-        "UPDATE txn SET status = 'void' WHERE id = ?1 AND status <> 'void'",
-        [input.id.as_str()],
-    )? > 0;
-    Ok(json!({ "voided": voided, "transfers_ended": ended }))
-}
-
-fn pre_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let connection = ctx.connection();
-    let (a, b) = (ctx.required_str("id")?, ctx.required_str("other_id")?);
-    if a == b {
-        return Ok(Some(
-            "A transfer is between two different transactions.".to_owned(),
-        ));
-    }
-    let (Some(first), Some(second)) = (line(connection, a)?, line(connection, b)?) else {
-        return Ok(Some("Both must be transactions.".to_owned()));
-    };
-    if first.status == "void" || second.status == "void" {
-        return Ok(Some(
-            "A removed transaction cannot be part of a transfer.".to_owned(),
-        ));
-    }
-    if first.account_id == second.account_id {
-        return Ok(Some(
-            "A transfer moves money between two accounts.".to_owned(),
-        ));
-    }
-    if (first.amount_minor < 0) == (second.amount_minor < 0) {
-        return Ok(Some(
-            "One side of a transfer is money out and the other money in.".to_owned(),
-        ));
-    }
-    if first.currency != second.currency {
-        return Ok(Some(
-            "Both sides of a transfer are in the same currency.".to_owned(),
-        ));
-    }
-    let elsewhere =
-        |found: &Line, other: &str| found.transfer_id.as_deref().is_some_and(|t| t != other);
-    Ok(unless(
-        !(elsewhere(&first, b) || elsewhere(&second, a)),
-        "One of those is already part of another transfer.",
-    ))
-}
-
-#[derive(serde::Deserialize)]
-struct LinkTransferInput {
-    id: String,
-    other_id: String,
-}
-
-/// Two lines are the two halves of one movement of the member's own money: one `transfer` row
-/// holds the pair, the lower id first, so either half finds its partner.
-fn link_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let input: LinkTransferInput = ctx.parse_input()?;
-    let (one, other) = (input.id.as_str(), input.other_id.as_str());
-    let (a, b) = if one < other {
-        (one, other)
-    } else {
-        (other, one)
-    };
-    let linked = ctx.connection().execute(
-        "INSERT INTO transfer (a, b) VALUES (?1, ?2) ON CONFLICT (a) DO NOTHING",
-        [a, b],
-    )? > 0;
-    Ok(json!({ "linked": linked }))
-}
-
-fn unlink_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let input: TxnIdInput = ctx.parse_input()?;
-    // The other half, named before the link goes: linking the two again takes the act back.
-    let other: Option<String> = ctx
-        .connection()
-        .query_row(
-            "SELECT CASE WHEN a = ?1 THEN b ELSE a END FROM transfer WHERE a = ?1 OR b = ?1",
-            [input.id.as_str()],
-            |row| row.get(0),
+            "SELECT opening_minor, opening_on FROM account WHERE id = ?1",
+            [account_id],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
         )
         .optional()?
-        .flatten();
-    let unlinked = end_transfer(ctx, &input.id)?;
-    Ok(json!({
-        "unlinked": unlinked,
-        "replaced": other.map(|other| json!({ "other_id": other }))
+    else {
+        return Ok(None);
+    };
+    Ok(Some(match opening_on.as_deref() {
+        None => opening + posted_between(connection, account_id, None, day)?,
+        Some(opened) if day >= opened => {
+            opening + posted_between(connection, account_id, Some(opened), day)?
+        }
+        Some(opened) => opening - posted_between(connection, account_id, Some(day), opened)?,
     }))
 }
 
+/// A balance the bank stated, and what the lines say it should have been.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckpointGap {
+    pub day: String,
+    pub stated_minor: i64,
+    pub derived_minor: i64,
+}
+
+/// An account's checkpoints, oldest first, each beside the balance the lines derive for its day.
+/// A gap is where a statement is missing a line or a hand line is wrong.
+///
+/// # Errors
+/// A database error.
+pub fn checkpoint_gaps(connection: &Connection, account_id: &str) -> Result<Vec<CheckpointGap>> {
+    let stated: Vec<(String, i64)> = connection
+        .prepare_cached(
+            "SELECT day, balance_minor FROM checkpoint WHERE account_id = ?1 ORDER BY day",
+        )?
+        .query_map([account_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    stated
+        .into_iter()
+        .map(|(day, stated_minor)| {
+            Ok(CheckpointGap {
+                derived_minor: balance_on(connection, account_id, &day)?.unwrap_or(0),
+                day,
+                stated_minor,
+            })
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
-// Plans and checkpoints
+// What a month spent, and what was planned
+// ---------------------------------------------------------------------------
+
+/// What a month holds in one currency and one category (`None`: no category): the signed sum of
+/// the parts filed there, so money out is negative.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Spent {
+    pub currency: String,
+    pub category_id: Option<String>,
+    pub amount_minor: i64,
+}
+
+/// The month's lines that count toward a plan, summed by currency and category: posted, on a
+/// budgeted account, not in the trash and not a half of a transfer (money moved between the
+/// member's own accounts is not spent). One walk of the month by day (`txn_by_day`) with a seek of
+/// each line's parts by key; the sum is made here, so the plan has no sort.
+///
+/// # Errors
+/// A database error.
+pub fn spending_in_month(connection: &Connection, month: &str) -> Result<Vec<Spent>> {
+    let first = format!("{month}-01");
+    let next: String =
+        connection.query_row("SELECT date(?1, '+1 month')", [&first], |row| row.get(0))?;
+    let mut statement = connection.prepare_cached(SPENDING_OF_MONTH)?;
+    let mut sums: BTreeMap<(String, Option<String>), i64> = BTreeMap::new();
+    let mut rows = statement.query([&first, &next])?;
+    while let Some(row) = rows.next()? {
+        *sums.entry((row.get(0)?, row.get(1)?)).or_default() += row.get::<_, i64>(2)?;
+    }
+    Ok(sums
+        .into_iter()
+        .map(|((currency, category_id), amount_minor)| Spent {
+            currency,
+            category_id,
+            amount_minor,
+        })
+        .collect())
+}
+
+/// What a category was budgeted for a month.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Budgeted {
+    pub category_id: String,
+    pub amount_minor: i64,
+    pub carry: bool,
+}
+
+/// Every budget of one month, in the vault's currency.
+///
+/// # Errors
+/// A database error.
+pub fn budgets_of_month(connection: &Connection, month: &str) -> Result<Vec<Budgeted>> {
+    Ok(connection
+        .prepare_cached(BUDGETS_OF_MONTH)?
+        .query_map([month], |row| {
+            Ok(Budgeted {
+                category_id: row.get(0)?,
+                amount_minor: row.get(1)?,
+                carry: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+// ---------------------------------------------------------------------------
+// Budgets and checkpoints
 // ---------------------------------------------------------------------------
 
 fn pre_plan(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -671,13 +762,6 @@ fn pre_plan(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if !is_live(connection, ctx.required_str("category_id")?, Kind::Category)? {
         return Ok(Some("There is no such category.".to_owned()));
     }
-    if let Some(currency) = ctx.optional_str("currency")
-        && currency.trim().len() != 3
-    {
-        return Ok(Some(
-            "A currency is a three-letter code like USD.".to_owned(),
-        ));
-    }
     Ok(None)
 }
 
@@ -686,7 +770,6 @@ struct SetPlanInput {
     month: String,
     category_id: String,
     amount_minor: Option<i64>,
-    currency: Option<String>,
     carry: Option<bool>,
 }
 
@@ -694,13 +777,13 @@ fn set_plan(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: SetPlanInput = ctx.parse_input()?;
     let (month, category) = (input.month.as_str(), input.category_id.as_str());
     // What the month held before, so the act is taken back by setting it again (or by removing
-    // the plan when there was none): a plan is no record, so the history keeps none.
-    let before: Option<(i64, String, bool)> = ctx
+    // the budget when there was none): a budget is no part of a record, so the history keeps none.
+    let before: Option<(i64, bool)> = ctx
         .connection()
         .query_row(
-            "SELECT amount_minor, currency, carry FROM budget WHERE month = ?1 AND category_id = ?2",
+            "SELECT amount_minor, carry FROM budget WHERE month = ?1 AND category_id = ?2",
             [month, category],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
     let replaced = |changed: bool| -> Json {
@@ -708,38 +791,28 @@ fn set_plan(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             return Json::Null;
         }
         match &before {
-            Some((amount, currency, carry)) => {
-                json!({ "amount_minor": amount, "currency": currency, "carry": carry })
-            }
+            Some((amount, carry)) => json!({ "amount_minor": amount, "carry": carry }),
             None => json!({ "amount_minor": null }),
         }
     };
     let Some(amount) = input.amount_minor else {
-        // `null` removes the plan for that month.
+        // `null` removes the budget for that month.
         let removed = ctx.connection().execute(
             "DELETE FROM budget WHERE month = ?1 AND category_id = ?2",
             [month, category],
         )? > 0;
         return Ok(json!({ "changed": removed, "replaced": replaced(removed) }));
     };
-    let currency = match input.currency.as_deref() {
-        Some(currency) => currency.trim().to_uppercase(),
-        None => ctx
-            .connection()
-            .query_row("SELECT currency FROM vault", [], |row| row.get(0))?,
-    };
     let carry = input.carry.map(i64::from);
     let changed = ctx.connection().execute(
-        "INSERT INTO budget (category_id, month, amount_minor, currency, carry)
-         VALUES (?1, ?2, ?3, ?4, COALESCE(?5, 0))
+        "INSERT INTO budget (category_id, month, amount_minor, carry)
+         VALUES (?1, ?2, ?3, COALESCE(?4, 0))
          ON CONFLICT (category_id, month) DO UPDATE SET
            amount_minor = excluded.amount_minor,
-           currency = excluded.currency,
-           carry = COALESCE(?5, budget.carry)
+           carry = COALESCE(?4, budget.carry)
          WHERE budget.amount_minor IS NOT excluded.amount_minor
-            OR budget.currency IS NOT excluded.currency
-            OR (?5 IS NOT NULL AND budget.carry IS NOT ?5)",
-        rusqlite::params![category, month, amount, currency, carry],
+            OR (?4 IS NOT NULL AND budget.carry IS NOT ?4)",
+        rusqlite::params![category, month, amount, carry],
     )? > 0;
     Ok(json!({ "changed": changed, "replaced": replaced(changed) }))
 }
@@ -789,19 +862,13 @@ fn set_carry(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 }
 
 fn pre_checkpoint(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    if let Some(sentence) = pre_account_at(ctx, "account_id")? {
-        return Ok(Some(sentence));
+    let connection = ctx.connection();
+    if !is_live(connection, ctx.required_str("account_id")?, Kind::Account)? {
+        return Ok(Some("There is no such account.".to_owned()));
     }
     Ok(unless(
-        is_day(ctx.connection(), ctx.required_str("day")?)?,
+        is_day(connection, ctx.required_str("day")?)?,
         "That is not a real date.",
-    ))
-}
-
-fn pre_account_at(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<Option<String>> {
-    Ok(unless(
-        is_live(ctx.connection(), ctx.required_str(key)?, Kind::Account)?,
-        "There is no such account.",
     ))
 }
 
@@ -848,7 +915,8 @@ fn pre_new_category(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             }
             let held: Option<(String, Option<String>)> = connection
                 .query_row(
-                    "SELECT key, parent_id FROM concept WHERE id = ?1",
+                    "SELECT c.key, e.parent_id FROM concept c JOIN entity e ON e.id = c.id
+                      WHERE c.id = ?1",
                     [parent],
                     |row| Ok((row.get(0)?, row.get(1)?)),
                 )
@@ -885,6 +953,7 @@ fn category_key(group: Option<&str>, title: &str) -> String {
 
 #[derive(serde::Deserialize)]
 struct AddCategoryInput {
+    id: Option<String>,
     title: String,
     parent_id: Option<String>,
 }
@@ -903,91 +972,18 @@ fn add_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     };
     let title = squash(&input.title);
     let key = category_key(group_key.as_deref(), &title);
-    let id = concept_id(Kind::Category, &key);
-    ctx.insert_entity_as(&id, Kind::Category, &title)?;
+    let id = match input.id.as_deref() {
+        Some(id) => {
+            ctx.insert_entity_in(id, Kind::Category, &title, parent)?;
+            id.to_owned()
+        }
+        None => ctx.insert_entity_under(Kind::Category, &title, parent)?,
+    };
     connection.execute(
-        "INSERT INTO concept (id, kind, key, parent_id) VALUES (?1, 'category', ?2, ?3)",
-        rusqlite::params![id, key, parent],
+        "INSERT INTO concept (id, kind, key) VALUES (?1, 'category', ?2)",
+        rusqlite::params![id, key],
     )?;
     Ok(json!({ "id": id }))
-}
-
-fn pre_merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let connection = ctx.connection();
-    let (from, into) = (ctx.required_str("from_id")?, ctx.required_str("into_id")?);
-    if !(is_live(connection, from, Kind::Category)? && is_live(connection, into, Kind::Category)?) {
-        return Ok(Some("There is no such category.".to_owned()));
-    }
-    if from == into {
-        return Ok(Some(
-            "Choose a different category to merge into.".to_owned(),
-        ));
-    }
-    let children: bool = connection.query_row(
-        "SELECT EXISTS (SELECT 1 FROM concept WHERE parent_id = ?1)",
-        [from],
-        |row| row.get(0),
-    )?;
-    Ok(unless(
-        !children,
-        "Merge or move the categories inside it first.",
-    ))
-}
-
-#[derive(serde::Deserialize)]
-struct MergeCategoryInput {
-    from_id: String,
-    into_id: String,
-}
-
-/// Fold one category into another: its lines, its rules and its plans move, and
-/// it goes. Where both planned the same month (in one currency) the plans add.
-fn merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let input: MergeCategoryInput = ctx.parse_input()?;
-    let connection = ctx.connection();
-    let (from, into) = (input.from_id.as_str(), input.into_id.as_str());
-    let transactions = connection.execute(
-        "UPDATE txn SET category_id = ?2 WHERE category_id = ?1",
-        [from, into],
-    )?;
-    let rules = connection.execute(
-        "UPDATE rule SET category_id = ?2 WHERE category_id = ?1",
-        [from, into],
-    )?;
-    let plans: Vec<(String, i64, String, i64)> = connection
-        .prepare(PLANS_OF_CATEGORY)?
-        .query_map([from], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-        })?
-        .collect::<rusqlite::Result<_>>()?;
-    for (month, amount, currency, carry) in &plans {
-        let held: Option<String> = connection
-            .query_row(
-                "SELECT currency FROM budget WHERE category_id = ?1 AND month = ?2",
-                [into, month],
-                |row| row.get(0),
-            )
-            .optional()?;
-        match held {
-            None => {
-                connection.execute(
-                    "UPDATE budget SET category_id = ?3 WHERE category_id = ?1 AND month = ?2",
-                    [from, month, into],
-                )?;
-            }
-            Some(held) if &held == currency => {
-                connection.execute(
-                    "UPDATE budget SET amount_minor = amount_minor + ?3, carry = MAX(carry, ?4)
-                      WHERE category_id = ?1 AND month = ?2",
-                    rusqlite::params![into, month, amount, carry],
-                )?;
-            }
-            Some(_) => {}
-        }
-    }
-    // The category leaves; its plans left with it and its archive mark with it.
-    entity::purge_one(ctx, from, &mut Vec::new())?;
-    Ok(json!({ "transactions": transactions, "rules": rules, "plans": plans.len() }))
 }
 
 // ---------------------------------------------------------------------------
@@ -1016,22 +1012,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "layout_names_its_columns",
         check: pre_layout,
     }];
-    const CATEGORIZE: &[CommandCondition] = &[
-        STALE_GUARD[0],
-        STALE_GUARD[1],
-        CommandCondition {
-            predicate: "lines_can_be_filed",
-            check: pre_categorize,
-        },
-    ];
-    const LINE: &[CommandCondition] = &[CommandCondition {
-        predicate: "transaction_exists",
-        check: pre_line,
-    }];
-    const TRANSFER: &[CommandCondition] = &[CommandCondition {
-        predicate: "lines_make_a_transfer",
-        check: pre_transfer,
-    }];
     const PLAN: &[CommandCondition] = &[CommandCondition {
         predicate: "plan_is_for_a_month_and_a_category",
         check: pre_plan,
@@ -1048,42 +1028,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "category_is_new_and_under_a_group",
         check: pre_new_category,
     }];
-    const MERGE: &[CommandCondition] = &[CommandCondition {
-        predicate: "categories_can_merge",
-        check: pre_merge_category,
-    }];
-
-    let mut merge = CommandDefinition::plain(
-        "category.merge",
-        "category",
-        r#"{
-          "type": "object",
-          "required": ["from_id", "into_id"],
-          "additionalProperties": false,
-          "properties": {
-            "from_id": { "type": "string", "minLength": 1 },
-            "into_id": { "type": "string", "minLength": 1 }
-          }
-        }"#,
-        Idempotency::Idempotent,
-        MERGE,
-        merge_category,
-    );
-    merge.risk = Risk::Medium;
-    let mut void_line = CommandDefinition::plain(
-        "txn.void",
-        "txn",
-        r#"{
-          "type": "object",
-          "required": ["id"],
-          "additionalProperties": false,
-          "properties": { "id": { "type": "string", "minLength": 1 } }
-        }"#,
-        Idempotency::Idempotent,
-        LINE,
-        void,
-    );
-    void_line.risk = Risk::Medium;
 
     vec![
         CommandDefinition::plain(
@@ -1096,7 +1040,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "title": { "type": "string", "minLength": 1, "maxLength": 80 },
-                "type": { "enum": ["checking", "savings", "credit_card", "cash"] },
+                "type": { "type": "string", "minLength": 1, "maxLength": 40 },
                 "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
                 "on_budget": { "type": "boolean" },
                 "external_ref": { "type": "string", "minLength": 1, "maxLength": 64 },
@@ -1118,7 +1062,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "title": { "type": "string", "minLength": 1, "maxLength": 80 },
-                "type": { "enum": ["checking", "savings", "credit_card", "cash"] },
+                "type": { "type": "string", "minLength": 1, "maxLength": 40 },
+                "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
                 "on_budget": { "type": "boolean" },
                 "external_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 64 },
                 "expected_rev": { "type": "integer", "minimum": 0 }
@@ -1181,56 +1126,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
             remember_layout,
         ),
         CommandDefinition::plain(
-            "txn.categorize",
-            "txn",
-            r#"{
-              "type": "object",
-              "required": ["ids", "category_id"],
-              "additionalProperties": false,
-              "properties": {
-                "ids": {
-                  "type": "array", "minItems": 1, "maxItems": 2000,
-                  "items": { "type": "string", "minLength": 1 }
-                },
-                "category_id": { "type": ["string", "null"], "minLength": 1 },
-                "expected_rev": { "type": "integer", "minimum": 0 }
-              }
-            }"#,
-            Idempotency::Idempotent,
-            CATEGORIZE,
-            categorize,
-        ),
-        void_line,
-        CommandDefinition::plain(
-            "txn.link_transfer",
-            "txn",
-            r#"{
-              "type": "object",
-              "required": ["id", "other_id"],
-              "additionalProperties": false,
-              "properties": {
-                "id": { "type": "string", "minLength": 1 },
-                "other_id": { "type": "string", "minLength": 1 }
-              }
-            }"#,
-            Idempotency::Idempotent,
-            TRANSFER,
-            link_transfer,
-        ),
-        CommandDefinition::plain(
-            "txn.unlink_transfer",
-            "txn",
-            r#"{
-              "type": "object",
-              "required": ["id"],
-              "additionalProperties": false,
-              "properties": { "id": { "type": "string", "minLength": 1 } }
-            }"#,
-            Idempotency::Idempotent,
-            LINE,
-            unlink_transfer,
-        ),
-        CommandDefinition::plain(
             "budget.set",
             "budget",
             r#"{
@@ -1241,7 +1136,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "month": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$" },
                 "category_id": { "type": "string", "minLength": 1 },
                 "amount_minor": { "type": ["integer", "null"], "minimum": 0 },
-                "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
                 "carry": { "type": "boolean" }
               }
             }"#,
@@ -1291,6 +1185,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "required": ["title"],
               "additionalProperties": false,
               "properties": {
+                "id": { "type": "string", "minLength": 1 },
                 "title": { "type": "string", "minLength": 1, "maxLength": 60 },
                 "parent_id": { "type": "string", "minLength": 1 }
               }
@@ -1299,6 +1194,5 @@ pub fn definitions() -> Vec<CommandDefinition> {
             NEW_CATEGORY,
             add_category,
         ),
-        merge,
     ]
 }

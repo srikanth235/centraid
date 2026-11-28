@@ -1,0 +1,20 @@
+room editor key="money/new"
+  header title="New transaction"
+  ready
+    form
+      money #field/amount "Amount" "$0.00" required focused
+      choice #field/direction "Direction"
+        option "Expense" selected
+        option "Income"
+      choice #field/account "Account" required
+        option "Checking" selected
+        option "Savings"
+      text #field/title "Payee"  rev=0
+      moment #field/date "Date" "Thu 26 Nov"
+      text #field/memo "Memo"  rev=0
+      choice #field/status "Status"
+        option "Posted" selected
+        option "Pending"
+      repeat "Splits" #repeat/splits
+        add "Add split" sym="plus" #repeat/splits/add
+      explicit save="Save"#form/save cancel="Cancel"#form/cancel save_disabled

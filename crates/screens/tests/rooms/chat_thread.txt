@@ -1,0 +1,15 @@
+room pushed_page key="chat/43268b44-6247-7599-853a-b80cfff7a81f"
+  header title="Who am I meeting?"
+    back "Chats" #back
+    key menu sym="MoreHoriz" "Chat" #key/menu
+      menu #thread/menu
+        section
+          item "Move to trash" destructive #menu/trash
+  ready
+    empty glyph="Chat" "The assistant isn’t available yet." body="Saved chats stay on this phone. Sending a question will be available when the assistant is ready."
+    section #section/messages "Conversation"
+      row #msg/0 "Who am I meeting?" meta="You"
+      row #msg/0/att/0 "[A deleted item]" dimmed
+      row #msg/1 "You are meeting Ana Diaz." meta="Assistant"
+      row #msg/1/card/0 "Ana Diaz" meta="person · person"
+      row #msg/1/card/1 "An item you deleted" dimmed

@@ -1,0 +1,304 @@
+{
+  "renderer": "Android Compose/Robolectric",
+  "renderer_source_commit": "be6c4d0edd65ad4bc80b0cd916284b74ec023521",
+  "fixture_manifest": "../room-fixtures.json",
+  "scroll_fixture_manifest": "../glass-layout-fixture.json",
+  "native_device_run": false,
+  "limits": "Static rendered previews do not establish GPU blur, OS permission, owner authentication, share/save, clipboard or hardware picker behavior.",
+  "captures": [
+    {
+      "path": "light/money_ambiguous_csv_date_order.png",
+      "bytes": 161148,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "97c4ce25676429ead60df56f970a4af2bd98e3ad17a140672bc1b7fa77dd2da4"
+    },
+    {
+      "path": "light/money_csv_date_order_question.png",
+      "bytes": 160749,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "d6ef5e41ce836c7fc99645f2ddea884f86fde3bf62044502eab743b7669d7436"
+    },
+    {
+      "path": "light/money_currency_correction.png",
+      "bytes": 76943,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "61d731a9e8f719fa416d2031f047a00eabdfe39ecdd603b45263efcb269790dc"
+    },
+    {
+      "path": "light/money_detail.png",
+      "bytes": 106899,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "954c6be7b649ad5288528494396bad4614317eefb961d451e567027397a3c58e"
+    },
+    {
+      "path": "light/money_import_mapping.png",
+      "bytes": 169495,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "d9371ccaf437d663210ad7d4908f8d2a68084083c033a1cc650dc8578cdfa771"
+    },
+    {
+      "path": "light/money_match_candidates.png",
+      "bytes": 55610,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "026cf4cabacb29a8d3b1a2aa6e0eb3ab0552ca7a1e1abc5c2bbe64e647515598"
+    },
+    {
+      "path": "light/money_match_proposals.png",
+      "bytes": 46897,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "6005c453c572d45b9ff5b27b5239f6e2ef1c1f66efe73fd7741a37306bb29a25"
+    },
+    {
+      "path": "light/money_recurring.png",
+      "bytes": 78086,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "1d836e6536d978ef861c27919a9b6be1b21e65202cac0a74245f24777fcb5d7e"
+    },
+    {
+      "path": "light/money_root.png",
+      "bytes": 93206,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "05fe29da1c7527841d3b8a4e72f70df362ff23288114f9240e8933df48815536"
+    },
+    {
+      "path": "light/money_selection_mode.png",
+      "bytes": 88752,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "00d0c5a6e3249474cb965733f68f99ec29f347d02611695bfc1a05fd304b3c80"
+    },
+    {
+      "path": "light/money_statement_reimport_unchanged.png",
+      "bytes": 205763,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "9b9d41267c38520976e5e7d698c8c537696941f47eaebded7ab0e1645023d5b4"
+    },
+    {
+      "path": "light/money_statement_says.png",
+      "bytes": 137872,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "0bd2749b2cfd7cc9a694cbf4a679bf8ed76675edebfd2c0c8acf19bf64f47353"
+    },
+    {
+      "path": "light/money_transfer.png",
+      "bytes": 47002,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "9e8bc371088f26630baffcb934e3eb864ff3a5106ae8ab32ad21787e9a03401f"
+    },
+    {
+      "path": "light/people_detail.png",
+      "bytes": 84752,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "cafb98aa6c59a0054aad0e8b570b83c1d2dda5247b92359e796d61205f9edc94"
+    },
+    {
+      "path": "light/people_edit_form.png",
+      "bytes": 107258,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "b972e0725d679cdffeec54896da281021ecd5ae08db761f402ac0aae03f0ae2f"
+    },
+    {
+      "path": "light/people_link_picker.png",
+      "bytes": 34504,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "90bbf9b54a46a140da48f1d89f721fb19375cdec6d9efd4b990e4a766481b090"
+    },
+    {
+      "path": "light/people_phone_says.png",
+      "bytes": 86742,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "327bb619c57e7c189cf40dbeb09ce6a9222fca1f61343a5cd045f9da1b59d053"
+    },
+    {
+      "path": "light/people_root.png",
+      "bytes": 73703,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "dbdd926a11ca3a5a1d1d666d0263784ef31cb6eab394073a638db10b9cded64c"
+    },
+    {
+      "path": "light/people_selection_mode.png",
+      "bytes": 78076,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "602867226792a5d52298a985b62068ee292e5c542401e713d95fac5dcdec5b4b"
+    },
+    {
+      "path": "light/people_versions.png",
+      "bytes": 47564,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "b2bc2bc8f6b51e6dcc02e9568a748768e87da84161d249acf197bd6ce43dbac7"
+    },
+    {
+      "path": "dark/money_ambiguous_csv_date_order.png",
+      "bytes": 158149,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "040abc03cd768dec9607bcd2c45a4e0def2e03c143c16c3bf384a7fe45b365cc"
+    },
+    {
+      "path": "dark/money_csv_date_order_question.png",
+      "bytes": 159643,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "0b8ea3b43420e9596980a6d8f111d1eb3ad8c353deec794eec2f2ee5c5e362bf"
+    },
+    {
+      "path": "dark/money_currency_correction.png",
+      "bytes": 76816,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "eefa9c45c398d49f73adcda10e547638d6db61c7ac0cc0496e50f886dfaff9ee"
+    },
+    {
+      "path": "dark/money_detail.png",
+      "bytes": 105378,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "b06765f67b19cf22b171f730697fc0c47097fd48fe04222cc6e8b8ea0bd8935e"
+    },
+    {
+      "path": "dark/money_import_mapping.png",
+      "bytes": 166803,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "b126bff7cded3fa22b629ea6ffc904177763b26e329bafd3249e1a81c6c348ef"
+    },
+    {
+      "path": "dark/money_match_candidates.png",
+      "bytes": 54505,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "ed6653dcac8811315ebb0642b61a2851ef3ab54ae348e1c4fde037b9cbfa05a0"
+    },
+    {
+      "path": "dark/money_match_proposals.png",
+      "bytes": 46113,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "3dcc8718cd8aed87af3cc5b1cf16cd62a1acc518449e7e64c0fc22f742462def"
+    },
+    {
+      "path": "dark/money_recurring.png",
+      "bytes": 77626,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "2f2aacaad0e8b6a40a789fe7c446f896e50f4baa79329c767974a28c564a5816"
+    },
+    {
+      "path": "dark/money_root.png",
+      "bytes": 93581,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "715758e3ee414b252bf5cc9656cb3af708698a8d8aa322fe8a1f13d823a80fe6"
+    },
+    {
+      "path": "dark/money_selection_mode.png",
+      "bytes": 88431,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "93b7223288025341875f1ccc8d5221945ee7a808eb7511c0d2165058f9240936"
+    },
+    {
+      "path": "dark/money_statement_reimport_unchanged.png",
+      "bytes": 206022,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "1e04dd40317fa6c1482dca97aa554a4cea745b650805a175e647b4dde9e029e9"
+    },
+    {
+      "path": "dark/money_statement_says.png",
+      "bytes": 135555,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "6d6b0b6ba8d4c8684dea83f807dca71214cca437573394a64eb22a631e094e66"
+    },
+    {
+      "path": "dark/money_transfer.png",
+      "bytes": 46066,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "281f14c1f31ed38e931fa7d5660beff28f1234663820000e2a89d1c427d674b5"
+    },
+    {
+      "path": "dark/people_detail.png",
+      "bytes": 84283,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "9e3ad14d0eb738405bc8eec503e6d8309be1a0d0bb0a520c4142a83146114fcf"
+    },
+    {
+      "path": "dark/people_edit_form.png",
+      "bytes": 104303,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "3c29355dce540451e2db58e87276199d6e14d033c397770a030b768c6f33d296"
+    },
+    {
+      "path": "dark/people_link_picker.png",
+      "bytes": 34894,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "70de664c83f5b04a9b3a2e07b4fa96bb035c3935e6b616547fad28004f42f11f"
+    },
+    {
+      "path": "dark/people_phone_says.png",
+      "bytes": 86028,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "ad54f3da24a3108007337ab7f59b214cd0bf6e3796efee8891e874542cffa755"
+    },
+    {
+      "path": "dark/people_root.png",
+      "bytes": 74015,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "8533c87ef0b490189ed196c2d173da16b64e28fd0a1905bef30877c80e3078ea"
+    },
+    {
+      "path": "dark/people_selection_mode.png",
+      "bytes": 78296,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "24971bef0315f85fde7df3fabd8c3c843d725db10da033f0acf6bd38d6a215c3"
+    },
+    {
+      "path": "dark/people_versions.png",
+      "bytes": 46331,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "7ef93654a7b919a86a2d6031e10204af36dd9c858e3ccc47c375113bc6f45107"
+    },
+    {
+      "path": "glass-scroll/dark/money_glass_scroll.png",
+      "bytes": 277818,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "06052b60bbc00f458bc27b621956c1bf339121ed8db25e5d660293c66ceecc8c"
+    },
+    {
+      "path": "glass-scroll/light/money_glass_scroll.png",
+      "bytes": 261346,
+      "width": 1170,
+      "height": 2532,
+      "sha256": "2a7594ef8f1a955cedca4ba2bf4f911a8a86abc0d985ffa9923bfdbccbcf55d9"
+    }
+  ]
+}

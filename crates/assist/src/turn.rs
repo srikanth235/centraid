@@ -16,7 +16,7 @@
 use crate::app::App;
 use crate::attach::{ATTACH_MAX_TOKENS, Attachments, Notice, attach_prompt};
 use crate::model::{Cancel, Control, Finish, GenerateRequest, ImageInput, Model, ModelError};
-use crate::prompt::{Budget, END_OF_TURN, Recorded, Turn, chat_prompt, question};
+use crate::prompt::{Budget, END_OF_TURN, Turn, chat_prompt, question};
 use crate::result::Card;
 
 /// The longest free reply, in tokens.
@@ -260,7 +260,7 @@ impl Plane<'_> {
     ///
     /// The prompt is [`attach_prompt`]'s; the pixels of an image travel beside
     /// it in the request and are dropped with it. What the history keeps is the
-    /// marker line and the model's words ([`Recorded::Attachment`]).
+    /// marker line and the model's words.
     fn attached(
         &self,
         session: &mut Session,
@@ -313,7 +313,7 @@ impl Plane<'_> {
         session.last_recorded_user = Some(prompt.user_line.clone());
         session.history.push(Turn {
             user: prompt.user_line,
-            record: Recorded::Attachment(text.clone()),
+            said: text.clone(),
         });
         Ok(Answered {
             text,
@@ -552,7 +552,7 @@ mod tests {
             turn.user,
             "[Photo: Truckee river bend] What is in this photo?"
         );
-        assert_eq!(turn.record, Recorded::Attachment("A river.".to_owned()));
+        assert_eq!(turn.said, "A river.");
 
         // A free reply after it sees the marker and the earlier answer, and carries no image.
         let follow = ScriptedModel::new(["It is on the left."]);
@@ -659,11 +659,7 @@ mod tests {
         let history: Vec<Turn> = (1..=6)
             .map(|n| Turn {
                 user: format!("question {n}"),
-                record: Recorded::Tool {
-                    call_json: r#"{"tool":"agenda.task_list","args":{}}"#.to_owned(),
-                    headline: "2 tasks".to_owned(),
-                    answer: format!("answer {n}"),
-                },
+                said: format!("answer {n}"),
             })
             .collect();
         let restored =
@@ -677,16 +673,15 @@ mod tests {
         assert!(prompt.contains("question 5") && prompt.contains("question 6"));
         assert!(
             prompt.contains("answer 6"),
-            "a stored read's words are shown"
+            "a stored answer's words are shown"
         );
-        assert!(!prompt.contains("agenda.task_list"), "and its call is not");
     }
 
     #[test]
     fn a_restored_session_can_ask_the_last_question_again() {
         let history = vec![Turn {
             user: "what is due?".to_owned(),
-            record: Recorded::Answer("Nothing.".to_owned()),
+            said: "Nothing.".to_owned(),
         }];
         let mut session = Session::restore(None, history, Some("what is due?".to_owned()));
         assert_eq!(
@@ -702,7 +697,7 @@ mod tests {
             Some(App::Notes),
             vec![Turn {
                 user: "hi".to_owned(),
-                record: Recorded::Answer("Hi.".to_owned()),
+                said: "Hi.".to_owned(),
             }],
             Some("hi".to_owned()),
         );

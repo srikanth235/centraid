@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Figure</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Figure</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">One finished number with its caption; never a chart.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">SPENT IN THE MONTH</div>
+  <div>
+    <!-- variant:month -->
+    <div style="margin: 0 16px; background: var(--surface-card); border-radius: 18px; padding: 14px 16px;">
+      <div data-slot="t0" style="font-size: 13px; color: var(--text-meta);">Spent in October</div>
+      <div data-slot="t1" style="font-size: 32px; font-weight: 700; margin-top: 2px;">₹68,420</div>
+      <div style="height: 8px; border-radius: 4px; background: var(--app-money-tint); margin-top: 10px; position: relative;"><div style="width: 76%; height: 8px; border-radius: 4px; background: var(--app-money-fill);"></div><span style="position: absolute; left: 71%; top: -3px; width: 2px; height: 14px; background: var(--chip-ink);"></span></div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-meta); margin-top: 6px;"><span data-slot="t2">Planned ₹90,000 · Left ₹21,580</span><span data-slot="t3">9 days left</span></div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--surface-line); font-size: 13px;">
+        <div><div data-slot="t4" style="color: var(--text-meta);">In</div><div data-slot="t5" style="font-weight: 600; font-size: 15px;">₹1,42,000</div></div>
+        <div><div data-slot="t6" style="color: var(--text-meta);">Out</div><div data-slot="t7" style="font-weight: 600; font-size: 15px;">₹68,420</div></div>
+        <div><div data-slot="t8" style="color: var(--text-meta);">Net</div><div data-slot="t9" style="font-weight: 600; font-size: 15px; color: var(--state-green);">+₹73,580</div></div>
+      </div>
+    </div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

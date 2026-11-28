@@ -13,11 +13,11 @@ name = "centraid_search"
 path = "src/lib.rs"
 
 [dependencies]
+centraid-domain = { path = "../domain" }
 # The PAGE, not a second copy of it: one assembler for the paging law
 # (D-1020-N1a). `crates/search` is not an app and holds its own SQL; what it
 # borrows is the window's shape and the probe, so a search page and a drive page
 # continue the same way.
-centraid-apps-kit = { path = "../apps/kit" }
 centraid-ontology = { path = "../ontology" }
 # The text an entity was indexed from, for a snippet: the index is contentless.
 centraid-vault = { path = "../vault" }

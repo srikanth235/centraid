@@ -343,7 +343,7 @@ private fun BackupPage(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(line?.sentence.orEmpty(), style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)), color = Surface.ink)
-                    if (!line?.detail.isNullOrEmpty()) Sentence(line?.detail.orEmpty())
+                    line?.detail?.takeIf(String::isNotEmpty)?.let { detail -> Sentence(detail) }
                     if (model.last_good.isNotEmpty()) Sentence(model.last_good, "backup-last-good")
                 }
             }

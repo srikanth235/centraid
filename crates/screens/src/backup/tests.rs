@@ -2002,7 +2002,7 @@ fn with_two_devices_a_class_says_which_hold_it_and_which_it_waits_for() {
             },
             wire::Destination {
                 classes: behind,
-                ..gateway("gw-2", "Office NAS", None, NOW - 2 * DAY, NOW - 2 * DAY)
+                ..gateway("gw-2", "Office Mac", None, NOW - 2 * DAY, NOW - 2 * DAY)
             },
         ],
         classes: aggregate,
@@ -2014,12 +2014,12 @@ fn with_two_devices_a_class_says_which_hold_it_and_which_it_waits_for() {
     assert_eq!(data.apps[0].status, "Backed up");
     let previews = &data.apps[1];
     assert_eq!(previews.detail, "All 1,240 on Home laptop");
-    assert_eq!(previews.note, "184 waiting for Office NAS");
+    assert_eq!(previews.note, "184 waiting for Office Mac");
     assert_eq!(
         (previews.status.as_str(), previews.waiting),
         ("1 of 2 devices", true)
     );
-    assert_eq!(data.apps[2].note, "282 waiting for Office NAS");
+    assert_eq!(data.apps[2].note, "282 waiting for Office Mac");
 }
 
 #[test]
@@ -2300,11 +2300,11 @@ mod check_my_backup {
 
     #[test]
     fn a_failure_is_a_failure_and_offers_a_pass() {
-        let mut wont = device("Office NAS", Verdict::WontOpen);
+        let mut wont = device("Office Mac", Verdict::WontOpen);
         wont.older_snapshot_ms = SUNDAY;
         let mut missing = device("Garage drive", Verdict::MissingFiles);
         missing.files_missing = 3;
-        let damaged = device("Parents' NAS", Verdict::DamagedFile);
+        let damaged = device("Parents' Mac", Verdict::DamagedFile);
         let state = drawn(&Check::resting(
             true,
             Some((vec![wont, missing, damaged], NOW)),
@@ -2362,14 +2362,14 @@ mod check_my_backup {
         let state = drawn(&Check::running(wire::CheckProgress {
             running: true,
             gateway_id: "id".to_owned(),
-            label: "Office NAS".to_owned(),
+            label: "Office Mac".to_owned(),
             done: 112,
             total: 260,
         }));
         assert!(state.running);
         assert!((state.fraction - 112.0 / 260.0).abs() < 1e-6);
         assert_eq!(state.rows[0].detail, "112 of 260 parts");
-        assert_eq!(state.status.unwrap().sentence, "Checking Office NAS");
+        assert_eq!(state.status.unwrap().sentence, "Checking Office Mac");
         assert_eq!(state.action, wire::BackupCheckAction::Stop as i32);
         assert_eq!(state.heading, "Checking");
     }
@@ -2400,7 +2400,7 @@ mod one_device_behind {
     fn office(change: impl FnOnce(&mut wire::Destination)) -> wire::BackupStatusResponse {
         let mut behind = gateway(
             "gw-2",
-            "Office NAS",
+            "Office Mac",
             Some("192.168.1.30:7443"),
             NOW - 2 * 86_400_000,
             NOW - 2 * 86_400_000,
@@ -2476,12 +2476,12 @@ mod one_device_behind {
         silent.classes = behind;
         let data = Page::open(silent).data();
         let line = data.line.expect("a line");
-        assert_eq!(line.status, "Office NAS is behind");
-        assert_eq!(line.sentence, "Office NAS is behind");
+        assert_eq!(line.status, "Office Mac is behind");
+        assert_eq!(line.sentence, "Office Mac is behind");
         assert_eq!(data.last_good, "Backed up to Home laptop just now");
         assert_eq!(line.tone, Tone::Attention as i32);
         assert!(
-            data.reason.starts_with("Office NAS hasn't answered since "),
+            data.reason.starts_with("Office Mac hasn't answered since "),
             "{}",
             data.reason
         );
@@ -2492,7 +2492,7 @@ mod one_device_behind {
         let row = &data.destinations[1];
         assert!(row.held.starts_with("184 files behind"), "{}", row.held);
         assert!(data.apps_waiting.is_empty() && data.waiting_heading.is_empty());
-        assert_eq!(data.apps[1].note, "184 waiting for Office NAS");
+        assert_eq!(data.apps[1].note, "184 waiting for Office Mac");
         assert_eq!(data.apps[1].status, "1 of 2 devices");
         assert!(
             data.destinations[0].held.starts_with("Up to date"),
@@ -2514,11 +2514,11 @@ mod one_device_behind {
         .data();
         assert_eq!(
             too_large.line.expect("a line").status,
-            "Office NAS refused a file"
+            "Office Mac refused a file"
         );
         assert_eq!(
             too_large.reason,
-            "Office NAS refused a file as over its 83.8 MB limit. Update Centraid on this phone and on Office NAS, then back up again."
+            "Office Mac refused a file as over its 83.8 MB limit. Update Centraid on this phone and on Office Mac, then back up again."
         );
         assert_eq!(
             too_large.destinations[1].held.split(" \u{b7} ").next(),
@@ -2532,7 +2532,7 @@ mod one_device_behind {
         .data();
         assert_eq!(
             other.line.expect("a line").status,
-            "Office NAS is refusing the backup"
+            "Office Mac is refusing the backup"
         );
         assert!(!other.reason.contains("no room"), "{}", other.reason);
         assert!(!other.reason.contains("full"), "{}", other.reason);
@@ -2545,10 +2545,10 @@ mod one_device_behind {
             d.reach = wire::WaitReason::Refused as i32;
         }))
         .data();
-        assert_eq!(data.line.expect("a line").status, "Office NAS is full");
+        assert_eq!(data.line.expect("a line").status, "Office Mac is full");
         assert_eq!(
             data.reason,
-            "Office NAS has no room left. Free some space on it, then back up again."
+            "Office Mac has no room left. Free some space on it, then back up again."
         );
         assert_eq!(
             data.destinations[1].held.split(" \u{b7} ").next(),
@@ -2561,7 +2561,7 @@ mod one_device_behind {
         let data = Page::open(office(|d| d.rolled_back = true)).data();
         assert_eq!(
             data.line.expect("a line").status,
-            "Office NAS has an older backup"
+            "Office Mac has an older backup"
         );
         assert_eq!(
             data.reason,
@@ -3252,7 +3252,7 @@ mod what_a_member_reads {
                 state.status.unwrap().sentence,
                 "The check didn't finish. Try again."
             );
-            assert_eq!(state.action_label, "Retry");
+            assert_eq!(state.action_label, "Try again");
             assert_eq!(state.action, wire::BackupCheckAction::Check as i32);
             assert!(
                 state.rows.is_empty(),
@@ -3274,7 +3274,7 @@ mod what_a_member_reads {
             let mut page = Check::resting(true, None);
             let effects = page.update(done(wire::VaultCalled::default()), &ctx);
             assert!(effects.is_empty());
-            assert_eq!(page.drawn(&ctx).action_label, "Retry");
+            assert_eq!(page.drawn(&ctx).action_label, "Try again");
             // A backup that opened: kept.
             let answer = wire::Response {
                 kind: Some(wire::response::Kind::CheckBackup(

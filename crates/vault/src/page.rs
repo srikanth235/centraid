@@ -369,7 +369,8 @@ pub struct ColumnTest<'a> {
     pub value: &'a str,
 }
 
-/// What [`Vault::count_kind`] counts: the entities of `kind`, live or trashed, whose own row (in
+/// What [`Vault::count_kind`] counts: the entities of `kind`, live or trashed on their own (a row
+/// the trash took with its holder is the holder's to restore, not a line of the trash), whose own row (in
 /// `table`) passes every test.
 #[derive(Debug, Clone, Copy)]
 pub struct KindCount<'a> {
@@ -551,37 +552,12 @@ fn in_unit(count: i64, unit: i64, rounding: Rounding) -> Amount {
     }
 }
 
-/// THE READS THAT MAY SEE A LOCKER ITEM'S ROW.
-///
-/// A Locker item is an entity, so a page over `entity` or `edge` would serve
-/// it with every other kind's rows: its title, its tags, the notes that link
-/// it. Locker's items are the member's most private rows, so a page serves
-/// them only to a read that is named as one that may (#1135, the Locker lane,
-/// L4):
-///
-/// - `locker.*`: Locker's own reads, behind its gate on the shell;
-/// - `home.locker`: Home's count of Locker's items, which selects ids and
-///   nothing a member wrote;
-/// - `assist.native.*`: the assistant's reads. It has the owner's access to a
-///   Locker item's plain rows (the owner's ruling of 2026-10-22), and no
-///   access to a sealed value, which [`withholds_sealed_value`] holds for it.
-///
-/// Every other read (a generic list, the Trash of another app) is given the
-/// page **without** them: the rows are not there, and no count of them is
-/// either.
-#[must_use]
-pub fn reaches_locker(name: &str) -> bool {
-    name.starts_with("locker.") || name.starts_with(ASSISTANT_READ) || name == "home.locker"
-}
-
-/// The prefix of the assistant's reads of the vault's tables.
-const ASSISTANT_READ: &str = "assist.native.";
-
 /// The clauses every read of `page` is held to before its own cursor: the author's predicate, and
-/// the Locker rules (a sealed column is named only by its presence test; a read that is not one of
-/// Locker's neither reads a Locker table nor sees a Locker item through another).
+/// the one rule sealing leaves (a sealed column is named only by its presence test, except in a
+/// read of Locker's own). A Locker item is an item like any other: any read may see its row, its
+/// plain fields and its edges.
 fn served_clauses(page: &KeysetPage) -> Result<Vec<String>> {
-    let mut clauses: Vec<String> = page
+    let clauses: Vec<String> = page
         .predicate
         .as_ref()
         .map(|text| vec![format!("({text})")])
@@ -599,18 +575,6 @@ fn served_clauses(page: &KeysetPage) -> Result<Vec<String>> {
             ),
         });
     }
-    if !reaches_locker(&page.name) {
-        if is_locker_table(&page.from) {
-            return Err(VaultError::InvalidInput {
-                name: page.name.clone(),
-                detail: format!(
-                    "`{}` is a Locker table, and this read is not one of Locker's",
-                    page.from
-                ),
-            });
-        }
-        clauses.extend(locker_exclusion(&page.from));
-    }
     Ok(clauses)
 }
 
@@ -624,8 +588,8 @@ fn is_sealed_column(word: &str) -> bool {
 
 /// THE SEALED-COLUMN GUARD, which holds for every read that is not Locker's own.
 ///
-/// [`reaches_locker`] lets the assistant's reads page a Locker table, and a
-/// sealed value is the one thing it has no access to. A read that is not
+/// Any read may page a Locker table, and a sealed value is the one thing no read but Locker's has
+/// access to. A read that is not
 /// named `locker.*` therefore may not project a sealed column, order by one or
 /// name one in its predicate (a predicate is an oracle: `password = 'x'`). Only
 /// the kit's presence test, `<cell> IS NOT NULL AS <name>`, names one, and it
@@ -655,20 +619,6 @@ fn withholds_sealed_value(page: &KeysetPage) -> bool {
 /// secret and is paged by name like any other table.
 fn is_locker_table(table: &str) -> bool {
     table == "locker_item" || table.starts_with("locker_item_")
-}
-
-/// The clause that takes Locker's items out of a page over `entity`, and the
-/// edges that touch one out of a page over `edge`.
-fn locker_exclusion(from: &str) -> Option<String> {
-    match from {
-        "entity" => Some("(\"kind\" <> 'locker_item')".to_owned()),
-        "edge" => Some(
-            "(NOT EXISTS (SELECT 1 FROM entity AS locker_end WHERE locker_end.kind = 'locker_item' \
-             AND locker_end.id IN (\"edge\".\"from_id\", \"edge\".\"to_id\", \"edge\".\"label_id\")))"
-                .to_owned(),
-        ),
-        _ => None,
-    }
 }
 
 /// One page of rows, plus the cursor to ask from next.
@@ -976,7 +926,7 @@ impl Vault {
             });
         }
         let state = if query.trashed {
-            "deleted_at IS NOT NULL"
+            "deleted_at IS NOT NULL AND trashed_by IS NULL"
         } else {
             "deleted_at IS NULL"
         };
@@ -1336,7 +1286,7 @@ mod keyset_tests {
 
         photograph(
             &vault,
-            "p1",
+            &crate::test_ids::uuid(1),
             "2026-01-01T00:00:00.000Z",
             &original,
             17,
@@ -1390,7 +1340,7 @@ mod keyset_tests {
             let vault = founded(&dir);
             photograph(
                 &vault,
-                "p1",
+                &crate::test_ids::uuid(1),
                 "2026-01-01T00:00:00.000Z",
                 &hash,
                 29,
@@ -1464,7 +1414,7 @@ mod keyset_tests {
         let vault = founded(&dir);
         photograph(
             &vault,
-            "c1",
+            &crate::test_ids::uuid(11),
             "2026-01-01T00:00:00.000Z",
             &in_library,
             17,
@@ -1473,7 +1423,7 @@ mod keyset_tests {
         );
         photograph(
             &vault,
-            "c2",
+            &crate::test_ids::uuid(12),
             "2026-01-02T00:00:00.000Z",
             &elsewhere,
             17,
@@ -1587,14 +1537,14 @@ mod keyset_tests {
             .commit(|tx| {
                 for index in 0..4 {
                     tx.insert_entity(
-                        &format!("t{index}"),
+                        &crate::test_ids::uuid(100 + index),
                         crate::model::Kind::Tag,
                         &format!("tag {index}"),
                         &now,
                     )?;
                     tx.connection().execute(
                         "INSERT INTO concept (id, kind, key) VALUES (?1, 'tag', ?2)",
-                        rusqlite::params![format!("t{index}"), format!("k{index}")],
+                        rusqlite::params![crate::test_ids::uuid(100 + index), format!("k{index}")],
                     )?;
                 }
                 Ok(())
@@ -1603,7 +1553,7 @@ mod keyset_tests {
         let asked = |limit, after| KeysetPage {
             limit,
             after,
-            predicate: Some("kind = 'tag' AND id LIKE 't%'".to_owned()),
+            predicate: Some("kind = 'tag'".to_owned()),
             ..page("entity", &["id", "created_at"], "created_at", "id")
         };
         let first = vault.keyset_page(&asked(3, None)).expect("page one");
@@ -1632,10 +1582,15 @@ mod keyset_tests {
         vault
             .commit(|tx| {
                 for index in 0..rows {
-                    tx.insert_entity(&format!("n{index:05}"), crate::model::Kind::Tag, "t", &now)?;
+                    tx.insert_entity(
+                        &crate::test_ids::uuid(1000 + index as u64),
+                        crate::model::Kind::Tag,
+                        "t",
+                        &now,
+                    )?;
                     tx.connection().execute(
                         "INSERT INTO concept (id, kind, key) VALUES (?1, 'tag', ?1)",
-                        [format!("n{index:05}")],
+                        [crate::test_ids::uuid(1000 + index as u64)],
                     )?;
                 }
                 Ok(())
@@ -1644,7 +1599,7 @@ mod keyset_tests {
         let answer = vault
             .keyset_page(&KeysetPage {
                 limit: MAX_PAGE_ROWS + 100,
-                predicate: Some("id LIKE 'n%'".to_owned()),
+                predicate: Some("kind = 'tag'".to_owned()),
                 ..page("entity", &["id", "created_at"], "created_at", "id")
             })
             .expect("it serves");
@@ -1733,10 +1688,11 @@ mod keyset_tests {
         vault
             .commit(|tx| {
                 crate::blob::stage(tx.connection(), &hash, 880_000)?;
-                tx.insert_entity("d1", crate::model::Kind::Document, "Report", &now)?;
+                let document = crate::test_ids::uuid(1);
+                tx.insert_entity(&document, crate::model::Kind::Document, "Report", &now)?;
                 tx.connection().execute(
-                    "INSERT INTO document (id, blob, media_type) VALUES ('d1', ?1, 'application/pdf')",
-                    [&hash],
+                    "INSERT INTO document (id, blob, media_type) VALUES (?1, ?2, 'application/pdf')",
+                    [&document, &hash],
                 )?;
                 Ok(())
             })
@@ -1829,7 +1785,7 @@ mod keyset_tests {
         let vault = founded(&dir);
         photograph(
             &vault,
-            "p1",
+            &crate::test_ids::uuid(1),
             "2026-01-01T00:00:00.000Z",
             &crate::blob::content_digest(b"x"),
             1,

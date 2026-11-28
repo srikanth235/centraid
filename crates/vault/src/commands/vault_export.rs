@@ -3,30 +3,30 @@
 //!
 //! | Folder | What is in it | Written by |
 //! |---|---|---|
-//! | `Notes/` | the Markdown tree, a folder per notebook | [`note::markdown_entries`] |
+//! | `Notes/` | the Markdown tree, a folder per notebook; a journal entry is a note with its day in the front matter | [`note::markdown_entries`] |
+//! | `Notes/<stem>.assets/` | each note's images and files beside it, where its Markdown links to them, streamed from the content store | [`stream_note_assets`] |
 //! | `People/people.vcf` | everyone, including the member, as vCards | [`person::vcard_file_for_vault`] |
-//! | `People/Journal/` | the owner's Journal entries as Markdown | [`note::journal_markdown_entries`] |
 //! | `Calendar/calendar.ics` | every event | [`event_portable::calendar_text`] |
 //! | `Reminders/reminders.ics` | every reminder | [`task_portable::reminders_text`] |
 //! | `Money/transactions.csv` | every transaction | [`txn_portable::transactions_csv`] |
-//! | `Health/` | `Daily totals.csv`, `Workouts.csv` | [`health_portable`] |
+//! | `Health/` | `Daily totals.csv`, `Workouts.csv`, `Readings.csv` | [`health_portable`] |
 //! | `Docs/` | the originals, in the member's folders | [`document_portable::add_documents`] |
 //! | `Photos/` | the originals, named by when they were taken | [`photo_portable::add_photos`] |
 //!
-//! The aggregate includes the owner's Journal and My card as well as each app's portable data.
-//! Originals are streamed from the content store's files in fixed-size chunks, never read into
-//! memory. A `README.txt` at the top says what each folder is.
+//! The aggregate includes the member's own card as well as each app's portable data.
+//! Originals and note assets are streamed from the content store's files in fixed-size chunks,
+//! never read into memory. A `README.txt` at the top says what each folder is.
 //!
 //! **LOCKER IS NOT IN IT** (owner decision D11): a Locker item's contents leave the phone only
 //! through Locker's own export, which asks for its own, stricter owner check. Nothing here reads
-//! a Locker table. The aggregate adds the owner's Journal entries and card because they are part
-//! of the member's own data; the individual Notes and People exports retain their own destinations.
+//! a Locker table. The aggregate adds the member's own card because it is part of the member's own
+//! data; the individual People export leaves it out.
 //!
 //! The zip is written to a private per-job folder in the store's staging area. The shell deletes
 //! the file once the save sheet is done with it, and the core removes leftover job folders on the
 //! next export build. The command answers `{path, name, media_type, count,
 //! missing, left_out}`: `count` is the files in the archive other than the README and
-//! `Left out.txt`, `missing` counts the documents and photographs the archive could not include
+//! `Left out.txt`, `missing` counts the documents, photographs and note images the archive could not include
 //! (bytes not on this phone, or a file that cannot be read) and `left_out` names the first of
 //! them with the reason; `Left out.txt` in the archive names every one. It writes nothing to the
 //! vault.
@@ -43,7 +43,7 @@ use crate::commands::document::no_store;
 use crate::commands::document_portable::{
     LeftOut, add_left_out, clear, left_out_json, live_documents, live_folders, unique,
 };
-use crate::commands::health_portable::{measurements, workouts};
+use crate::commands::health_portable::{measurements, readings, workouts};
 use crate::commands::photo_portable::{Item as PhotoItem, live_photos};
 use crate::commands::{
     CommandCondition, CommandCtx, CommandDefinition, Idempotency, event_portable, note, person,
@@ -84,6 +84,14 @@ pub struct VaultExportSnapshot {
     folders: std::collections::BTreeMap<String, crate::commands::document_portable::Folder>,
     documents: Vec<crate::commands::document_portable::DocumentRow>,
     photos: Vec<SnapshottedPhoto>,
+    note_assets: Vec<SnapshottedAsset>,
+}
+
+/// A note's image or file, located while the vault is held and streamed after it is released.
+struct SnapshottedAsset {
+    archive_path: String,
+    size: u64,
+    source: std::result::Result<std::path::PathBuf, &'static str>,
 }
 
 impl VaultExportSnapshot {
@@ -96,16 +104,27 @@ impl VaultExportSnapshot {
         use crate::bytes::Located;
 
         let mut entries = vec![("README.txt".to_owned(), README.as_bytes().to_vec())];
-        let (_, notes) = note::markdown_entries(connection, None)?;
+        // A journal entry is a note with a day: it is in `Notes/` with the front matter that
+        // says which day.
+        let notes = note::markdown_entries(connection, None)?;
+        let note_assets = notes
+            .assets
+            .into_iter()
+            .map(|asset| SnapshottedAsset {
+                archive_path: format!("Notes/{}", asset.path),
+                size: u64::try_from(asset.size).unwrap_or(0),
+                source: match blobs.locate(&asset.hash) {
+                    Ok(Located::Store(path)) => Ok(path),
+                    Ok(_) => Err(crate::commands::document_portable::NOT_HERE),
+                    Err(_) => Err(crate::commands::document_portable::UNREADABLE),
+                },
+            })
+            .collect();
         entries.extend(
             notes
+                .entries
                 .into_iter()
                 .map(|entry| (format!("Notes/{}", entry.path), entry.bytes)),
-        );
-        entries.extend(
-            note::journal_markdown_entries(connection)?
-                .into_iter()
-                .map(|entry| (entry.path, entry.bytes)),
         );
         let (people, _) = person::vcard_file_for_vault(connection)?;
         entries.push(("People/people.vcf".to_owned(), people.into_bytes()));
@@ -119,6 +138,8 @@ impl VaultExportSnapshot {
         entries.push(("Health/Daily totals.csv".to_owned(), daily.into_bytes()));
         let (moves, _, _) = workouts(connection, None)?;
         entries.push(("Health/Workouts.csv".to_owned(), moves.into_bytes()));
+        let (spot, _) = readings(connection, None)?;
+        entries.push(("Health/Readings.csv".to_owned(), spot.into_bytes()));
 
         let folders = live_folders(connection)?;
         let documents = live_documents(connection)?;
@@ -150,6 +171,7 @@ impl VaultExportSnapshot {
             folders,
             documents,
             photos,
+            note_assets,
         })
     }
 }
@@ -256,6 +278,14 @@ impl VaultExportArchive {
             &cancelled_for_docs,
         )?;
         archive.left_out = left_out;
+        let cancelled_for_assets = Arc::clone(&archive.cancelled);
+        let missing = stream_note_assets(
+            archive.zip_mut()?,
+            snapshot.note_assets,
+            &cancelled_for_assets,
+            |path| File::open(path),
+        )?;
+        archive.left_out.extend(missing);
         archive.photos = snapshot.photos.into();
         Ok(archive)
     }
@@ -548,6 +578,55 @@ impl VaultExportArchive {
     }
 }
 
+/// Stream each note asset into `zip` at its path under `Notes/`, `open`ing it only as the zip
+/// reads it in fixed-size chunks, never whole. An asset whose bytes are not on this phone, or
+/// whose file cannot be opened or is not the size recorded, is named in the result, never dropped.
+fn stream_note_assets<W: Write + Seek, R: Read>(
+    zip: &mut ZipWriter<W>,
+    assets: Vec<SnapshottedAsset>,
+    cancelled: &Arc<AtomicBool>,
+    open: impl Fn(&Path) -> std::io::Result<R>,
+) -> Result<Vec<LeftOut>> {
+    let mut left = Vec::new();
+    for asset in assets {
+        if cancelled.load(Ordering::SeqCst) {
+            return Err(VaultError::Invariant {
+                context: "the whole-vault export was cancelled".to_owned(),
+            });
+        }
+        let path = match asset.source {
+            Ok(path) => path,
+            Err(why) => {
+                left.push(LeftOut {
+                    name: asset.archive_path,
+                    why,
+                });
+                continue;
+            }
+        };
+        let readable = fs::metadata(&path)
+            .ok()
+            .filter(|meta| meta.len() == asset.size)
+            .and_then(|_| open(&path).ok());
+        let Some(reader) = readable else {
+            left.push(LeftOut {
+                name: asset.archive_path,
+                why: crate::commands::document_portable::UNREADABLE,
+            });
+            continue;
+        };
+        zip.add(
+            &asset.archive_path,
+            asset.size,
+            CancelReader {
+                inner: reader,
+                cancelled: Arc::clone(cancelled),
+            },
+        )?;
+    }
+    Ok(left)
+}
+
 fn verified_file(
     path: &Path,
     photo: &PhotoItem,
@@ -604,16 +683,16 @@ fn photo_path(item: &PhotoItem) -> String {
 pub const README: &str = "\
 This is a copy of what Centraid holds on your phone, one folder per app.
 
-Notes: your notes as Markdown files, a folder for each notebook.
-People: everyone's card, including yours, in people.vcf; your Journal entries as Markdown.
+Notes: your notes and journal entries as Markdown files, a folder for each notebook, with each note's images and files beside it.
+People: everyone's card, including yours, in people.vcf.
 Calendar: your events as one calendar file (calendar.ics).
 Reminders: your reminders as one calendar file (reminders.ics).
 Money: your transactions as one spreadsheet (transactions.csv).
-Health: your daily totals and your workouts as two spreadsheets.
+Health: your daily totals, your workouts and your readings as three spreadsheets.
 Docs: your documents, as the original files, in the folders you made.
 Photos: your photos and videos, as the original files, by the year and time they were taken.
 
-If a document or a photo could not be included, Left out.txt names it and says why.
+If a document, a photo or a note's image could not be included, Left out.txt names it and says why.
 
 Locker is not here. Its passwords and secrets leave only through Locker's own export.
 
@@ -741,6 +820,7 @@ mod archive_tests {
             entries: vec![("README.txt".to_owned(), README.as_bytes().to_vec())],
             folders: std::collections::BTreeMap::new(),
             documents: Vec::<DocumentRow>::new(),
+            note_assets: Vec::new(),
             photos: vec![SnapshottedPhoto {
                 item: PhotoItem {
                     id: "photo-1".to_owned(),
@@ -896,5 +976,52 @@ mod archive_tests {
             !job_dir.exists(),
             "cancelled ZIP and staged originals are removed"
         );
+    }
+
+    /// Reads of an asset come in the zip's fixed-size chunks: no read asks for the whole file.
+    #[test]
+    fn a_note_asset_is_streamed_in_chunks_and_never_read_whole() {
+        struct Counting {
+            inner: std::io::Cursor<Vec<u8>>,
+            reads: std::rc::Rc<std::cell::RefCell<Vec<usize>>>,
+        }
+        impl Read for Counting {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                self.reads.borrow_mut().push(buffer.len());
+                self.inner.read(buffer)
+            }
+        }
+        let dir = tempfile::tempdir().expect("a directory");
+        let bytes: Vec<u8> = (0..1_000_000_u32).map(|n| (n % 251) as u8).collect();
+        let path = dir.path().join("asset.bin");
+        std::fs::write(&path, &bytes).expect("an asset file");
+        let reads = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let left = stream_note_assets(
+            &mut zip,
+            vec![SnapshottedAsset {
+                archive_path: "Notes/A.assets/pic.png".to_owned(),
+                size: bytes.len() as u64,
+                source: Ok(path),
+            }],
+            &Arc::new(AtomicBool::new(false)),
+            |_| {
+                Ok(Counting {
+                    inner: std::io::Cursor::new(bytes.clone()),
+                    reads: std::rc::Rc::clone(&reads),
+                })
+            },
+        )
+        .expect("streams");
+        assert!(left.is_empty());
+        let reads = reads.borrow();
+        assert!(reads.len() > 2, "read in several calls: {}", reads.len());
+        assert!(
+            reads.iter().all(|asked| *asked < bytes.len()),
+            "no read asked for the whole asset"
+        );
+        let written = zip.finish().expect("closed").into_inner();
+        let entries = stored_entries(&written).expect("valid archive");
+        assert_eq!(entries[0].1, bytes);
     }
 }

@@ -149,7 +149,6 @@ jobs:
         run: bash mobile/scripts/select-xcode.sh
       - uses: ./.github/actions/setup
         with:
-          bun: "false"
           rust: "true"
           rust-targets: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
           cargo-cache: release-ios

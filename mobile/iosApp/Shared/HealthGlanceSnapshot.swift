@@ -99,7 +99,7 @@ struct HealthGlanceSnapshot: Codable, Equatable, Sendable {
 
     /// The snapshot the app last kept, or nil when there is none that this reader trusts.
     static func load() -> HealthGlanceSnapshot? {
-        guard let url = AgendaGlanceSnapshot.containerURL()?.appendingPathComponent(fileName),
+        guard let url = TodayGlanceSnapshot.containerURL()?.appendingPathComponent(fileName),
             let data = try? Data(contentsOf: url)
         else { return nil }
         return decode(data)

@@ -66,15 +66,8 @@ struct State {
     /// left it: it lives until the next push takes it. A pop that does not close that page, a tab
     /// change or any other navigation drops it.
     onward: Option<(u64, Handed)>,
-    /// What the screens and the follow coordinator tell one another (`crate::follow`).
-    follows: crate::follow::Follows,
     /// What the phone said about alerts, for every screen's row (`kit::permission::AlertBoard`).
     alerts: crate::kit::permission::AlertBoard,
-    /// The terms recently searched: kept while the runtime lives, emptied when the vault in
-    /// front changes (ruling 24, #1202).
-    recents: crate::kit::search::Recents,
-    /// The unsaved new event (`calendar::draft`): memory here, the device store behind it.
-    drafts: crate::calendar::draft::Board,
     /// The latest Locker clipboard copy, held until Lock or its original expiry.
     clipboard: crate::kit::secret::ClipboardBoard,
     band: Option<BandFn>,
@@ -141,10 +134,7 @@ impl Runtime {
                 handed: None,
                 handing: None,
                 onward: None,
-                follows: crate::follow::Follows::default(),
                 alerts: crate::kit::permission::AlertBoard::default(),
-                recents: crate::kit::search::Recents::default(),
-                drafts: crate::calendar::draft::Board::default(),
                 clipboard: crate::kit::secret::ClipboardBoard::default(),
                 band: None,
                 next_instance: 1,
@@ -326,7 +316,6 @@ impl Runtime {
             // or an effect for a screen the same update closes would be drawn
             // or performed for nothing.
             out.views.retain(|view| view.instance != id);
-            out.deltas.retain(|delta| delta.instance != id);
             // ...EXCEPT A WITHDRAWN PROMPT: the screen's goodbye asked the shell to
             // take down the OS prompt it raised, and that must outlive the screen.
             out.effects
@@ -407,10 +396,7 @@ impl Runtime {
             .units
             .as_ref()
             .is_none_or(crate::kit::permission::details_shown);
-        let follows = state.follows.clone();
         let alerts = state.alerts.clone();
-        let recents = state.recents.clone();
-        let drafts = state.drafts.clone();
         let clipboard = state.clipboard.clone();
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
@@ -421,10 +407,7 @@ impl Runtime {
             .filter(|(to, _)| *to == id)
             .map(|(_, handed)| handed.clone());
         let ctx = Ctx::new(core, &env)
-            .with_follows(follows.clone())
             .with_alerts(alerts.clone())
-            .with_recents(recents.clone())
-            .with_drafts(drafts.clone())
             .with_clipboard(clipboard.clone())
             .with_handed(handed);
         let effects = instance.screen.update(event, &ctx);
@@ -505,45 +488,20 @@ impl Runtime {
         instance.screen.effects_numbered(&numbers);
 
         if !instance.service {
-            let view_ctx = Ctx::new(core, &env)
-                .with_follows(follows)
-                .with_alerts(alerts)
-                .with_recents(recents)
-                .with_drafts(drafts);
+            let view_ctx = Ctx::new(core, &env).with_alerts(alerts);
             let view_ctx = view_ctx.with_clipboard(clipboard);
             let mut view = instance.screen.view(&view_ctx);
             view.instance = id;
             view.revision = 0;
-            // A STREAMING ANSWER GROWING AT ITS END is sent as the words alone (#1188 C14), and the
-            // chat is not encoded again for it: the revision moves, the echo check starts afresh.
-            let growth = crate::chat::delta::append(&mut instance.view, &mut view);
-            if let Some(add) = growth {
-                let base = instance.revision;
+            let encoded = view.encode_to_vec();
+            if encoded != instance.last {
                 instance.revision += 1;
-                instance.last.clear();
-                view.revision = instance.revision;
+                instance.last = encoded;
+            }
+            view.revision = instance.revision;
+            if view != instance.view {
                 instance.view = view.clone();
-                match out.views.iter_mut().find(|held| held.instance == id) {
-                    // the same update already carries this screen whole: it carries the newest
-                    Some(held) => *held = view,
-                    None => out.deltas.push(wire::ViewDelta {
-                        instance: id,
-                        base,
-                        revision: instance.revision,
-                        kind: Some(wire::view_delta::Kind::ChatAppend(add)),
-                    }),
-                }
-            } else {
-                let encoded = view.encode_to_vec();
-                if encoded != instance.last {
-                    instance.revision += 1;
-                    instance.last = encoded;
-                }
-                view.revision = instance.revision;
-                if view != instance.view {
-                    instance.view = view.clone();
-                    out.views.push(view);
-                }
+                out.views.push(view);
             }
         }
 
@@ -891,8 +849,6 @@ impl Runtime {
             state.clipboard_effects.clear();
         }
         state.foreground = now;
-        // One vault's searches are never offered over another's.
-        state.recents.clear();
         state.handed = None;
         state.onward = None;
         let mut reopened = Vec::new();
@@ -983,7 +939,6 @@ impl Runtime {
     fn empty(update: &wire::ScreenUpdate) -> bool {
         update.navigation.is_none()
             && update.views.is_empty()
-            && update.deltas.is_empty()
             && update.effects.is_empty()
             && update.closed.is_empty()
     }

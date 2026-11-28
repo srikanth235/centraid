@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Move or tag selected items</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}button{font:inherit;color:inherit}</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:var(--surface-plain-page);font-family:Geist,system-ui,sans-serif;color:var(--text-ink);">
+  <div style="display:flex;align-items:center;gap:12px;padding:56px 20px 8px;"><button aria-label="Back" style="width:44px;height:44px;border-radius:22px;border:1px solid var(--surface-border);background:var(--glass-card);display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg></button><div><h1 style="margin:0;font-size:23px;font-weight:700;">2 selected</h1><div style="font-size:13px;color:var(--text-meta);margin-top:2px;">Move or add a tag</div></div></div>
+  <h2 style="margin:20px 20px 8px;font-size:14px;font-weight:700;color:var(--text-meta);text-transform:uppercase;letter-spacing:.4px;">Move to calendar</h2>
+  <div style="margin:0 16px;background:var(--surface-card);border-radius:16px;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 14px;border-bottom:1px solid var(--surface-line);"><span style="width:36px;height:36px;border-radius:11px;background:var(--tint-cornflower);display:flex;align-items:center;justify-content:center;color:var(--app-calendar);font-weight:700;">C</span><span style="flex:1;font-size:16px;">Personal</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--stroke-strong)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg></div>
+    <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 14px;"><span style="width:36px;height:36px;border-radius:11px;background:var(--tint-wisteria);display:flex;align-items:center;justify-content:center;color:var(--app-calendar);font-weight:700;">W</span><span style="flex:1;font-size:16px;">Work</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--stroke-strong)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg></div>
+    <button aria-label="Show more calendars" style="width:100%;min-height:48px;border:0;background:transparent;color:var(--app-calendar);font-size:14px;font-weight:600;">Show more</button>
+  </div>
+  <h2 style="margin:22px 20px 8px;font-size:14px;font-weight:700;color:var(--text-meta);text-transform:uppercase;letter-spacing:.4px;">Add a tag</h2>
+  <div style="margin:0 16px;background:var(--surface-card);border-radius:16px;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:12px;min-height:54px;padding:6px 14px;border-bottom:1px solid var(--surface-line);"><span style="width:10px;height:10px;border-radius:5px;background:var(--list-violet);"></span><span style="flex:1;font-size:16px;">Travel</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--stroke-strong)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg></div>
+    <div style="display:flex;align-items:center;gap:12px;min-height:54px;padding:6px 14px;border-bottom:1px solid var(--surface-line);"><span style="width:10px;height:10px;border-radius:5px;background:var(--list-petrol);"></span><span style="flex:1;font-size:16px;">Family</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--stroke-strong)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg></div>
+    <button aria-label="Show more tags" style="width:100%;min-height:48px;border:0;background:transparent;color:var(--app-notes);font-size:14px;font-weight:600;">Show more</button>
+    <div style="display:flex;align-items:center;gap:12px;min-height:54px;padding:6px 14px;"><span style="width:10px;height:10px;border-radius:5px;border:1px solid var(--surface-border);"></span><span style="flex:1;font-size:16px;font-weight:600;color:var(--app-notes);">Create a tag…</span><span style="font-size:19px;color:var(--app-notes);">＋</span></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>class Component extends DCLogic { renderVals(){return{};} }</script>
+</body>
+</html>

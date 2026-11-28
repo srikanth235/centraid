@@ -1,0 +1,12 @@
+room app_place key="chat"
+  header title="Chat"
+    key tool sym="Clock" "Chats" #key/threads
+  band
+    tab "Home" sym="Home" #tab/home
+    tab "Chat" sym="Chat" selected #tab/chat
+    tab "Backup" sym="Backup" #tab/backup
+  ready
+    empty glyph="Chat" "The assistant isn’t available yet." body="Saved chats stay on this phone. Sending a question will be available when the assistant is ready."
+    section #section/threads "Chats"
+      trailing "Show more" sym="ChevronRight" #threads/all
+      row #thread/43268b44-6247-7599-853a-b80cfff7a81f "Who am I meeting?" meta="2026-11-26" swipe="Move to trash" #thread/43268b44-6247-7599-853a-b80cfff7a81f/swipe

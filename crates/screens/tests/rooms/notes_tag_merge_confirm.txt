@@ -1,0 +1,4 @@
+room sheet key="notes/tag/f2aa1d38-e85b-77e3-83a9-ea6e9c67fb2c/merge/c4bbc887-e301-7d8e-8f1d-2e7f4afde178"
+  header title="Merge tags?"
+  ready
+    confirm outlined "Merge tags?" body="Everything tagged “Trips” moves to “Travel”, and “Trips” is erased. This cannot be undone." yes="Merge tags"#confirm/yes no="Cancel"#confirm/no

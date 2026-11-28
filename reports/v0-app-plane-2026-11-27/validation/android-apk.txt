@@ -1,0 +1,15 @@
+Android Debug APK receipt
+
+Source and Core source commit: `be6c4d0edd65ad4bc80b0cd916284b74ec023521`.
+Build command: `. /tmp/centraid-env.sh && . /tmp/centraid-gradle-proxy.sh && /workspace/.tools/gradle-9.7.1/bin/gradle -p mobile -Pcentraid.android=true :androidApp:assembleDebug --no-daemon`.
+Result: `BUILD SUCCESSFUL`; log: `/tmp/centraid-android-be6c4d0e-assemble.log`.
+
+The compact Debug APK is package `dev.centraid`, minSdk 24, targetSdk 36, arm64-v8a only. APK size is 197,724,327 bytes; SHA-256 is `be739c7348e7a51641095d7d2d96e6f0c790e0e2aafdce3e72ac1a883e258663`. The named download and default output are hard links with identical contents.
+
+- Download: `mobile/androidApp/build/outputs/apk/debug/centraid-v0-android-arm64-api24-be6c4d0e.apk`
+- Default output: `mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk`
+- Embedded Core SHA-256 equals the rebuilt Android library: `1ac5cd8e35d0214137f6aa1f83c0e40f20df150af4ce9ba31c74078f9821c8f7`.
+- All five expected C ABI exports are present. Core dependencies are `libdl.so`, `libm.so`, and `libc.so`.
+- `zipalign -c -v 4` and `apksigner verify` passed. Signing certificate SHA-256 `90c42bb21431aa4523e0b5e97ae5e739f5bc5d3454c3b8d98aea9ab67783d0be` matches the previous Debug APK.
+
+No device or emulator was used (`device_run: false`).

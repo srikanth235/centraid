@@ -5,7 +5,11 @@ import android.os.Build
 import android.os.Looper
 import android.text.format.DateFormat
 import android.util.Log
+import android.Manifest
 import dev.centraid.android.backup.LinkFacts
+import dev.centraid.android.notify.Notify
+import dev.centraid.android.room.RoomClient
+import dev.centraid.android.share.ShareInboxWriter
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
 import dev.centraid.core.CoreFailure
@@ -52,25 +56,22 @@ internal object AppSession {
     class Open(
         val core: CentraidCore,
         val screens: Screens,
+        val rooms: RoomClient,
         val scope: CoroutineScope,
         val effects: ShellEffects,
-        val imports: ImportsRelay,
         private val context: Context,
     ) {
-        /**
-         * The app came forward or left (the activity's start and stop). The runtime tells every open
-         * screen and service (the Locker relocks on leaving; the pass service decides whether coming
-         * back is worth a pass, the follow coordinator that every phone store may have changed);
-         * coming forward also reports the locale, zone and 12 or 24 hour clock again, and MediaStore
-         * is watched while the app is in view.
-         */
-        /** The locale, zone or 12 or 24 hour setting changed while the app is in view. */
         suspend fun environment() = AppSession.environment(context, screens)
 
         suspend fun foreground(on: Boolean) {
-            if (on) AppSession.environment(context, screens)
+            if (on) {
+                rooms.foreground()
+                AppSession.environment(context, screens)
+                AppSession.drainShareInbox(context, rooms)
+            } else {
+                rooms.background()
+            }
             screens.lifecycle(foreground = on)
-            imports.foreground(on)
         }
     }
 
@@ -238,16 +239,39 @@ internal object AppSession {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val screens = Screens(core, scope)
         screens.attach()
+        val rooms = RoomClient(core, scope)
+        rooms.attach()
         val effects = ShellEffects(context, core, screens, scope)
-        val imports = ImportsRelay(context, screens, scope)
-        val open = Open(core, screens, scope, effects, imports, context.applicationContext)
-        // THE PERFORMER FIRST: the roots' first effects (the secrets the shelf reads at launch)
-        // must find it collecting.
+        rooms.shellEffectPerformer = effects::performShell
+        rooms.followReadPerformer = effects::performFollow
+        val open = Open(core, screens, rooms, scope, effects, context.applicationContext)
         effects.start()
-        imports.start()
         environment(context, screens)
         screens.start()
         LinkFacts.start(context, screens)
+        scope.launch {
+            rooms.loadAppearance()
+            rooms.open(RoomClient.DEFAULT_TAB, tab = RoomClient.DEFAULT_TAB, root = true)
+            drainShareInbox(context, rooms)
+            Notify.replayPresses(context, core)
+            Notify.launched(context, core) { effects.ui?.ask(Manifest.permission.POST_NOTIFICATIONS) }
+        }
+        scope.launch {
+            core.events.collect { event ->
+                event.notify?.let { schedule ->
+                    Notify.applyAndReport(context, core, schedule) {
+                        effects.ui?.ask(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+            }
+        }
         return open
+    }
+
+    private suspend fun drainShareInbox(context: Context, rooms: RoomClient) {
+        val inbox = ShareInboxWriter.inboxDir(context)
+        if (ShareInboxWriter.hasPendingItems(inbox)) {
+            rooms.drainShareIn(inbox.absolutePath)
+        }
     }
 }

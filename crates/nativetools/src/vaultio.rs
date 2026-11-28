@@ -12,11 +12,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use centraid_apps_kit::reads::{FanOutBound, read_pages};
-use centraid_apps_kit::row::Row;
-use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
-use centraid_apps_kit::testdoor::TestDoor;
 use centraid_assist::native::{Flags, Session};
+use centraid_domain::reads::{FanOutBound, read_pages};
+use centraid_domain::row::Row;
+use centraid_domain::statement::{PageBindValue, PageOrder, PageQuery};
+use centraid_domain::testdoor::TestDoor;
 use centraid_vault::access::Principal;
 use centraid_vault::bytes::FsBlobStore;
 use centraid_vault::{Clock, Command, CommandStatus, Registry, SeededIds, Vault};
@@ -25,6 +25,8 @@ pub use centraid_assist::native::door::{Call, Door, Ran, int, text};
 
 /// The device every command is invoked from.
 pub const DEVICE: &str = "nativetools";
+
+const HARNESS_LOCKER_KEY: [u8; 32] = *b"centraid-nativetools-harness-key";
 
 /// Commands run through [`Handle::run`] on a watched vault file, by `(command, outcome)` where the
 /// outcome is `executed`, `refused` or `failed`.
@@ -102,10 +104,6 @@ pub fn millis_of(datetime: jiff::civil::DateTime) -> i64 {
         .map(|zoned| zoned.timestamp().as_millisecond())
         .unwrap_or_default()
 }
-
-/// THE LOCKER KEY EVERY HARNESS WORLD IS SEALED UNDER. It protects nothing:
-/// every value it seals is invented.
-pub const HARNESS_LOCKER_KEY: &[u8; 32] = b"centraid harness locker key 0001";
 
 /// Where the content store of a vault file lives.
 #[must_use]
@@ -276,75 +274,6 @@ impl Handle {
         })
     }
 
-    /// A TYPED LOCKER SECRET, SEALED under the harness key before the vault sees it (#1135): the
-    /// runtime hands the door a secret as the member typed it, as the phone's core does inside
-    /// `run_keyed` (`crates/core/src/locker/phone.rs`, `seal_command`). A cell that is empty, the
-    /// vault's placeholder or already ciphertext (a seeded world writes its own) passes untouched.
-    fn sealed(
-        &self,
-        name: &str,
-        mut input: serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
-        use centraid_vault::commands::locker::{
-            SEALED_ITEM_CELLS, SEALED_PLACEHOLDER, built_in_field_id,
-        };
-        use centraid_vault::custody::locker_key::{
-            decrypt_under_locker_key, encrypt_under_locker_key, is_locker_ciphertext,
-        };
-        if !matches!(name, "locker.add_item" | "locker.edit_item") {
-            return Ok(input);
-        }
-        let typed = |value: &serde_json::Value| {
-            value
-                .as_str()
-                .filter(|text| {
-                    !text.is_empty() && *text != SEALED_PLACEHOLDER && !is_locker_ciphertext(text)
-                })
-                .map(str::to_owned)
-        };
-        let mut carried: Vec<(&str, String)> = SEALED_ITEM_CELLS
-            .iter()
-            .filter_map(|column| typed(&input[*column]).map(|value| (*column, value)))
-            .collect();
-        if carried.is_empty() {
-            return Ok(input);
-        }
-        let item_id = input["item_id"]
-            .as_str()
-            .filter(|id| !id.is_empty())
-            .ok_or("a Locker secret is sealed against its item's id, and none was named")?
-            .to_owned();
-        let (key_id, key) = self.locker_key()?;
-        for (column, value) in &mut carried {
-            if *column == "otp_seed" {
-                *value = centraid_apps_locker::totp::seed_of(value)
-                    .map_err(|refusal| refusal.sentence().to_owned())?;
-            }
-        }
-        if let Some((_, password)) = carried.iter().find(|(column, _)| *column == "password") {
-            let field_id = built_in_field_id(&item_id, "password");
-            let rotated = name == "locker.add_item" || {
-                let stored = self
-                    .vault
-                    .locker_sealed_item_cell(&item_id, "password")
-                    .map_err(|error| error.to_string())?
-                    .and_then(|cell| {
-                        decrypt_under_locker_key(&key, &key_id, &field_id, &cell.ciphertext?).ok()
-                    });
-                stored.as_deref() != Some(password.as_str())
-            };
-            input["password_rotated"] = serde_json::Value::Bool(rotated);
-        }
-        for (column, value) in carried {
-            let field_id = built_in_field_id(&item_id, column);
-            let sealed = encrypt_under_locker_key(&key, &key_id, &field_id, &value)
-                .map_err(|error| error.to_string())?;
-            input[column] = serde_json::Value::String(sealed);
-        }
-        input["key_id"] = serde_json::Value::String(key_id);
-        Ok(input)
-    }
-
     /// Run a command that must succeed.
     pub fn must(&self, name: &str, input: serde_json::Value) -> Result<serde_json::Value, String> {
         let ran = self.run(name, input.clone())?;
@@ -411,34 +340,6 @@ impl Handle {
             .map_err(|error| format!("reading {table}: {error}"))
     }
 
-    /// The occurrences of the days `from_day..=to_day` in the zone `tz`: Agenda's own read
-    /// (`centraid_apps_calendar::occurrences`) over the owner's view, as the core's door asks it.
-    pub fn events(
-        &self,
-        from_day: &str,
-        to_day: &str,
-        tz: &str,
-    ) -> Result<Vec<centraid_apps_calendar::Occurrence>, String> {
-        let zone = centraid_vault::time::zone::FireZone::named(tz)
-            .map_err(|_| format!("{tz} is not a time zone"))?;
-        let now = centraid_vault::clock::format_iso_ms(self.clock.get());
-        self.vault
-            .read(|connection| {
-                let door = TestDoor::new(connection);
-                Ok(centraid_apps_calendar::occurrences(
-                    &door, from_day, to_day, &now, &zone,
-                ))
-            })
-            .map_err(|error| error.to_string())?
-            .map_err(|error| format!("reading the events: {error}"))
-            .and_then(|(rows, denial)| match denial {
-                Some(denial) => Err(denial
-                    .message
-                    .unwrap_or_else(|| "the events are refused".to_owned())),
-                None => Ok(rows),
-            })
-    }
-
     /// Run a search through the vault's FTS door.
     pub fn search(
         &self,
@@ -466,11 +367,9 @@ impl Handle {
                 other => Err(other.to_string()),
             })
     }
+}
 
-    /// The Locker generation's id and the key its cells are sealed under:
-    /// `(key_id, key)`. The id is the vault's own (naming one on first use);
-    /// the key is [`HARNESS_LOCKER_KEY`], because the phone derives `K` from
-    /// the 24 words and a harness world has none (#1047, D-6).
+impl Handle {
     pub fn locker_key(&self) -> Result<(String, Vec<u8>), String> {
         let key_id = self
             .vault
@@ -478,9 +377,81 @@ impl Handle {
             .map_err(|error| error.to_string())?;
         Ok((key_id, HARNESS_LOCKER_KEY.to_vec()))
     }
-}
 
-impl Handle {
+    fn sealed(
+        &self,
+        name: &str,
+        mut input: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        use centraid_vault::commands::locker::schema::{
+            SEALED_PLACEHOLDER, built_in, field_id_of, is_sealed_kind,
+        };
+        use centraid_vault::custody::locker_key::{encrypt_under_locker_key, is_locker_ciphertext};
+        if !matches!(name, "locker.add_item" | "locker.edit_item") {
+            return Ok(input);
+        }
+        let item_id = input["item_id"].as_str().unwrap_or_default().to_owned();
+        let item_type = input["type"].as_str().unwrap_or("login").to_owned();
+        let Some(fields) = input
+            .get_mut("fields")
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            return Ok(input);
+        };
+        let mut key_pair: Option<(String, Vec<u8>)> = None;
+        for field in fields.iter_mut() {
+            let Some(obj) = field.as_object_mut() else {
+                continue;
+            };
+            let field_key = obj
+                .get("field_key")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned);
+            let kind = obj
+                .get("kind")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .or_else(|| {
+                    field_key
+                        .as_deref()
+                        .and_then(|k| built_in(&item_type, k))
+                        .map(|b| b.kind.to_owned())
+                });
+            let Some(kind) = kind else {
+                continue;
+            };
+            if !is_sealed_kind(&kind) {
+                continue;
+            }
+            let Some(plain) = obj
+                .get("value")
+                .and_then(serde_json::Value::as_str)
+                .filter(|v| !v.is_empty() && *v != SEALED_PLACEHOLDER && !is_locker_ciphertext(v))
+                .map(str::to_owned)
+            else {
+                continue;
+            };
+            if key_pair.is_none() {
+                key_pair = Some(self.locker_key()?);
+            }
+            let (key_id, key) = key_pair.as_ref().expect("just set");
+            let field_id = obj
+                .get("field_id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .or_else(|| field_key.as_deref().map(|k| field_id_of(&item_id, k)))
+                .unwrap_or_else(|| self.mint_id());
+            let sealed = encrypt_under_locker_key(key, key_id, &field_id, &plain)
+                .map_err(|error| error.to_string())?;
+            obj.insert("value".to_owned(), serde_json::Value::String(sealed));
+            obj.insert(
+                "key_id".to_owned(),
+                serde_json::Value::String(key_id.clone()),
+            );
+        }
+        Ok(input)
+    }
+
     /// Move the write-ahead log into the vault file and truncate it, so a
     /// seeded vault's file is the whole vault before it is copied
     /// (`.claude/skills/stack/sqlite/centraid.md`).
@@ -511,15 +482,6 @@ impl Door for Handle {
         binds: &[String],
     ) -> Result<Vec<Row>, String> {
         Self::table_where(self, table, columns, sort, pk, predicate, binds)
-    }
-
-    fn events(
-        &self,
-        from_day: &str,
-        to_day: &str,
-        tz: &str,
-    ) -> Result<Vec<centraid_apps_calendar::Occurrence>, String> {
-        Self::events(self, from_day, to_day, tz)
     }
 
     fn search(

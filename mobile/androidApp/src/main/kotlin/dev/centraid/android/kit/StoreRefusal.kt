@@ -11,9 +11,11 @@ import centraid.core.v1.EffectFailed
  * tell the two apart itself, so the asking is recorded in a preferences file of its own.
  */
 internal object StoreRefusal {
-    /** The answer for a read whose permission is not granted; [asked] is whether the prompt was ever shown. */
-    fun failure(asked: Boolean): EffectFailed =
-        if (asked) EffectFailed(reason = EffectReason.DENIED, denied = true) else EffectFailed(reason = EffectReason.UNAVAILABLE)
+    fun failure(asked: Boolean, restricted: Boolean = false): EffectFailed = when {
+        restricted -> EffectFailed(reason = EffectReason.DENIED, denied = true, restricted = true)
+        asked -> EffectFailed(reason = EffectReason.DENIED, denied = true)
+        else -> EffectFailed(reason = EffectReason.UNAVAILABLE)
+    }
 
     fun asked(context: Context, permission: String): Boolean =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(permission, false)

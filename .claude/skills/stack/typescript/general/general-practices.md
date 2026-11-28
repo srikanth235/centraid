@@ -2,6 +2,8 @@
 
 Detailed language, testing, and performance guidance. Centraid-specific commands and generated-file rules in [`../SKILL.md`](../centraid.md) take precedence.
 
+TypeScript application tests and the Vitest tooling below are (target). The repository currently uses TypeScript only for static-site scripts and has no Vitest project.
+
 ## 1. Mindset
 
 - **Let the types carry the design.** A good TypeScript program is mostly types that make wrong code fail to compile; the runtime code is then short and boring.
@@ -62,7 +64,7 @@ Detailed language, testing, and performance guidance. Centraid-specific commands
 - Exit non-zero with a one-line reason on failure; print machine-readable output when another tool reads it.
 - Parse JSON into `unknown` and validate it before use.
 
-## 8. Testing with vitest
+## 8. Testing with vitest (target)
 
 - Test behaviour through the public API: inputs and observable outputs, not private helpers. A refactor that keeps behaviour should not need assertion changes.
 - One scenario per test, named for the behaviour. Table-driven tests for many cases, with an assertion message naming the case.
@@ -89,7 +91,7 @@ reproduce -> measure (the real runtime, not watch mode) -> find the line -> fix 
 | --- | --- |
 | A script is slow | `bun --cpu-prof --cpu-prof-md script.ts` (writes a markdown profile you can grep), or `node --cpu-prof --cpu-prof-dir=<dir> script.mjs` (a `.cpuprofile` for DevTools or speedscope) |
 | Memory grows | `bun --heap-prof-md script.ts`, or `node --heap-prof` |
-| One vitest file is slow | `bun run --cwd packages/<pkg> test -- <file> --reporter=verbose` shows per-test time; time the setup with `performance.now()` |
+| One Vitest test is slow (target) | Use the project's test command with the test file and verbose reporter; time setup with `performance.now()` |
 | A step wastes time waiting | Log `performance.now()` deltas between awaits; a sequential `await` chain of independent calls shows as a staircase |
 
 A profile file records the process environment, and a shell started by an agent carries its tokens. Write profiles to the scratchpad or a temp directory, delete them after reading, never commit them.

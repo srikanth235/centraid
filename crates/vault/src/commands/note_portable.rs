@@ -8,10 +8,14 @@
 //!   vault's convention) unless front matter says `title:`; its folder, if it had one
 //!   below the picked root, is its notebook (the top folder only); its words are the file
 //!   without the front matter.
-//! - **`[[links]]` become links.** The note command already compiles `[[Title]]` into a
-//!   `links` edge; the parse only has to normalise Obsidian's `[[Title|alias]]` and
+//! - **`[[links]]` become mentions.** The note command rebuilds a note's `mention` rows from its
+//!   words on every save; the parse only has to normalise Obsidian's `[[Title|alias]]` and
 //!   `[[Title#Heading]]` to `[[Title]]`, because the vault resolves a title and nothing
 //!   narrower.
+//! - **A dated note is a journal entry.** Front matter `journal: 2026-03-01` is the note's
+//!   `journal_on`, and an export writes it back.
+//! - **An asset travels beside its note**: `<Folder>/<Stem>.assets/<name>`. On import such a
+//!   file (the shell hands it over as a held blob, not text) joins the note of that stem.
 //! - **`#tags` become tags.** An inline `#tag` outside code (not a heading: a `#` followed
 //!   by a space is one), and front matter `tags:` in any of its three spellings. The
 //!   `#tag` stays in the words, as Obsidian keeps it.
@@ -28,6 +32,10 @@ use crate::portable::zip::ZipWriter;
 pub struct SourceFile {
     pub path: String,
     pub text: String,
+    /// The hash of the bytes the shell has put in the content store, for a file that is not text
+    /// (an asset). `None` for a text file.
+    pub blob: Option<String>,
+    pub media_type: Option<String>,
 }
 
 /// A file read as a note.
@@ -37,6 +45,7 @@ pub struct Parsed {
     pub body: String,
     pub tags: Vec<String>,
     pub notebook: Option<String>,
+    pub journal_on: Option<String>,
 }
 
 const EXTENSIONS: [&str; 3] = ["md", "markdown", "txt"];
@@ -57,7 +66,7 @@ pub fn is_readable(path: &str) -> bool {
 /// words and no name.
 #[must_use]
 pub fn parse(file: &SourceFile) -> Option<Parsed> {
-    if !is_readable(&file.path) {
+    if file.blob.is_some() || !is_readable(&file.path) {
         return None;
     }
     let (front, rest) = split_front_matter(&file.text);
@@ -72,7 +81,9 @@ pub fn parse(file: &SourceFile) -> Option<Parsed> {
     let notebook = notebook.filter(|folder| !folder.is_empty() && !folder.starts_with('.'));
     let mut title = stem.to_owned();
     let mut tags: Vec<String> = Vec::new();
+    let mut journal_on = None;
     if let Some(front) = front {
+        journal_on = front_value(front, "journal").filter(|day| !day.is_empty());
         if let Some(named) = front_value(front, "title").filter(|named| !named.is_empty()) {
             title = named;
         }
@@ -93,8 +104,34 @@ pub fn parse(file: &SourceFile) -> Option<Parsed> {
         body,
         tags,
         notebook,
+        journal_on,
     })
 }
+
+/// Where an asset file belongs: `(the note's folder, the note's stem)` for a path like
+/// `Trip/Paris.assets/pic.png`, with the asset's own name. `None` for any other path.
+#[must_use]
+pub fn asset_owner(path: &str) -> Option<((Option<String>, String), String)> {
+    let mut parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    let name = parts.pop()?;
+    let holder = parts.pop()?;
+    let stem = holder.strip_suffix(ASSETS_SUFFIX)?;
+    let folder = parts.first().map(|folder| (*folder).trim().to_owned());
+    Some(((folder, stem.trim().to_lowercase()), name.to_owned()))
+}
+
+/// The note a parsed file would be, as an asset's owner key: the same `(folder, stem)` pair.
+#[must_use]
+pub fn owner_key(path: &str) -> Option<(Option<String>, String)> {
+    let mut parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    let name = parts.pop()?;
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+    let folder = parts.first().map(|folder| (*folder).trim().to_owned());
+    Some((folder, stem.trim().to_lowercase()))
+}
+
+/// The folder an exported note's assets sit in, beside it.
+pub const ASSETS_SUFFIX: &str = ".assets";
 
 /// `---` … `---` at the very top, if there is one.
 fn split_front_matter(text: &str) -> (Option<&str>, &str) {
@@ -401,16 +438,21 @@ pub fn zip(entries: &[Entry]) -> Vec<u8> {
 /// one, and its tags as a front-matter list, so a re-import finds them again. Links stay
 /// as written.
 #[must_use]
-pub fn markdown_of(title: &str, body: &str, tags: &[String]) -> String {
+pub fn markdown_of(title: &str, body: &str, tags: &[String], journal_on: Option<&str>) -> String {
     let mut out = String::new();
     // The title is the file's name, and a name loses what a file system refuses and is cut short:
     // when it would not read back as the title, the file says the title itself.
     let named = file_stem(title) != title.trim();
-    if named || !tags.is_empty() {
+    if named || !tags.is_empty() || journal_on.is_some() {
         out.push_str("---\n");
         if named {
             out.push_str("title: ");
             out.push_str(&serde_json::to_string(title).unwrap_or_default());
+            out.push('\n');
+        }
+        if let Some(day) = journal_on {
+            out.push_str("journal: ");
+            out.push_str(day);
             out.push('\n');
         }
         if !tags.is_empty() {
@@ -433,6 +475,8 @@ mod tests {
         SourceFile {
             path: path.to_owned(),
             text: text.to_owned(),
+            blob: None,
+            media_type: None,
         }
     }
 
@@ -555,17 +599,19 @@ mod tests {
             "x".repeat(300).as_str(),
             "plain",
         ] {
-            let text = markdown_of(title, "Body", &[]);
+            let text = markdown_of(title, "Body", &[], None);
             let parsed = parse(&SourceFile {
                 path: format!("{}.md", file_stem(title)),
                 text,
+                blob: None,
+                media_type: None,
             })
             .expect("a note");
             assert_eq!(parsed.title, title);
             assert_eq!(parsed.body, "Body");
         }
         assert_eq!(
-            markdown_of("plain", "Body", &[]),
+            markdown_of("plain", "Body", &[], None),
             "Body\n",
             "a plain title adds nothing"
         );

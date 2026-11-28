@@ -86,6 +86,23 @@ pub struct Pending {
     producer: String,
     /// Whether the commit is a quiet save (an editor's autosave): see [`CommitTx::set_quiet`].
     quiet: bool,
+    /// Who made the commit: see [`CommitTx::set_actor`].
+    actor: crate::history::Actor,
+}
+
+impl Pending {
+    /// What the history is told when the commit settles.
+    fn settling(&self) -> crate::history::Settling {
+        crate::history::Settling {
+            cause: if self.producer.is_empty() {
+                "unnamed".to_owned()
+            } else {
+                self.producer.clone()
+            },
+            actor: self.actor.clone(),
+            quiet: self.quiet,
+        }
+    }
 }
 
 impl<'conn> CommitTx<'conn> {
@@ -112,17 +129,18 @@ impl<'conn> CommitTx<'conn> {
         self.pending.borrow_mut().quiet = quiet;
     }
 
-    /// What the history will be told when this commit settles: the cause it is kept under and
-    /// whether the commit is a quiet save. A handler that answers the revision its save leaves
-    /// asks the history with the same two facts ([`crate::history::head_after`]).
-    pub(crate) fn settling_as(&self) -> (String, bool) {
-        let pending = self.pending.borrow();
-        let cause = if pending.producer.is_empty() {
-            "unnamed".to_owned()
-        } else {
-            pending.producer.clone()
-        };
-        (cause, pending.quiet)
+    /// Say WHO made this commit (B4): the door a command came through, a follow pass for the
+    /// origin it follows. It is written to every revision the commit keeps and is never inferred
+    /// from the producer's name; a commit that says nothing is the member's.
+    pub fn set_actor(&self, actor: crate::history::Actor) {
+        self.pending.borrow_mut().actor = actor;
+    }
+
+    /// What the history will be told when this commit settles: the cause it is kept under, who
+    /// made it, and whether it is a quiet save. A handler that answers the revision its save
+    /// leaves asks the history with the same facts ([`crate::history::head_after`]).
+    pub(crate) fn settling_as(&self) -> crate::history::Settling {
+        self.pending.borrow().settling()
     }
 
     /// Stamp an entity as changed: `updated_at`, and a place on the
@@ -166,14 +184,31 @@ impl<'conn> CommitTx<'conn> {
     /// # Errors
     /// Whatever SQLite refused: a duplicate id, a kind the CHECK does not know.
     pub fn insert_entity(&self, id: &str, kind: Kind, title: &str, now: &str) -> Result<()> {
+        self.insert_entity_in(id, kind, title, None, now)
+    }
+
+    /// [`Self::insert_entity`] born in a home: `parent` is the id of the row that holds it (its
+    /// kind is read from that row, so a home that does not exist leaves the pair the database
+    /// refuses).
+    ///
+    /// # Errors
+    /// Whatever SQLite refused: a duplicate id, a home of a kind the shape does not allow.
+    pub fn insert_entity_in(
+        &self,
+        id: &str,
+        kind: Kind,
+        title: &str,
+        parent: Option<&str>,
+        now: &str,
+    ) -> Result<()> {
         self.pending
             .borrow_mut()
             .instant
             .get_or_insert_with(|| now.to_owned());
         self.connection.execute(
-            "INSERT INTO entity (id, kind, title, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?4)",
-            rusqlite::params![id, kind.as_str(), title, now],
+            "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?5, (SELECT kind FROM entity WHERE id = ?5), ?4, ?4)",
+            rusqlite::params![id, kind.as_str(), title, now, parent],
         )?;
         self.born(id);
         Ok(())
@@ -311,27 +346,21 @@ impl Vault {
                     }
                 }
             }
-            // The index is part of the commit: a change and its search rows
-            // land together or not at all.
+            // The index file owes what this commit changed: the queue (`search_owed`) is part of
+            // the commit, in `vault.db`; the index file itself is written right after it
+            // (`index::after_commit`), because no transaction spans the two files.
             let mut owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
             owed.extend(auto.reindex);
             crate::index::reindex(&connection, &owed)?;
-            // The alerts are part of the commit too: what an item fires next lands with it.
-            crate::alerts::refresh(&connection, &owed, crate::alerts::now_ms(&now))?;
+            // A line's parts add up to its amount (E3): the one place that rule is held, for every
+            // line this commit touched, whatever wrote it.
+            crate::commands::txn::check_split_sums(&connection, &owed)?;
+            // The alerts are written with the search rows, after the commit: the entity a reminder,
+            // a date, a field or an override changed is in `owed` already (the touch triggers).
             // The history is part of the commit too: the states it replaced are kept with the
             // change that replaced them, or neither lands.
-            let producer = std::mem::take(&mut self.pending.borrow_mut().producer);
-            let quiet = self.pending.borrow().quiet;
-            crate::history::settle(
-                &connection,
-                &now,
-                if producer.is_empty() {
-                    "unnamed"
-                } else {
-                    &producer
-                },
-                quiet,
-            )?;
+            let settling = self.pending.borrow().settling();
+            crate::history::settle(&connection, &now, &settling)?;
             bump_writes(&connection, &census, &now)?;
             Ok(value)
         })();
@@ -362,6 +391,9 @@ impl Vault {
                 // before it would be a screen redrawn from a transaction that
                 // could still roll back.
                 let tally = hook.take(&census)?;
+                // The index file is written from what the commit queued. The hook is off, so
+                // none of it is a screen's change, and it never fails a commit that is durable.
+                crate::index::after_commit(&self.connection(), self.clock().now_ms());
                 let rows = tally.rows;
                 let tables: Vec<String> = tally.tables.into_iter().collect();
                 tracing::debug!(rows, tables = tables.len(), "commit");
@@ -405,6 +437,10 @@ pub(crate) fn is_index(table: &str) -> bool {
         || table == "search_word"
         || table == "search_owed"
         || table == "alert"
+        || table == "geo"
+        || table == "index_state"
+        || crate::index::is_scratch(table)
+        || matches!(table, "geo_node" | "geo_rowid" | "geo_parent")
         || is_fts_shadow(table)
 }
 
@@ -614,6 +650,11 @@ mod tests {
             "search_word",
             "search_owed",
             "alert",
+            "geo",
+            "geo_node",
+            "geo_rowid",
+            "geo_parent",
+            "index_state",
             "search_past",
             "search_past_data",
             "search_past_docsize",

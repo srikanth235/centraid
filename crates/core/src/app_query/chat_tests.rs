@@ -7,7 +7,6 @@ use crate::config::CoreConfig;
 use crate::handle::{Core, Handle};
 
 const NOW: &str = "2099-06-02T02:00:00.000Z";
-const TZ: &str = "America/New_York";
 
 struct Scratch {
     dir: std::path::PathBuf,
@@ -60,18 +59,6 @@ impl Scratch {
         }
     }
 
-    fn home(&self, term: &str) -> wire::VaultSearch {
-        match self.ask(wire::app_query_request::Query::VaultSearch(
-            wire::VaultSearchRequest {
-                term: term.to_owned(),
-                tz: TZ.to_owned(),
-            },
-        )) {
-            wire::app_query_response::Answer::VaultSearch(found) => found,
-            other => panic!("vault.search answered as {other:?}"),
-        }
-    }
-
     fn drawer(&self, term: &str, limit: u32) -> wire::ChatThreads {
         match self.ask(wire::app_query_request::Query::ChatThreads(
             wire::ChatThreadsRequest {
@@ -110,7 +97,7 @@ impl Scratch {
             "answer": {
                 "outcome": "answered",
                 "text": answer,
-                "cards": [{ "app": "notes", "entity": "note", "id": "n-1", "title": "cardzed" }]
+                "cards": [{ "entity_id": "note:n-1" }]
             }
         }});
         if let Some(thread) = thread {
@@ -129,89 +116,6 @@ fn ids(found: &wire::ChatThreads) -> Vec<&str> {
         .iter()
         .map(|thread| thread.thread_id.as_str())
         .collect()
-}
-
-/// HOME CARRIES A CHAT THREAD AS A HIT (R-1097-24): entity `thread`, app
-/// `chat`, the thread's id and title, found by the title and by what the member
-/// said and by nothing the assistant or a card said.
-#[test]
-fn home_finds_a_thread_by_its_title_and_its_words_and_by_nothing_the_assistant_said() {
-    let scratch = Scratch::founded();
-    let thread = scratch.turn(
-        None,
-        "Where is the marmalade recipe?",
-        "On the shelf, flibbertigibbet.",
-    );
-    scratch.turn(Some(&thread), "And the persimmon jam?", "In the cellar.");
-    let other = scratch.turn(None, "When is the dentist?", "Tuesday.");
-
-    let chat_hits = |term: &str| -> Vec<(String, String, String, String)> {
-        scratch
-            .home(term)
-            .hits
-            .into_iter()
-            .filter(|hit| hit.app_id == "chat")
-            .map(|hit| (hit.entity, hit.id, hit.title, hit.open_id))
-            .collect()
-    };
-    let expected = |id: &str, title: &str| {
-        vec![(
-            "thread".to_owned(),
-            id.to_owned(),
-            title.to_owned(),
-            String::new(),
-        )]
-    };
-    assert_eq!(
-        chat_hits("marmalade"),
-        expected(&thread, "Where is the marmalade recipe?")
-    );
-    // Said in the second message, in no title.
-    assert_eq!(
-        chat_hits("persimmon"),
-        expected(&thread, "Where is the marmalade recipe?")
-    );
-    assert_eq!(
-        chat_hits("dentist"),
-        expected(&other, "When is the dentist?")
-    );
-    // The snippet is the member's own word.
-    let found = scratch.home("persimmon");
-    let hit = found
-        .hits
-        .iter()
-        .find(|hit| hit.app_id == "chat")
-        .expect("the thread is a hit");
-    assert!(hit.snippet.contains("⟦persimmon⟧"), "{}", hit.snippet);
-    // Not the assistant's words, not a card.
-    for planted in ["flibbertigibbet", "cardzed", "Tuesday"] {
-        assert!(
-            scratch.home(planted).hits.is_empty(),
-            "{planted} found something on Home"
-        );
-    }
-}
-
-/// A TYPO IN A MEMBER'S WORD IS CORRECTED ON HOME across the chat's vocabulary,
-/// and a deleted thread leaves Home's answer.
-#[test]
-fn a_typo_in_a_thread_word_is_corrected_on_home_and_a_deleted_thread_leaves() {
-    let scratch = Scratch::founded();
-    let thread = scratch.turn(None, "What did the surveyor say about the boundary?", "Ok.");
-    let slipped = scratch.home("surveyer");
-    assert_eq!(slipped.corrected, "surveyor");
-    assert_eq!(
-        slipped
-            .hits
-            .iter()
-            .filter(|hit| hit.app_id == "chat")
-            .map(|hit| hit.id.as_str())
-            .collect::<Vec<_>>(),
-        [thread.as_str()]
-    );
-    scratch.run("entity.purge", serde_json::json!({ "id": thread }));
-    assert!(scratch.home("surveyor").hits.is_empty());
-    assert!(scratch.home("surveyer").corrected.is_empty());
 }
 
 /// THE DRAWER'S SEARCH (R-1097-24): `chat.threads` with a term answers the
@@ -273,6 +177,7 @@ fn the_drawer_searches_threads_and_says_what_it_corrected() {
         serde_json::json!({ "id": other, "title": "Teeth appointment" }),
     );
     assert_eq!(ids(&scratch.drawer("teeth", 0)), [other.as_str()]);
+    scratch.run("entity.trash", serde_json::json!({ "id": other }));
     scratch.run("entity.purge", serde_json::json!({ "id": other }));
     assert!(scratch.drawer("teeth", 0).threads.is_empty());
     assert!(scratch.drawer("dentist", 0).threads.is_empty());

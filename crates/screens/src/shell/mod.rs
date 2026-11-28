@@ -1,17 +1,14 @@
-//! THE SHELL'S OWN SCREENS (#1135, lane H1): Home, the springboard, and its
-//! search, plus the band, the one table that sends a row to its page and the
-//! runtime the shells attach.
+//! THE SHELL'S OWN SCREENS (#1135, lane H1): the band, settings and the export, and the runtime the
+//! shells attach.
 //!
 //! | Screen | Route name | Machine |
 //! |---|---|---|
-//! | The springboard | [`HOME`] | [`home`] |
-//! | Search over every app | [`SEARCH`] | [`search`] |
+//! | Home's root, empty | [`HOME`] | [`home`] |
 //! | Settings | [`SETTINGS`] | [`settings`] |
 //! | Export everything | [`EXPORT`] | [`export`] |
 //!
-//! Home is the root of the `home` tab; an app opens as a page pushed on that
-//! tab and back returns to Home. A tile and a search row carry the
-//! [`wire::Route`] to push, so a shell never names a destination.
+//! Home is the root of the `home` tab; the springboard went with the apps it listed, and the shell
+//! frame fills the page.
 
 use centraid_api_proto::core_v1 as wire;
 
@@ -20,14 +17,9 @@ use crate::Registry;
 pub mod band;
 pub mod export;
 pub mod home;
-pub mod policy;
-pub mod row_routes;
-pub mod search;
 pub mod settings;
-pub mod tiles;
 
 pub const HOME: &str = "home.springboard";
-pub const SEARCH: &str = "home.search";
 pub const SETTINGS: &str = "home.settings";
 pub const EXPORT: &str = "home.export";
 
@@ -38,15 +30,14 @@ pub const TAB: &str = band::HOME;
 #[must_use]
 pub fn registry(secrets: &crate::custody::secrets::VaultSecrets) -> Registry {
     Registry::default()
-        .with(HOME, home::build(secrets))
-        .with(SEARCH, search::build)
+        .with(HOME, home::build)
         .with(SETTINGS, settings::build(secrets))
         .with(EXPORT, export::build)
 }
 
 /// The routes the shell's own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{HOME, SEARCH, SETTINGS, wire};
+    use super::{HOME, SETTINGS, wire};
 
     /// Home, the springboard.
     #[must_use]
@@ -55,16 +46,6 @@ pub mod routes {
             sheet: false,
             screen: HOME.to_owned(),
             args: Some(wire::route::Args::Home(wire::HomeRoute {})),
-        }
-    }
-
-    /// Home's search over every app.
-    #[must_use]
-    pub fn search() -> wire::Route {
-        wire::Route {
-            sheet: false,
-            screen: SEARCH.to_owned(),
-            args: Some(wire::route::Args::HomeSearch(wire::HomeSearchRoute {})),
         }
     }
 

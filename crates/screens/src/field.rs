@@ -18,6 +18,10 @@ pub enum Field<T> {
     Is(T),
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once an app declares such a field"
+)]
 pub(crate) fn blob(value: impl Into<Vec<u8>>) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Blob(value.into())),
@@ -30,12 +34,20 @@ pub(crate) fn text(value: impl Into<String>) -> wire::Value {
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once a manifest declares a field of this type"
+)]
 pub(crate) fn whole(value: i64) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Integer(value)),
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once an app declares such a field"
+)]
 pub(crate) fn real(value: f64) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Real(value)),
@@ -43,17 +55,29 @@ pub(crate) fn real(value: f64) -> wire::Value {
 }
 
 /// A boolean travels as 0 or 1; the core types it by the manifest's schema.
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once a manifest declares a field of this type"
+)]
 pub(crate) fn flag(value: bool) -> wire::Value {
     whole(i64::from(value))
 }
 
 /// An explicit `null`, for a required property the schema lets be cleared.
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once an app declares such a field"
+)]
 pub(crate) fn null() -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Null(wire::NullValue {})),
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once an app declares such a field"
+)]
 pub(crate) fn put_field<T>(
     map: &mut HashMap<String, wire::Value>,
     name: &str,

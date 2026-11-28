@@ -1,14 +1,33 @@
 //! The per-system follow maps (`SYSTEMS`) and their defaults/shape callbacks.
+//!
+//! **Registering a system's map is one step: a row in [`SYSTEMS`].** The command (`follow.<…>`),
+//! its schema and its preconditions are built from the rows; the engine in `merge.rs` reads what a
+//! system fills, whether it retires, whether it names a device and which kinds it yields from
+//! `origin_system` and `source_shape`, so a map says only which fields its kind has and how a
+//! record reads.
+//!
+//! The table holds the maps of the lanes that have re-plugged theirs (a map names the kind's
+//! columns, its children and its defaults, all of which moved with the v0 schema); the removed
+//! maps are in this file's history at `40b18d2c` and the engine is proved with maps of the tests'
+//! own (`tests/follow_*.rs`).
 
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
-use crate::commands::{CommandCtx, contact_point, container, event, workout};
-use crate::error::{Result, VaultError};
-use crate::model::{DEFAULT_CALENDAR_ID, Kind};
+use crate::commands::{CommandCtx, event, reading, workout};
+use crate::error::Result;
+use crate::model::Kind;
 
 use super::merge::same;
-use super::{Child, Gone, Match, OriginOf, OriginRow, SystemMap};
+use super::{Child, Gone, Maps, Match, OriginRow, SystemMap};
+use crate::error::VaultError;
+
+fn no_defaults(
+    _: &rusqlite::Connection,
+    _: &OriginRow,
+) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
+    Ok(Vec::new())
+}
 
 /// The name a system gives a record: `stated.title`, kept in a column of its own so a read of it
 /// parses no JSON.
@@ -16,19 +35,15 @@ pub(super) fn stated_title(stated: &Json) -> Option<&str> {
     stated.get("title").and_then(Json::as_str)
 }
 
-fn as_stated(_: &CommandCtx<'_, '_>, _: &mut Map<String, Json>) -> std::result::Result<(), String> {
-    Ok(())
-}
-
-fn event_shape(
-    _: &CommandCtx<'_, '_>,
-    fields: &mut Map<String, Json>,
-) -> std::result::Result<(), String> {
-    event::shape(fields)
-}
-
-fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
-    Ok(())
+/// Put the instants a record states, the fields named, in the clock's one form whatever the phone
+/// spelled, so what the row holds and what the source stated stay equal: the helper a map's
+/// `shape` calls for each field it holds as an instant.
+pub fn canonical_instants(fields: &mut Map<String, Json>, names: &[&str]) {
+    for name in names {
+        if let Some(Json::String(text)) = fields.get_mut(*name) {
+            *text = crate::time::temporal::canonical(text);
+        }
+    }
 }
 
 impl SystemMap {
@@ -53,53 +68,33 @@ impl SystemMap {
     }
 }
 
-fn no_defaults(
-    _: &Connection,
-    _: &OriginRow,
-) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
-    Ok(Vec::new())
+fn as_stated(_: &CommandCtx<'_, '_>, _: &mut Map<String, Json>) -> std::result::Result<(), String> {
+    Ok(())
 }
 
-fn calendar_defaults(
-    _: &Connection,
-    origin: &OriginRow,
-) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
-    Ok(vec![(
-        "calendar_id",
-        origin
-            .fills
-            .clone()
-            .unwrap_or_else(|| DEFAULT_CALENDAR_ID.to_owned())
-            .into(),
-    )])
+fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
+    Ok(())
 }
 
-fn project_defaults(
-    _: &Connection,
-    origin: &OriginRow,
-) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
-    Ok(origin
-        .fills
-        .clone()
-        .map(|project| ("project_id", project.into()))
-        .into_iter()
-        .collect())
+/// A line whose amount the bank changed keeps its parts adding up: the last part takes the
+/// difference.
+fn settle_line(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
+    ctx.connection().execute(
+        "UPDATE txn_split
+            SET amount_minor = amount_minor
+                + (SELECT t.amount_minor - (SELECT SUM(amount_minor) FROM txn_split WHERE txn_id = t.id)
+                     FROM txn t WHERE t.id = txn_split.txn_id)
+          WHERE txn_id = ?1
+            AND position = (SELECT MAX(position) FROM txn_split WHERE txn_id = ?1)",
+        [id],
+    )?;
+    Ok(())
 }
 
-fn folder_defaults(
-    _: &Connection,
-    origin: &OriginRow,
-) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
-    Ok(origin
-        .fills
-        .clone()
-        .map(|folder| ("folder_id", folder.into()))
-        .into_iter()
-        .collect())
-}
-
+/// A statement line is in the account its origin fills (the line's account stays `txn.account_id`,
+/// it is not a home). The line is entered from a statement, the column's default.
 fn statement_defaults(
-    connection: &Connection,
+    _: &Connection,
     origin: &OriginRow,
 ) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
     let Some(account) = origin.fills.clone() else {
@@ -108,22 +103,12 @@ fn statement_defaults(
             detail: "a statement is imported into an account".to_owned(),
         });
     };
-    // A line is in the account's currency: one account, one currency.
-    let currency: String = connection.query_row(
-        "SELECT currency FROM account WHERE id = ?1",
-        [&account],
-        |row| row.get(0),
-    )?;
-    Ok(vec![
-        ("account_id", account.into()),
-        ("currency", currency.into()),
-    ])
+    Ok(vec![("account_id", account.into())])
 }
 
-/// A child that is only ever stated, never a row of the vault's: what the
-/// source last said of it, read back from `source.stated`. The member cannot
-/// edit it, so the row always agrees with what was stated, and a changed
-/// statement is recorded by the engine and written nowhere else.
+/// A child that is only ever stated, never a row of the vault's: what the source last said of it,
+/// read back from `source.stated`. The member cannot edit it, so the row always agrees with what
+/// was stated, and a changed statement is recorded by the engine and written nowhere else.
 fn stated_read(connection: &Connection, id: &str, name: &str) -> Result<Json> {
     let stated: Option<String> = connection
         .query_row(
@@ -151,23 +136,8 @@ fn stated_merge(_: &CommandCtx<'_, '_>, _: &str, _: Option<&Json>, _: &Json) -> 
     Ok(false)
 }
 
-/// A file's size and modification time as the phone last stated them.
-///
-/// The phone's cheap pre-check rides in the statement: a rescan of an unchanged
-/// folder reads no bytes, because the phone asks the vault what each file last
-/// stated (`source.stated`) and stages a file only when its size or time moved.
-const STAT: Child = Child {
-    name: "stat",
-    read: |connection, id| stated_read(connection, id, "stat"),
-    canon: stated_canon,
-    merge: stated_merge,
-    items: None,
-    take: stated_take,
-    stamp: None,
-};
-
-/// What a statement said of a line beyond what the model keeps: its memo, its
-/// check number, the bank's own type and the file format it came in.
+/// What a statement said of a line beyond what the model keeps: the bank's memo, its check number,
+/// the bank's own type and the file format it came in.
 const LINE: Child = Child {
     name: "line",
     read: |connection, id| stated_read(connection, id, "line"),
@@ -178,45 +148,56 @@ const LINE: Child = Child {
     stamp: None,
 };
 
-/// The six systems the vault follows.
+/// A bank's statement (Money): read line by line into an account (its one origin fills it; a statement is
+// not a phone's store and is never stopped): the vault adds a line once and a re-import adds it
+// again never. A field the member edited stays theirs and the bank's word is read beside it
+// (`follow::differences`); one they did not edit follows the bank (a pending line the bank later
+// posts). The payee a rule names is given to a line when it is added, never after. The member's
+// categories are `txn_split` and their memo is `txn.memo`: neither is stated, so neither is ever
+// overwritten.
+pub const STATEMENT: SystemMap = SystemMap {
+    system: "statement",
+    command: "follow.statement",
+    kind: Kind::Txn,
+    claims: None,
+    fields: &[
+        "posted_on",
+        "amount_minor",
+        "status",
+        "original_amount_minor",
+        "original_currency",
+    ],
+    fixed: &["title"],
+    children: &[LINE],
+    match_on: &[],
+    gone: Gone::Keep,
+    window: None,
+    defaults: statement_defaults,
+    founds: None,
+    shape: as_stated,
+    settle: settle_line,
+    named: crate::commands::rule::name_new_line,
+};
+
+/// The maps the vault follows. A lane's map is one row; the pass command, its schema and its
+/// preconditions are built from it.
 pub const SYSTEMS: &[SystemMap] = &[
-    SystemMap {
-        system: "contacts",
-        command: "follow.contacts",
-        kind: Kind::Person,
-        fills: None,
-        origin: OriginOf::Phone,
-        claims: None,
-        fields: &["sort_name", "nickname", "role", "birthday"],
-        fixed: &[],
-        children: &[Child {
-            name: "points",
-            read: contact_point::read,
-            canon: contact_point::canon,
-            merge: contact_point::merge,
-            items: Some(contact_point::items),
-            take: contact_point::take,
-            stamp: None,
-        }],
-        match_on: &[Match::Title],
-        gone: Gone::Trash,
-        window: None,
-        defaults: no_defaults,
-        founds: None,
-        shape: as_stated,
-        settle: nothing_to_settle,
-        named: nothing_to_settle,
-    },
+    // The phone's calendars: an event in the calendar of the vault that stands for the phone's
+    // calendar (the engine founds it, named and coloured as the phone has it; the member's own
+    // rename stands). The fields are the event's own columns, `location` as the words the phone
+    // wrote (a followed record never founds a place, D5), and three fields that are rows of their
+    // own: the series' one-day overrides, the alerts, and the guests (stated as `attendees`).
+    // `starts` and `reminders` are the keys `alerts.rs` reads to let the phone alert for a record
+    // it still states (one alert per real thing).
     SystemMap {
         system: "calendar",
         command: "follow.calendar",
         kind: Kind::Event,
-        fills: Some(Kind::Calendar),
-        origin: OriginOf::Phone,
         claims: None,
         fields: &[
             "description",
             "url",
+            "location",
             "starts",
             "ends",
             "timing",
@@ -236,9 +217,7 @@ pub const SYSTEMS: &[SystemMap] = &[
                 take: event::overrides_take,
                 stamp: None,
             },
-            // The guests the phone states: a guest whose email is a person's is that person's
-            // `attendee` edge; the rest stay in the statement and are read from it.
-            // The alerts, minutes before, judged whole ([`event::shape`] states them as an array).
+            // The alerts, minutes before, judged whole (`event::shape` states them as an array).
             Child {
                 name: "reminders",
                 read: event::reminders_read,
@@ -248,120 +227,41 @@ pub const SYSTEMS: &[SystemMap] = &[
                 take: event::reminders_take,
                 stamp: None,
             },
+            // The guests, one by one, by address: a guest who is in People is resolved to the
+            // person by their address; one who is not is a guest all the same.
             Child {
                 name: "attendees",
-                read: event::attendees_read,
-                canon: event::attendees_canon,
-                merge: event::attendees_merge,
-                items: Some(event::attendees_items),
-                take: event::attendees_take,
-                stamp: Some(event::attendees_stamp),
+                read: event::guests_read,
+                canon: event::guests_canon,
+                merge: event::guests_merge,
+                items: Some(event::guests_items),
+                take: event::guests_take,
+                stamp: None,
             },
         ],
         match_on: &[Match::Title, Match::Column("starts")],
         gone: Gone::Trash,
         window: None,
-        defaults: calendar_defaults,
-        founds: Some(container::follow_calendar),
-        shape: event_shape,
+        defaults: no_defaults,
+        founds: Some(event::follow_home),
+        shape: event::shape,
         settle: event::settle,
         named: nothing_to_settle,
     },
-    SystemMap {
-        system: "files",
-        command: "follow.files",
-        kind: Kind::Document,
-        fills: Some(Kind::Folder),
-        origin: OriginOf::Phone,
-        claims: Some("blob"),
-        fields: &["blob", "media_type"],
-        fixed: &[],
-        children: &[STAT],
-        match_on: &[Match::Title],
-        gone: Gone::Trash,
-        window: None,
-        defaults: folder_defaults,
-        founds: None,
-        shape: as_stated,
-        settle: nothing_to_settle,
-        named: nothing_to_settle,
-    },
-    // A reminder of the phone's Reminders app (iOS): a task in the list it sat in. The
-    // member's own edit of a field stands; a reminder the phone completes completes the task
-    // (the status and its date are two fields written as one, so the table's own CHECK holds),
-    // and one deleted on the phone goes to the trash if the member never touched the task.
-    SystemMap {
-        system: "phone_reminders",
-        command: "follow.reminders",
-        kind: Kind::Task,
-        fills: Some(Kind::Project),
-        origin: OriginOf::Phone,
-        claims: None,
-        fields: &[
-            "description",
-            "due",
-            "zone",
-            "priority",
-            "rule",
-            "remind_before_min",
-            "url",
-            "status",
-            "done_at",
-        ],
-        fixed: &[],
-        children: &[],
-        match_on: &[Match::Title],
-        gone: Gone::Trash,
-        window: None,
-        defaults: project_defaults,
-        founds: None,
-        shape: as_stated,
-        settle: nothing_to_settle,
-        named: nothing_to_settle,
-    },
-    // A workout: an activity of a workout kind, its span, and what the store
-    // measured. A record states the store's word for the kind and the vault
-    // places it ([`workout::shape`]); the member edits none of it, and one gone
-    // from the phone stays (R-1129-14).
-    SystemMap {
-        system: "health",
-        command: "follow.health",
-        kind: Kind::Activity,
-        fills: None,
-        origin: OriginOf::Phone,
-        claims: None,
-        fields: &["type_id", "type_kind", "starts", "ends"],
-        fixed: &[],
-        children: &[workout::MEASURES],
-        match_on: &[Match::Column("type_id"), Match::Minute("starts")],
-        gone: Gone::Forget,
-        window: Some("starts"),
-        defaults: no_defaults,
-        founds: None,
-        shape: workout::shape,
-        settle: workout::settle,
-        named: nothing_to_settle,
-    },
-    // A line of a statement: its title is the bank's words until the member
-    // renames it, its day and amount are the bank's and never edited, and the
-    // category is the member's to change.
-    SystemMap {
-        system: "statement",
-        command: "follow.statement",
-        kind: Kind::Txn,
-        fills: Some(Kind::Account),
-        origin: OriginOf::Account,
-        claims: None,
-        fields: &["posted_on", "amount_minor", "category_id"],
-        fixed: &["title", "posted_on", "amount_minor"],
-        children: &[LINE],
-        match_on: &[],
-        gone: Gone::Keep,
-        window: None,
-        defaults: statement_defaults,
-        founds: None,
-        shape: as_stated,
-        settle: nothing_to_settle,
-        named: crate::commands::rule::name_new_line,
-    },
+    crate::commands::task::PHONE_REMINDERS,
+    crate::commands::person::CONTACTS,
+    STATEMENT,
+    // The health store: a workout and a reading (the system yields both, so a map for each).
+    workout::MAP,
+    reading::MAP,
+    // The phone's picked folders and its camera roll (Docs and Photos).
+    crate::commands::document::FILES,
+    crate::commands::photo::ROLL,
 ];
+
+/// The product's maps, [`SYSTEMS`], as the type the follow commands are built from.
+pub struct Systems;
+
+impl Maps for Systems {
+    const MAPS: &'static [SystemMap] = SYSTEMS;
+}

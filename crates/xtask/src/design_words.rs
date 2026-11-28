@@ -7,7 +7,7 @@
 //! of the kit composables and SwiftUI views, defaulting to these.
 //!
 //! Their one source is the Rust catalogue, `crates/screens/src/strings/shared.rs`
-//! (and one word from `home.rs`). This module reads each file's `catalog!`
+//! (and the owning screen catalogues). This module reads each file's `catalog!`
 //! block, which is data: one `plain key = ("one", "other");` row per word. It
 //! is a port of the TypeScript reader it replaced and keeps its strictness:
 //! a row this reader cannot parse, an escape it does not lower, a word missing
@@ -26,26 +26,30 @@ pub const WORDS_SOURCE: &str = "crates/screens/src/strings/shared.rs";
 
 /// A word the kit shares with one screen's own catalogue is read from there,
 /// as `<module>::<key>`, rather than spelled twice in Rust.
-pub const OTHER_SOURCES: [(&str, &str); 2] = [
+pub const OTHER_SOURCES: [(&str, &str); 3] = [
     ("home", "crates/screens/src/strings/home.rs"),
     ("backup", "crates/screens/src/strings/backup.rs"),
+    ("notes", "crates/screens/src/strings/notes.rs"),
 ];
 
 /// Member name to the Rust key. Exactly the words a native kit view reads; a
 /// word nothing native draws stays Rust's alone.
-const CONSTANTS: [(&str, &str); 25] = [
+const CONSTANTS: [(&str, &str); 28] = [
     ("BACK", "back"),
     ("BAND_CURRENT", "home::band_current_spoken"),
     ("BAND_HOME", "kit_band_home"),
     ("BAND_MORE", "kit_band_more"),
     ("CANCEL", "kit_cancel"),
     ("CLOSE_SEARCH", "kit_close_search"),
+    ("CORE_REQUEST_FAILED", "core_request_failed"),
     ("DELETE", "kit_delete"),
     ("DETAILS", "kit_details"),
     ("DISMISS", "kit_dismiss"),
     ("DONE", "kit_done"),
     ("FLAG", "kit_flag"),
     ("LOADING_MORE", "kit_loading_more"),
+    ("NOTE_EDITOR_TITLE", "notes::field_title"),
+    ("NOTE_EDITOR_BODY", "notes::field_body"),
     ("OPEN", "kit_open"),
     ("OPENING", "kit_opening"),
     ("PENDING", "kit_pending"),
@@ -381,6 +385,10 @@ mod tests {
         BTreeMap::from([
             ("home".to_owned(), home.to_owned()),
             ("backup".to_owned(), backup),
+            (
+                "notes".to_owned(),
+                include_str!("../../screens/src/strings/notes.rs").to_owned(),
+            ),
         ])
     }
 

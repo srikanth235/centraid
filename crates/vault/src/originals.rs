@@ -26,9 +26,18 @@
 //!
 //! An album holds a photograph by a `contains` edge, and `edge_shape` allows no
 //! other kind into an album, so the join needs no type test. A photograph's
-//! `blob` is UNIQUE, so the photograph's id IS the identity of its bytes and
-//! there is nothing to fold ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
-//! The Photos lane owns what an original means beyond these four questions.
+//! `blob` is not unique (two photographs may offer the same bytes), so a hash
+//! names every photograph that rents it; a kept album keeps a hash whichever
+//! photograph holds it, and a Live Photo's motion clip is kept with its still.
+//! The Photos lane owns what an original means beyond these questions.
+//!
+//! ## WHAT NO PASS MAY FREE
+//!
+//! [`never_freed`] is the set of hashes the phone's "free up space" must never offer to delete: the
+//! kept albums' originals and every **Locker sealed file**. A sealed file has no other copy but the
+//! backup's, is not a photograph the member can fetch again from anywhere, and its bytes are the
+//! Locker's own; they are always sent with a backup (`backup::files`, whatever the member's
+//! exclusions) and are never freed from the phone.
 
 use std::collections::BTreeSet;
 
@@ -138,16 +147,34 @@ pub fn kept_hashes(vault: &Vault, kept_albums: &BTreeSet<String>) -> Result<BTre
         .unwrap_or_else(|_| "[]".to_owned());
     vault.read(|connection| {
         let mut statement = connection.prepare(
-            "SELECT DISTINCT p.blob
+            "SELECT p.blob
                FROM photo p
                JOIN entity e ON e.id = p.id
                JOIN edge g ON g.rel = 'contains' AND g.to_id = p.id
               WHERE e.deleted_at IS NULL
+                AND g.from_id IN (SELECT value FROM json_each(?1))
+             UNION
+             SELECT p.motion_blob
+               FROM photo p
+               JOIN entity e ON e.id = p.id
+               JOIN edge g ON g.rel = 'contains' AND g.to_id = p.id
+              WHERE e.deleted_at IS NULL AND p.motion_blob IS NOT NULL
                 AND g.from_id IN (SELECT value FROM json_each(?1))",
         )?;
         let rows = statement.query_map([kept_json], |row| row.get::<_, String>(0))?;
         Ok(rows.collect::<rusqlite::Result<BTreeSet<_>>>()?)
     })
+}
+
+/// The hashes no pass may free from this phone: the originals [`kept_hashes`] names and every
+/// Locker sealed file ([`crate::blob::sealed_hashes`]).
+///
+/// # Errors
+/// [`crate::error::VaultError`] for anything SQLite refused.
+pub fn never_freed(vault: &Vault, kept_albums: &BTreeSet<String>) -> Result<BTreeSet<String>> {
+    let mut never = kept_hashes(vault, kept_albums)?;
+    never.extend(vault.read(crate::blob::sealed_hashes)?);
+    Ok(never)
 }
 
 /// The asset rows whose bytes are any of `hashes` (64 lowercase hex each),

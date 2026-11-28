@@ -1,0 +1,14 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running tests/room_money.rs (target/debug/deps/room_money-6fbee1c3625d02ae)
+
+running 7 tests
+test csv_import_maps_columns_previews_three_rows_and_imports ... ok
+test accounts_currency_confirm_budgets_rules_categories_and_trash_work ... ok
+test ambiguous_slash_dates_are_not_importable_until_member_chooses_order ... ok
+test home_tile_opens_money_activity_and_list_flows_work ... ok
+test new_txn_form_uses_d3_last_account_and_d1_draft ... ok
+test spending_and_cashflow_emit_charts_and_handle_scrub ... ok
+test txn_detail_shows_splits_statement_says_and_footers ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s
+

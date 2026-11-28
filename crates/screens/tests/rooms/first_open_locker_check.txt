@@ -1,0 +1,12 @@
+room app_place key="locker" secure
+  header title="Locker" subtitle="Step 1 of 2"
+  band home=#band/home more=#band/more
+    tab "Items" sym="Lock" selected #tab/items
+    tab "Starred" sym="Star" #tab/starred
+    menu #band/more/menu
+      section
+        item "Expiry alerts" #more/alerts
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    wall "Your passwords and secure notes" body="Locker opens with your face or your passcode, every time."
+      unlock "Confirm it's you" sym="Lock" #wall/unlock

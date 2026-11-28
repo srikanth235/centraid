@@ -136,6 +136,8 @@ final class GatewayBrowseRun {
     private var order: [String] = []
     private var resolved: [String: ResolvedService] = [:]
 
+    var isFinished: Bool { finished }
+
     init(
         finder: ServiceFinder,
         resolver: AddressResolver,

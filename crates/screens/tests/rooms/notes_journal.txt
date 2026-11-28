@@ -1,0 +1,24 @@
+room app_place key="notes/journal"
+  header title="Journal" subtitle="1 entry"
+    key add sym="Plus" "New entry" #header/add
+  band home=#band/home search=#band/search more=#band/more
+    tab "Notes" sym="Journal" #tab/notes
+    tab "Notebooks" sym="Book" #tab/notebooks
+    tab "Journal" sym="Calendar" selected #tab/journal
+    menu #band/more/menu
+      section
+        item "Tags" #more/tags
+        item "Import Markdown" #more/import
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    section #section/entries "Journal"
+      row #journal/01900000-0000-7000-8000-000000001040 "Morning Walk" meta="2026-11-26" chips="Journal" mark=glyph:Journal swipe="Move to trash" #journal/01900000-0000-7000-8000-000000001040/swipe
+        menu #journal/01900000-0000-7000-8000-000000001040/menu
+          section
+            item "Open" #journal/01900000-0000-7000-8000-000000001040/menu/open
+            item "Move or tag" #journal/01900000-0000-7000-8000-000000001040/menu/organize
+            item "Pin" #journal/01900000-0000-7000-8000-000000001040/menu/pin
+            item "Share" #journal/01900000-0000-7000-8000-000000001040/menu/share
+            item "Select" #journal/01900000-0000-7000-8000-000000001040/menu/select
+            item "Move to trash" destructive #journal/01900000-0000-7000-8000-000000001040/menu/trash

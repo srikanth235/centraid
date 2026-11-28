@@ -1,46 +1,35 @@
-//! The model's commitments, each read off the file the vault founded.
+//! The v0 schema's commitments, each read off the founded file (#1214, K12).
 //!
-//! Every test asks the database (`PRAGMA`, `sqlite_master`, the rows) and
-//! compares the answer with the Rust enums in `model.rs`, so a table added
-//! without a decision, a delete rule changed on one side only, or an index a
-//! command forgot to keep is red here before it ships
-//! ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
+//! The issue lists what holds at every checkpoint. Each line is held by a test, here or in the
+//! file named:
+//!
+//! | Commitment | Held by |
+//! |---|---|
+//! | every 64-hex value references `blob(hash)` | `every_hash_in_the_file_sits_in_a_foreign_key_into_blob` |
+//! | an incremental index update equals a full rebuild | `index_owed.rs`, `index_past.rs`, `index_geo.rs` (`assert_equals_a_rebuild`, after every step of a scripted run) |
+//! | no sealed value reaches any index, word list, derived blob, revision, notification or disk file | `locker_plaintext_gate.rs`, `locker_search.rs`, `index_past.rs` |
+//! | no blob an earlier version names is collected while its entity lives | `blob_release.rs` (`earlier_bytes_are_kept_while_the_entity_lives_and_a_purge_frees_them`) |
+//! | no CHECK or trigger names a value that lives in a lookup table | `no_check_or_trigger_names_a_value_a_lookup_table_holds` |
+//! | the lookup seeds equal every Rust enum that mirrors them | `lookups.rs` and `the_lookup_seeds_equal_the_rust_lists_that_mirror_them` |
+//! | every blob column is a `revision_blob` slot, `OMITTED`, or in `RENTERS` | `every_blob_column_is_a_slot_or_omitted_and_has_a_renter` (and `history.rs`, `blob_release.rs`) |
+//! | every text column is findable, sealed or argued out | `every_text_column_is_findable_sealed_or_argued_out` (`TEXT`) |
+//!
+//! The rest of the file is the structure every kind relies on: one host table per kind, the trash
+//! pair on `entity` alone, and an index behind every foreign key.
 
 mod common;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use centraid_vault::Clock as _;
-use centraid_vault::commands::Registry;
-use centraid_vault::index;
-use centraid_vault::model::{Kind, Rel, fold_label};
-use centraid_vault::{Command, CommandStatus, Principal, Vault};
+use centraid_vault::backup::files::RENTERS;
+use centraid_vault::commands::follow::SYSTEMS;
+use centraid_vault::lookups::LOOKUP_TABLES;
+use centraid_vault::model::Kind;
+use common::world::World;
 use rusqlite::Connection;
-use serde_json::json;
 
-const AT: &str = "2026-03-01T09:00:00.000Z";
-
-fn founded(seed: &str) -> common::Scratch {
-    common::Scratch::founded(seed).expect("a founded vault")
-}
-
-fn read<T>(vault: &Vault, body: impl FnOnce(&Connection) -> centraid_vault::Result<T>) -> T {
-    vault.read(body).expect("reads")
-}
-
-/// The words quoted inside the first `<column> IN (...)` of a statement.
-fn in_list(sql: &str, column: &str) -> BTreeSet<String> {
-    let sql = &sql.split_whitespace().collect::<Vec<_>>().join(" ");
-    let marker = format!("{column} IN (");
-    let start = sql
-        .find(&marker)
-        .unwrap_or_else(|| panic!("no `{marker}` in {sql}"))
-        + marker.len();
-    let end = start + sql[start..].find(')').expect("a closing parenthesis");
-    sql[start..end]
-        .split(',')
-        .map(|word| word.trim().trim_matches('\'').to_owned())
-        .collect()
+fn read<T>(w: &World, body: impl FnOnce(&Connection) -> centraid_vault::Result<T>) -> T {
+    w.vault().read(body).expect("reads")
 }
 
 fn table_sql(connection: &Connection, table: &str) -> String {
@@ -53,40 +42,23 @@ fn table_sql(connection: &Connection, table: &str) -> String {
         .unwrap_or_else(|error| panic!("{table}: {error}"))
 }
 
-/// Every ordinary table of the file, without SQLite's own and the shadow
-/// tables FTS5 keeps behind `search`.
+/// Every ordinary table of the vault file (the index file's tables are in schema `ix`).
 fn tables(connection: &Connection) -> Vec<String> {
     connection
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+        .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
+              ORDER BY name",
+        )
         .and_then(|mut statement| {
             statement
                 .query_map([], |row| row.get::<_, String>(0))?
                 .collect::<rusqlite::Result<Vec<_>>>()
         })
         .expect("lists tables")
-        .into_iter()
-        .filter(|name| !name.starts_with("sqlite_") && !is_search_shadow(name))
-        .collect()
 }
 
-fn is_search_shadow(name: &str) -> bool {
-    [
-        "search_data",
-        "search_idx",
-        "search_content",
-        "search_docsize",
-        "search_config",
-        "search_past_data",
-        "search_past_idx",
-        "search_past_content",
-        "search_past_docsize",
-        "search_past_config",
-    ]
-    .contains(&name)
-}
-
-/// One foreign key, as `PRAGMA foreign_key_list` states it: `from` is the
-/// comma-joined column list of a composite key.
+/// One foreign key, as `PRAGMA foreign_key_list` states it: `from` and `to` are the comma-joined
+/// column lists of a composite key.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Fk {
     table: String,
@@ -108,7 +80,7 @@ fn foreign_keys(connection: &Connection) -> Vec<Fk> {
                     row.get::<_, i64>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(3)?,
                     row.get::<_, String>(4)?,
                 ))
             })
@@ -124,7 +96,8 @@ fn foreign_keys(connection: &Connection) -> Vec<Fk> {
                 to: String::new(),
                 on_delete,
             });
-            for (joined, part) in [(&mut fk.from, from), (&mut fk.to, to)] {
+            for (joined, part) in [(&mut fk.from, Some(from)), (&mut fk.to, to)] {
+                let Some(part) = part else { continue };
                 if !joined.is_empty() {
                     joined.push(',');
                 }
@@ -136,9 +109,8 @@ fn foreign_keys(connection: &Connection) -> Vec<Fk> {
     all
 }
 
-/// The leading column of every index of `table`, the primary key included: a
-/// lookup of `column = ?` on the child is served by an index only when the column
-/// leads it.
+/// The leading column of every index of `table`, the primary key included: a lookup of
+/// `column = ?` on the child is served by an index only when the column leads it.
 fn leading_columns(connection: &Connection, table: &str) -> BTreeSet<String> {
     let mut leads = BTreeSet::new();
     let indexes: Vec<String> = connection
@@ -171,6 +143,445 @@ fn leading_columns(connection: &Connection, table: &str) -> BTreeSet<String> {
     leads
 }
 
+// ---------------------------------------------------------------------------------------------
+// Every hash is a foreign key into blob
+// ---------------------------------------------------------------------------------------------
+
+fn runs_of_hex(text: &str) -> Vec<&str> {
+    let bytes = text.as_bytes();
+    let mut found = Vec::new();
+    let mut start = None;
+    for (at, byte) in bytes.iter().enumerate().chain([(bytes.len(), &b' ')]) {
+        let hex = matches!(byte, b'0'..=b'9' | b'a'..=b'f');
+        match (hex, start) {
+            (true, None) => start = Some(at),
+            (false, Some(from)) => {
+                if at - from >= 64 {
+                    found.push(&text[from..at]);
+                }
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
+/// One vault holding a row in every column that names a blob (the ten the schema declares), a
+/// version that kept an earlier document, and a Locker field that is a sealed file.
+fn populate_every_blob_column(w: &World) {
+    let at = "2026-03-01T09:00:00.000Z";
+    let hash = |label: &str| centraid_vault::blob::content_digest(label.as_bytes());
+    let note = w.note("Trip");
+    let person = w.person("Ada");
+    let document = w.made(Kind::Document, "Doc");
+    let photo = w.made(Kind::Photo, "Photo");
+    let album = w.container("album", "Album");
+    let thread = w.made(Kind::Thread, "Chat");
+    let item = w.made(Kind::LockerItem, "Passport");
+    let c = |sql: String| {
+        w.vault()
+            .commit(|tx| Ok(tx.connection().execute_batch(&sql)?))
+            .unwrap_or_else(|error| panic!("{error}: {sql}"));
+    };
+    for label in [
+        "cover", "avatar", "doc", "doc2", "photo", "motion", "asset", "orig", "d-out", "thumb",
+        "sealed",
+    ] {
+        c(format!(
+            "INSERT INTO blob (hash, size) VALUES ('{}', 1)",
+            hash(label)
+        ));
+    }
+    c(format!(
+        "UPDATE container SET cover = '{}' WHERE id = '{album}'",
+        hash("cover")
+    ));
+    c(format!(
+        "UPDATE person SET avatar = '{}' WHERE id = '{person}'",
+        hash("avatar")
+    ));
+    c(format!(
+        "INSERT INTO document (id, blob, media_type) VALUES ('{document}', '{}', 'text/plain')",
+        hash("doc")
+    ));
+    // Replacing the bytes makes a version that names the earlier ones: a `revision_blob` row.
+    w.vault()
+        .commit(|tx| {
+            tx.connection().execute(
+                "UPDATE document SET blob = ?2 WHERE id = ?1",
+                [&document, &hash("doc2")],
+            )?;
+            tx.touch(&document, at)
+        })
+        .expect("replaces");
+    c(format!(
+        "INSERT INTO photo (id, blob, media_type, form, motion_blob) VALUES ('{photo}', '{}', 'image/jpeg', 'photo', '{}')",
+        hash("photo"),
+        hash("motion")
+    ));
+    c(format!(
+        "INSERT INTO note_asset (id, note_id, blob, name, media_type, position)
+         VALUES ('as-1', '{note}', '{}', 'map.png', 'image/png', 1)",
+        hash("asset")
+    ));
+    w.commit(|tx| {
+        centraid_vault::blob::write_derivative(
+            tx.connection(),
+            at,
+            &hash("orig"),
+            "thumb",
+            Some((&hash("d-out"), 1, "image/jpeg")),
+            None,
+        )
+    });
+    c(format!(
+        "INSERT INTO thread (id) VALUES ('{thread}');
+         INSERT INTO message (thread_id, ordinal, role, text, outcome, created_at, updated_at)
+         VALUES ('{thread}', 0, 'user', 'look', 'sent', '{at}', '{at}');
+         INSERT INTO message_attachment (thread_id, ordinal, position, form, label, thumb)
+         VALUES ('{thread}', 0, 0, 'image', 'pasted.png', '{}')",
+        hash("thumb")
+    ));
+    c(format!(
+        "INSERT INTO locker_key (id, key_id, created_at) VALUES (1, 'k1', '{at}');
+         INSERT INTO locker_item (id, type) VALUES ('{item}', 'document');
+         INSERT INTO locker_item_field (id, item_id, label, kind, value_sealed, value_blob, key_id,
+                                        value_set_at, created_at, updated_at)
+         VALUES ('f-file', '{item}', 'Scan', 'file', 'lk1:AAAA', '{}', 'k1', '{at}', '{at}', '{at}')",
+        hash("sealed")
+    ));
+}
+
+#[test]
+fn every_hash_in_the_file_sits_in_a_foreign_key_into_blob() {
+    let w = World::new("commit_hash");
+    populate_every_blob_column(&w);
+    read(&w, |connection| {
+        // What the schema says: the foreign keys into `blob(hash)`, and the one column that is a
+        // hash by its own CHECK (`blob.hash`, the key itself): no other CHECK states a hash.
+        let declared: BTreeSet<(String, String)> = foreign_keys(connection)
+            .into_iter()
+            .filter(|fk| fk.to_table == "blob")
+            .inspect(|fk| assert_eq!(fk.to, "hash"))
+            .map(|fk| (fk.table, fk.from))
+            .collect();
+        for table in tables(connection) {
+            let sql = table_sql(connection, &table);
+            assert_eq!(
+                sql.contains("length(hash) = 64"),
+                table == "blob",
+                "{table}: only `blob` states what a hash is; every other table references it"
+            );
+        }
+        // What the rows say: every cell of every table that holds a run of 64 lowercase hex
+        // characters, in a column, in JSON (a version's state, a record, a card) or in a sealed
+        // value alike, is in a declared column (and `blob.hash`).
+        let mut populated = BTreeSet::new();
+        for table in tables(connection) {
+            let columns: Vec<String> = connection
+                .prepare("SELECT name FROM pragma_table_xinfo(?1) WHERE hidden = 0 OR hidden = 2")?
+                .query_map([&table], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            for column in columns {
+                let mut statement = connection.prepare(&format!(
+                    "SELECT CAST(\"{column}\" AS TEXT) FROM \"{table}\" WHERE \"{column}\" IS NOT NULL"
+                ))?;
+                let values = statement
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                if values.iter().any(|value| !runs_of_hex(value).is_empty()) {
+                    populated.insert((table.clone(), column));
+                }
+            }
+        }
+        populated.remove(&("blob".to_owned(), "hash".to_owned()));
+        assert!(
+            populated.is_subset(&declared),
+            "a column holds a hash and is not a foreign key into blob: {:?}",
+            populated.difference(&declared).collect::<Vec<_>>()
+        );
+        // The fixture reaches every declared column, so the scan above looked at all of them.
+        assert_eq!(
+            populated, declared,
+            "the fixture left a blob column empty, or a column holds a hash it does not declare"
+        );
+        // The collector walks the same list and no other.
+        let seen: BTreeSet<(String, String)> = centraid_vault::blob::references(connection)?
+            .into_iter()
+            .map(|reference| (reference.table, reference.column))
+            .collect();
+        assert_eq!(
+            seen, declared,
+            "the collector sees every reference the schema declares, from foreign_key_list alone"
+        );
+        Ok(())
+    });
+}
+
+#[test]
+fn every_blob_column_is_a_slot_or_omitted_and_has_a_renter() {
+    let w = World::new("commit_slots");
+    read(&w, |connection| {
+        let columns: BTreeSet<(String, String)> = foreign_keys(connection)
+            .into_iter()
+            .filter(|fk| fk.to_table == "blob")
+            .map(|fk| (fk.table, fk.from))
+            .collect();
+        let renters: BTreeSet<(String, String)> = RENTERS
+            .iter()
+            .map(|(table, column, _)| ((*table).to_owned(), (*column).to_owned()))
+            .collect();
+        let history_tables: BTreeSet<&str> = centraid_vault::history::TABLES
+            .iter()
+            .filter(|(_, role)| {
+                matches!(
+                    role,
+                    centraid_vault::history::Role::Host
+                        | centraid_vault::history::Role::Child { .. }
+                )
+            })
+            .map(|(name, _)| *name)
+            .collect();
+        for (table, column) in &columns {
+            // A derivative's file is its original's, kept by the original (`RENTERS` leaves it
+            // out), and a derivative cascades with its original: it rents nothing itself.
+            let derived = table == "derivative";
+            // A state-bearing table's blob column is a slot (kept in `revision_blob`) or omitted
+            // from the version with a reason; any other table's column is no part of a version.
+            let versioned = history_tables.contains(table.as_str());
+            let classified = !versioned
+                || centraid_vault::history::blob_slot(table, column).is_some()
+                || centraid_vault::history::OMITTED
+                    .iter()
+                    .any(|(t, c, _)| t == table && c == column);
+            assert!(
+                classified,
+                "{table}.{column} names bytes: it is a `BLOB_SLOTS` row or `OMITTED`"
+            );
+            assert!(
+                derived || renters.contains(&(table.clone(), column.clone())),
+                "{table}.{column} names bytes and no `RENTERS` row says whose they are"
+            );
+        }
+        for (table, column) in &renters {
+            assert!(
+                columns.contains(&(table.clone(), column.clone())),
+                "RENTERS names {table}.{column}, which references no blob"
+            );
+        }
+        Ok(())
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
+// No CHECK or trigger names a value a lookup table holds
+// ---------------------------------------------------------------------------------------------
+
+/// The `'quoted'` literals of a piece of SQL.
+fn literals(sql: &str) -> BTreeSet<String> {
+    sql.split('\'')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The text of every `CHECK (...)` of a `CREATE TABLE`, column and table level.
+fn checks(sql: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut rest = sql;
+    while let Some(at) = rest.find("CHECK") {
+        rest = &rest[at + "CHECK".len()..];
+        let Some(open) = rest.find('(') else { break };
+        if !rest[..open].trim().is_empty() {
+            continue;
+        }
+        let mut depth = 0;
+        let mut quoted = false;
+        for (index, letter) in rest[open..].char_indices() {
+            match letter {
+                '\'' => quoted = !quoted,
+                '(' if !quoted => depth += 1,
+                ')' if !quoted => {
+                    depth -= 1;
+                    if depth == 0 {
+                        found.push(rest[open..open + index + 1].to_owned());
+                        rest = &rest[open + index + 1..];
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    found
+}
+
+fn mentions(sql: &str, column: &str) -> bool {
+    sql.split(|letter: char| !(letter.is_alphanumeric() || letter == '_'))
+        .any(|word| word == column)
+}
+
+/// A rule the database holds does not say a lookup's value: a new value is a seed row, and a list
+/// in a CHECK would be a rebuild of its table to widen. For every column that references a lookup
+/// table, no CHECK or trigger of its table that reads the column names one of that lookup's keys.
+#[test]
+fn no_check_or_trigger_names_a_value_a_lookup_table_holds() {
+    // The control: the reader finds a list planted in a CHECK, so an empty answer means none.
+    let planted = checks("CREATE TABLE t (a TEXT CHECK (a IN ('x','y')), b INT, CHECK (b > 0))");
+    assert_eq!(planted.len(), 2);
+    assert_eq!(
+        literals(&planted[0]),
+        ["x", "y"].map(str::to_owned).into_iter().collect()
+    );
+    let w = World::new("commit_lookup_literals");
+    read(&w, |connection| {
+        let mut values: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for table in LOOKUP_TABLES {
+            // The keys of a lookup row: its first column (`code`, `key`, or `kind` for
+            // `reminder_target`) and, for the shape tables, the two kinds and the relation.
+            let keys: Vec<String> = connection
+                .prepare("SELECT name FROM pragma_table_info(?1) WHERE pk > 0 ORDER BY pk")?
+                .query_map([table], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            let mut set = BTreeSet::new();
+            for key in keys {
+                let mut statement =
+                    connection.prepare(&format!("SELECT CAST(\"{key}\" AS TEXT) FROM {table}"))?;
+                set.extend(
+                    statement
+                        .query_map([], |row| row.get::<_, String>(0))?
+                        .collect::<rusqlite::Result<Vec<_>>>()?,
+                );
+            }
+            values.insert((*table).to_owned(), set);
+        }
+        let mut offences = Vec::new();
+        let mut looked_at = 0;
+        for fk in foreign_keys(connection) {
+            let Some(codes) = values.get(&fk.to_table) else {
+                continue;
+            };
+            if LOOKUP_TABLES.contains(&fk.table.as_str()) {
+                // A shape table's own keys are the lookup; its seed is not a rule.
+                continue;
+            }
+            let mut columns: Vec<&str> = fk.from.split(',').collect();
+            let mut domain_codes = None;
+            if fk.to_table == "vocab" {
+                // A vocabulary column keys `(<col>, <col>_domain)`: its codes are its domain's.
+                let (code_column, domain_column) = (columns[0], columns[1]);
+                let sql = table_sql(connection, &fk.table);
+                let at = sql
+                    .find(&format!("\n  {domain_column} "))
+                    .expect("a domain constant");
+                let constant = &sql[at..];
+                let constant = &constant[constant.find("AS ('").expect("a constant")..];
+                let domain = literals(&constant[..constant.find(')').expect("a close")])
+                    .into_iter()
+                    .next()
+                    .expect("a domain");
+                let set = connection
+                    .prepare("SELECT code FROM vocab WHERE domain = ?1")?
+                    .query_map([&domain], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<BTreeSet<_>>>()?;
+                assert!(!set.is_empty(), "the `{domain}` domain is seeded");
+                domain_codes = Some(set);
+                columns = vec![code_column];
+            }
+            let codes = domain_codes.as_ref().unwrap_or(codes);
+            looked_at += 1;
+            let mut rules: Vec<(String, String)> = checks(&table_sql(connection, &fk.table))
+                .into_iter()
+                .map(|check| (format!("a CHECK of {}", fk.table), check))
+                .collect();
+            let triggers: Vec<String> = connection
+                .prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ?1")?
+                .query_map([&fk.table], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            rules.extend(
+                triggers
+                    .into_iter()
+                    .map(|sql| (format!("a trigger on {}", fk.table), sql)),
+            );
+            for (what, sql) in rules {
+                if !columns.iter().any(|column| mentions(&sql, column)) {
+                    continue;
+                }
+                for word in literals(&sql).intersection(codes) {
+                    offences.push(format!(
+                        "{what} reads {} and names '{word}', a row of {}: {sql}",
+                        fk.from, fk.to_table
+                    ));
+                }
+            }
+        }
+        assert!(looked_at > 20, "the test looked at the lookups' referrers");
+        assert!(offences.is_empty(), "{}", offences.join("\n"));
+        Ok(())
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
+// The lookup seeds equal every Rust list that mirrors them
+// ---------------------------------------------------------------------------------------------
+
+fn words(w: &World, sql: &str) -> BTreeSet<String> {
+    w.strings(sql, &[]).into_iter().collect()
+}
+
+/// `lookups.rs` holds the kinds, concepts, containers, relations, photo forms and label colours.
+/// What it does not: the alerts' target kinds, and the followed stores the engine has a map for.
+#[test]
+fn the_lookup_seeds_equal_the_rust_lists_that_mirror_them() {
+    let w = World::new("commit_mirrors");
+    assert_eq!(
+        words(&w, "SELECT kind FROM reminder_target"),
+        centraid_vault::alerts::TARGET_KINDS
+            .iter()
+            .map(|kind| (*kind).to_owned())
+            .collect(),
+        "`alerts::TARGET_KINDS` is the `reminder_target` lookup"
+    );
+    let systems = words(&w, "SELECT code FROM origin_system");
+    let shapes = words(&w, "SELECT system || '/' || entity_kind FROM source_shape");
+    for map in SYSTEMS {
+        assert!(
+            systems.contains(map.system),
+            "the map of `{}` has no `origin_system` row",
+            map.system
+        );
+        assert!(
+            shapes.contains(&format!("{}/{}", map.system, map.kind.as_str())),
+            "the map of `{}` yields `{}` and `source_shape` does not say so",
+            map.system,
+            map.kind.as_str()
+        );
+    }
+    let colours = words(&w, "SELECT code FROM vocab WHERE domain = 'palette'");
+    for colour in centraid_vault::commands::container::LIST_COLORS
+        .iter()
+        .chain(&centraid_vault::commands::container::PHONE_CALENDAR_COLORS)
+        .chain(&centraid_vault::commands::tag::LABEL_COLORS)
+    {
+        assert!(colours.contains(*colour), "{colour} is not a palette key");
+    }
+    let locker_types = words(&w, "SELECT code FROM vocab WHERE domain = 'locker_type'");
+    assert_eq!(
+        locker_types,
+        centraid_vault::commands::locker::schema::ITEM_TYPES
+            .iter()
+            .map(|code| (*code).to_owned())
+            .collect(),
+        "`ITEM_TYPES` is the `locker_type` lookup"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// The structure every kind relies on
+// ---------------------------------------------------------------------------------------------
+
 /// Tables of one row, where a child-side scan costs nothing.
 const ONE_ROW_TABLES: [(&str, &str); 1] = [(
     "vault",
@@ -179,13 +590,12 @@ const ONE_ROW_TABLES: [(&str, &str); 1] = [(
 
 #[test]
 fn every_foreign_key_column_leads_an_index() {
-    // Deleting a parent row (a blob's collection, a purge, emptying the trash)
-    // makes SQLite look up the children that name it, once per deleted row; with
-    // no index leading on the child column each lookup reads the whole child
-    // table. `EXPLAIN QUERY PLAN` never shows that lookup, so the plan sweep in
-    // `crates/core/tests/query_plans.rs` cannot see its absence.
-    let scratch = founded("c4-fk-index");
-    let unindexed: Vec<String> = read(&scratch.vault, |connection| {
+    // Deleting a parent row (a blob's collection, a purge, emptying the trash) makes SQLite look
+    // up the children that name it, once per deleted row; with no index leading on the child
+    // column each lookup reads the whole child table. `EXPLAIN QUERY PLAN` never shows that
+    // lookup, so the plan sweep in `crates/core/tests/query_plans.rs` cannot see its absence.
+    let w = World::new("commit_fk_index");
+    let unindexed: Vec<String> = read(&w, |connection| {
         Ok(foreign_keys(connection)
             .into_iter()
             .filter(|fk| !ONE_ROW_TABLES.iter().any(|(table, _)| *table == fk.table))
@@ -198,22 +608,18 @@ fn every_foreign_key_column_leads_an_index() {
     });
     assert!(
         unindexed.is_empty(),
-        "foreign keys whose child column leads no index (add one to the baseline, \
-         partial `WHERE col IS NOT NULL` when it is mostly NULL): {unindexed:?}"
+        "foreign keys whose child column leads no index (add one to the baseline, partial \
+         `WHERE col IS NOT NULL` when it is mostly NULL): {unindexed:?}"
     );
     for (table, reason) in ONE_ROW_TABLES {
         assert!(!reason.is_empty(), "{table} is exempt without a reason");
     }
 }
 
-// ---------------------------------------------------------------------------
-// 1. One host per kind
-// ---------------------------------------------------------------------------
-
 #[test]
 fn every_kind_has_exactly_one_host_and_the_hosts_are_exactly_the_composite_cascade_keys() {
-    let scratch = founded("c1");
-    read(&scratch.vault, |connection| {
+    let w = World::new("commit_hosts");
+    read(&w, |connection| {
         let hosts: BTreeSet<String> = foreign_keys(connection)
             .into_iter()
             .filter(|fk| fk.to_table == "entity" && fk.from == "id,kind" && fk.to == "id,kind")
@@ -235,27 +641,27 @@ fn every_kind_has_exactly_one_host_and_the_hosts_are_exactly_the_composite_casca
             "the tables with an (id, kind) cascade are the kinds' hosts, and only them"
         );
         for host in &hosts {
-            let sql = table_sql(connection, host);
+            let sql = table_sql(connection, host)
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
             if host == "concept" || host == "container" {
                 assert!(
-                    sql.contains("kind      TEXT NOT NULL CHECK (kind IN ("),
-                    "{host} carries its kind"
+                    sql.contains("kind TEXT NOT NULL"),
+                    "{host} carries its own kind, a lookup row"
                 );
             } else {
                 assert!(
-                    sql.contains(&format!(
-                        "kind        TEXT GENERATED ALWAYS AS ('{host}') VIRTUAL"
-                    )) || sql
-                        .contains(&format!("kind TEXT GENERATED ALWAYS AS ('{host}') VIRTUAL"))
-                        || sql
-                            .replace("  ", " ")
-                            .contains(&format!("GENERATED ALWAYS AS ('{host}') VIRTUAL")),
+                    sql.contains(&format!("kind TEXT GENERATED ALWAYS AS ('{host}') VIRTUAL")),
                     "{host} is its own kind, generated and never written"
                 );
             }
         }
-        // And no entity is born without a kind row's table to go to.
-        let kinds: BTreeSet<String> = in_list(&table_sql(connection, "entity"), "kind");
+        // And every kind of the model is a row of the lookup, and the other way.
+        let kinds: BTreeSet<String> = connection
+            .prepare("SELECT code FROM entity_kind")?
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
         assert_eq!(
             kinds,
             Kind::ALL.iter().map(|k| k.as_str().to_owned()).collect()
@@ -264,14 +670,10 @@ fn every_kind_has_exactly_one_host_and_the_hosts_are_exactly_the_composite_casca
     });
 }
 
-// ---------------------------------------------------------------------------
-// 2. The trash pair
-// ---------------------------------------------------------------------------
-
 #[test]
 fn the_trash_pair_lives_on_entity_only() {
-    let scratch = founded("c2");
-    read(&scratch.vault, |connection| {
+    let w = World::new("commit_trash_pair");
+    read(&w, |connection| {
         let mut holders = BTreeSet::new();
         for table in tables(connection) {
             let columns: BTreeSet<String> = connection
@@ -288,1651 +690,20 @@ fn the_trash_pair_lives_on_entity_only() {
                 holders.insert(table);
             }
         }
-        // A Locker item is an entity of its own kind (#1135, the Locker lane):
-        // its trash pair is its entity's, like every kind's.
+        // A kind of every app is an entity: its trash pair is its entity's, like every kind's.
         assert_eq!(holders, ["entity"].map(str::to_owned).into());
         Ok(())
     });
 }
 
-// ---------------------------------------------------------------------------
-// 3. Every hash is a foreign key into blob
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------
+// Every text column is findable, sealed or argued out
+// ---------------------------------------------------------------------------------------------
 
-fn is_hash(text: &str) -> bool {
-    text.len() == 64 && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
-}
-
-#[test]
-fn every_column_holding_a_hash_is_a_foreign_key_into_blob_and_the_collector_sees_it() {
-    let scratch = founded("c3");
-    let vault = &scratch.vault;
-    let hash = |label: &str| centraid_vault::blob::content_digest(label.as_bytes());
-    vault
-        .commit(|tx| {
-            let c = tx.connection();
-            for label in ["cover", "avatar", "doc", "photo", "rev", "orig", "d-out"] {
-                centraid_vault::blob::stage(c, &hash(label), 1)?;
-            }
-            tx.insert_entity("book", Kind::Album, "Trip", AT)?;
-            c.execute("INSERT INTO container (id, kind, cover) VALUES ('book', 'album', ?1)", [hash("cover")])?;
-            tx.insert_entity("ada", Kind::Person, "Ada", AT)?;
-            c.execute("INSERT INTO person (id, avatar) VALUES ('ada', ?1)", [hash("avatar")])?;
-            tx.insert_entity("doc", Kind::Document, "Doc", AT)?;
-            c.execute(
-                "INSERT INTO document (id, blob, media_type) VALUES ('doc', ?1, 'text/plain')",
-                [hash("doc")],
-            )?;
-            tx.insert_entity("ph", Kind::Photo, "Photo", AT)?;
-            c.execute(
-                "INSERT INTO photo (id, blob, media_type, form) VALUES ('ph', ?1, 'image/jpeg', 'photo')",
-                [hash("photo")],
-            )?;
-            tx.insert_entity("n", Kind::Note, "Note", AT)?;
-            c.execute("INSERT INTO note (id, body) VALUES ('n', 'x')", [])?;
-            c.execute(
-                "INSERT INTO revision (entity_id, seq, at, blob, media_type) VALUES ('n', 1, ?2, ?1, 'text/plain')",
-                rusqlite::params![hash("rev"), AT],
-            )?;
-            centraid_vault::blob::write_derivative(
-                c,
-                AT,
-                &hash("orig"),
-                "thumb",
-                Some((&hash("d-out"), 1, "image/jpeg")),
-                None,
-            )?;
-            tx.insert_entity("th", Kind::Thread, "Chat", AT)?;
-            c.execute(
-                "INSERT INTO thread (id) VALUES ('th')",
-                [],
-            )?;
-            Ok(())
-        })
-        .expect("populates");
-
-    read(vault, |connection| {
-        // What the schema says: foreign keys into blob(hash).
-        let declared: BTreeSet<(String, String)> = foreign_keys(connection)
-            .into_iter()
-            .filter(|fk| fk.to_table == "blob")
-            .inspect(|fk| assert_eq!(fk.to, "hash"))
-            .map(|fk| (fk.table, fk.from))
-            .collect();
-        // What the rows say: every column of every table that holds a 64-hex
-        // value, other than blob's own key.
-        let mut populated = BTreeSet::new();
-        for table in tables(connection) {
-            if table == "blob" {
-                continue;
-            }
-            let columns: Vec<String> = connection
-                .prepare("SELECT name FROM pragma_table_info(?1) WHERE type = 'TEXT'")?
-                .query_map([&table], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<_>>()?;
-            for column in columns {
-                let mut statement = connection.prepare(&format!(
-                    "SELECT \"{column}\" FROM \"{table}\" WHERE \"{column}\" IS NOT NULL"
-                ))?;
-                let values = statement
-                    .query_map([], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                if values.iter().any(|value| is_hash(value)) {
-                    populated.insert((table.clone(), column));
-                }
-            }
-        }
-        assert!(
-            populated.len() >= 7,
-            "the fixture reaches every kind of hash column: {populated:?}"
-        );
-        assert!(
-            populated.is_subset(&declared),
-            "a column holds hashes and is not a foreign key into blob: {:?}",
-            populated.difference(&declared).collect::<Vec<_>>()
-        );
-        // The collector walks the same list and no other.
-        let seen: BTreeSet<(String, String)> = centraid_vault::blob::references(connection)?
-            .into_iter()
-            .map(|reference| (reference.table, reference.column))
-            .collect();
-        assert_eq!(
-            seen, declared,
-            "GC sees every reference the schema declares, from foreign_key_list alone"
-        );
-        Ok(())
-    });
-    // A blob nothing keeps alive goes, and so does what only it named: the
-    // derivative cascades with `orig`, which frees `d-out` in the next pass.
-    // Everything a plain reference names stays.
-    vault
-        .commit(|tx| {
-            centraid_vault::blob::stage(tx.connection(), &hash("loose"), 1)?;
-            Ok(())
-        })
-        .expect("stages");
-    let gone: BTreeSet<String> = vault
-        .collect_blobs()
-        .expect("collects")
-        .into_iter()
-        .collect();
-    assert_eq!(gone, ["loose", "orig", "d-out"].map(hash).into());
-    let kept = read(vault, |c| {
-        Ok(c.query_row("SELECT COUNT(*) FROM blob", [], |row| row.get::<_, i64>(0))?)
-    });
-    assert_eq!(kept, 5, "cover, avatar, doc, photo and rev");
-}
-
-// ---------------------------------------------------------------------------
-// 4. Delete rules
-// ---------------------------------------------------------------------------
-
-#[test]
-fn delete_rules_cascade_only_where_a_row_cannot_outlive_its_parent() {
-    let scratch = founded("c4");
-    read(&scratch.vault, |connection| {
-        let hosts: BTreeSet<String> = Kind::ALL
-            .iter()
-            .map(|kind| kind.host().to_owned())
-            .collect();
-        // Child rows: they are a part of what they hang on.
-        let child_rows: BTreeSet<(&str, &str)> = [
-            ("checkpoint", "account"),
-            ("contact_point", "person"),
-            ("derivative", "blob"),
-            ("locker_item_address", "locker_item"),
-            ("locker_item_alias", "locker_item"),
-            ("locker_item_field", "locker_item"),
-            ("locker_item_passkey", "locker_item"),
-            ("measurement", "person"),
-            ("message", "thread"),
-            ("message_attachment", "message"),
-            ("occurrence", "event"),
-            ("reminder", "event"),
-            ("transfer", "txn"),
-            ("workout", "activity"),
-        ]
-        .into();
-        // An entity pointer that cascades: an edge dies with either end or its
-        // label; a revision with its entity; a budget or a rule with its
-        // category (a rule for a category that is gone has nothing to say).
-        let entity_pointers: BTreeSet<(&str, &str)> = [
-            ("edge", "from_id"),
-            ("edge", "to_id"),
-            ("edge", "label_id"),
-            ("revision", "entity_id"),
-            // The index of when an item fires next goes with the item.
-            ("alert", "entity_id"),
-            ("budget", "category_id,category_kind"),
-            ("rule", "category_id,category_kind"),
-        ]
-        .into();
-        let set_null: BTreeSet<(&str, &str)> = [
-            ("message_attachment", "entity_id"),
-            ("source", "entity_id,entity_kind"),
-        ]
-        .into();
-
-        for fk in foreign_keys(connection) {
-            let here = (fk.table.as_str(), fk.from.as_str());
-            match fk.on_delete.as_str() {
-                "CASCADE" if fk.to_table == "entity" && fk.from == "id,kind" => {
-                    assert!(hosts.contains(&fk.table), "{fk:?}");
-                }
-                "CASCADE" if fk.to_table == "entity" => {
-                    assert!(
-                        entity_pointers.contains(&here),
-                        "an entity pointer cascades and is not on the list: {fk:?}"
-                    );
-                }
-                "CASCADE" => {
-                    assert!(
-                        child_rows.contains(&(fk.table.as_str(), fk.to_table.as_str())),
-                        "a child row cascades and is not on the list: {fk:?}"
-                    );
-                }
-                "SET NULL" => assert!(set_null.contains(&here), "{fk:?}"),
-                // NO ACTION: the pointer keeps its target alive, and the
-                // purge command says so in a sentence before SQLite would.
-                "NO ACTION" => {}
-                other => panic!("{fk:?}: `{other}` is not a delete rule this model uses"),
-            }
-        }
-        // Every entry on the lists is real, so a list cannot rot.
-        let actual = foreign_keys(connection);
-        for (table, to_table) in &child_rows {
-            assert!(actual.iter().any(|fk| fk.table == *table
-                && fk.to_table == *to_table
-                && fk.on_delete == "CASCADE"));
-        }
-        for (table, from) in entity_pointers.iter().chain(set_null.iter()) {
-            assert!(
-                actual
-                    .iter()
-                    .any(|fk| fk.table == *table && fk.from == *from)
-            );
-        }
-        Ok(())
-    });
-}
-
-#[test]
-fn every_pointer_into_an_entity_that_deletes_nothing_has_a_purge_rule() {
-    use centraid_vault::commands::entity::PURGE_RULES;
-    let scratch = founded("c4b");
-    read(&scratch.vault, |connection| {
-        let hosts: BTreeSet<String> = Kind::ALL
-            .iter()
-            .map(|kind| kind.host().to_owned())
-            .collect();
-        // The pointers the engine would refuse to delete out from under: no
-        // action on delete, into an entity or into a kind's own table.
-        let derived: BTreeSet<(String, String)> = foreign_keys(connection)
-            .into_iter()
-            .filter(|fk| {
-                fk.on_delete == "NO ACTION"
-                    && (fk.to_table == "entity" || hosts.contains(&fk.to_table))
-            })
-            .map(|fk| (fk.table, fk.from))
-            .collect();
-        let named: BTreeSet<(String, String)> = PURGE_RULES
-            .iter()
-            .map(|(table, from, _)| ((*table).to_owned(), (*from).to_owned()))
-            .collect();
-        assert_eq!(
-            derived, named,
-            "left: the file's pointers; right: the purge rules. A pointer with no rule \
-             fails a member's purge, or strands what points at it"
-        );
-        Ok(())
-    });
-}
-
-#[test]
-fn every_column_that_rents_a_blob_says_whose_the_bytes_are() {
-    use centraid_vault::backup::files::RENTERS;
-    let scratch = founded("c4c");
-    read(&scratch.vault, |connection| {
-        let rented: BTreeSet<(String, String)> = centraid_vault::blob::references(connection)?
-            .into_iter()
-            // A cascading reference (a derivative of a blob) keeps nothing alive;
-            // `derivative.out` is a plain one and follows its original.
-            .filter(|reference| reference.keeps_alive)
-            .map(|reference| (reference.table, reference.column))
-            .filter(|(table, column)| !(table == "derivative" && column == "out"))
-            .collect();
-        let named: BTreeSet<(String, String)> = RENTERS
-            .iter()
-            .map(|(table, column, _)| ((*table).to_owned(), (*column).to_owned()))
-            .collect();
-        assert_eq!(rented, named);
-        Ok(())
-    });
-}
-
-// ---------------------------------------------------------------------------
-// 5. Edges join only the kinds edge_shape names
-// ---------------------------------------------------------------------------
-
-use common::edge_shapes::SHAPES;
-
-fn shape_allows(rel: &str, from: &str, to: &str) -> bool {
-    SHAPES
-        .iter()
-        .any(|(r, f, t)| *r == rel && (*f == "*" || *f == from) && (*t == "*" || *t == to))
-}
-
-#[test]
-fn an_edge_joins_exactly_the_kinds_edge_shape_names_for_every_relation_and_pair_of_kinds() {
-    let scratch = founded("c5");
-    // The enum and the CHECK agree.
-    read(&scratch.vault, |connection| {
-        let check = in_list(&table_sql(connection, "edge"), "rel");
-        assert_eq!(
-            check,
-            Rel::ALL.iter().map(|rel| rel.as_str().to_owned()).collect()
-        );
-        let stored: BTreeSet<(String, String, String)> = connection
-            .prepare("SELECT rel, from_kind, to_kind FROM edge_shape")?
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-            .collect::<rusqlite::Result<_>>()?;
-        let spec: BTreeSet<(String, String, String)> = SHAPES
-            .iter()
-            .map(|(r, f, t)| ((*r).to_owned(), (*f).to_owned(), (*t).to_owned()))
-            .collect();
-        assert_eq!(stored, spec, "the seeded shapes are the spec's");
-        Ok(())
-    });
-
-    // One entity per kind at each end, then every rel x kind x kind, attempted
-    // inside a savepoint and compared with the oracle.
-    scratch
-        .vault
-        .commit(|tx| {
-            for kind in Kind::ALL {
-                tx.insert_entity(&format!("from:{}", kind.as_str()), kind, "f", AT)?;
-                tx.insert_entity(&format!("to:{}", kind.as_str()), kind, "t", AT)?;
-            }
-            let c = tx.connection();
-            let mut insert_edge = c.prepare(
-                "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            )?;
-            let mut tried = 0;
-            for rel in Rel::ALL {
-                for from in Kind::ALL {
-                    for to in Kind::ALL {
-                        c.execute_batch("SAVEPOINT shape")?;
-                        let label = (rel == Rel::Related).then_some("to:relation");
-                        let attempt = insert_edge.execute(rusqlite::params![
-                            format!("from:{}", from.as_str()),
-                            rel.as_str(),
-                            format!("to:{}", to.as_str()),
-                            label,
-                            AT
-                        ]);
-                        c.execute_batch("ROLLBACK TO shape; RELEASE shape")?;
-                        assert_eq!(
-                            attempt.is_ok(),
-                            shape_allows(rel.as_str(), from.as_str(), to.as_str()),
-                            "{} {} -> {}: {attempt:?}",
-                            rel.as_str(),
-                            from.as_str(),
-                            to.as_str()
-                        );
-                        tried += 1;
-                    }
-                }
-            }
-            assert_eq!(tried, 9 * Kind::ALL.len() * Kind::ALL.len());
-            // A label names a relation, and only `related` has one.
-            let bad_label = c.execute(
-                "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES ('from:person', 'related', 'to:person', 'to:tag', ?1)",
-                [AT],
-            );
-            assert!(bad_label.is_err(), "a label that is not a relation");
-            Ok(())
-        })
-        .expect("runs");
-}
-
-// ---------------------------------------------------------------------------
-// 6. The incremental index is the rebuilt one
-// ---------------------------------------------------------------------------
-
-/// Every `(term, entity.n, column, offset)` the index holds, through a
-/// throwaway `fts5vocab` of type `instance`.
-fn index_dump(vault: &Vault) -> BTreeSet<(String, i64, String, i64)> {
-    vault
-        .commit(|tx| {
-            let c = tx.connection();
-            c.execute_batch("CREATE VIRTUAL TABLE temp.search_instances USING fts5vocab(main, search, instance)")?;
-            // What items said before is part of the index: a row of `search_past` is dumped
-            // under its column's name prefixed `past:`, so a stale or missing one is a diff.
-            c.execute_batch("CREATE VIRTUAL TABLE temp.search_past_instances USING fts5vocab(main, search_past, instance)")?;
-            let mut rows = c
-                .prepare("SELECT term, doc, col, \"offset\" FROM temp.search_instances")?
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
-                .collect::<rusqlite::Result<BTreeSet<_>>>()?;
-            rows.extend(
-                c.prepare("SELECT term, doc, 'past:' || col, \"offset\" FROM temp.search_past_instances")?
-                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
-                    .collect::<rusqlite::Result<BTreeSet<_>>>()?,
-            );
-            c.execute_batch("DROP TABLE temp.search_instances; DROP TABLE temp.search_past_instances")?;
-            Ok(rows)
-        })
-        .expect("dumps")
-        .value
-}
-
-fn rebuilt(vault: &Vault) -> BTreeSet<(String, i64, String, i64)> {
-    vault
-        .commit(|tx| {
-            index::rebuild(tx.connection())?;
-            Ok(())
-        })
-        .expect("rebuilds");
-    index_dump(vault)
-}
-
-fn run(
-    vault: &Vault,
-    registry: &Registry,
-    name: &str,
-    input: serde_json::Value,
-) -> serde_json::Value {
-    let outcome = vault
-        .execute(
-            registry,
-            &Principal::owner("phone"),
-            &Command::new(name, input),
-        )
-        .expect("runs");
-    assert_eq!(
-        outcome.status,
-        CommandStatus::Executed,
-        "{name}: {:?}",
-        outcome.reason
-    );
-    outcome.output
-}
-
-fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Registry) {
-    let vault = &scratch.vault;
-    vault
-        .commit(|tx| {
-            common::add_person(tx, "ada", "Ada Lovelace", AT)?;
-            common::add_person(tx, "bob", "Bob Barker", AT)?;
-            tx.connection().execute(
-                "INSERT INTO contact_point (id, person_id, kind, value, normalized, label, position) VALUES ('cp1', 'ada', 'email', 'ada@analytical.example', 'ada@analytical.example', 'work', 1)",
-                [],
-            )?;
-            tx.touch("ada", AT)?;
-            tx.insert_entity("n1", Kind::Note, "Engine", AT)?;
-            tx.connection()
-                .execute("INSERT INTO note (id, body) VALUES ('n1', 'a note on the analytical engine')", [])?;
-            tx.insert_entity("n2", Kind::Note, "Lunch", AT)?;
-            tx.connection()
-                .execute("INSERT INTO note (id, body) VALUES ('n2', 'sandwiches')", [])?;
-            Ok(())
-        })
-        .expect("seeds");
-    run(
-        vault,
-        registry,
-        "edge.add",
-        json!({"from": "n1", "rel": "about", "to": "ada"}),
-    );
-    run(
-        vault,
-        registry,
-        "edge.add",
-        json!({"from": "n2", "rel": "about", "to": "bob"}),
-    );
-    run(
-        vault,
-        registry,
-        "entity.retitle",
-        json!({"id": "bob", "title": "Robert Barker"}),
-    );
-    // A body edit through a commit that touches, as an edit command will.
-    vault
-        .commit(|tx| {
-            tx.connection().execute(
-                "UPDATE note SET body = 'a note on the difference engine' WHERE id = 'n1'",
-                [],
-            )?;
-            tx.touch("n1", AT)
-        })
-        .expect("edits");
-    // The note verbs: an edit that changes the words, a restore of the words it
-    // replaced, and a note born with words that link.
-    run(
-        vault,
-        registry,
-        "note.edit",
-        json!({"id": "n2", "body": "sandwiches and soup"}),
-    );
-    run(
-        vault,
-        registry,
-        "note.restore_version",
-        json!({"id": "n2", "seq": 1}),
-    );
-    run(
-        vault,
-        registry,
-        "note.create",
-        json!({"id": "n3", "title": "Ledger", "body": "[[Lunch]] on the ledger"}),
-    );
-    run(
-        vault,
-        registry,
-        "edge.remove",
-        json!({"from": "n2", "rel": "about", "to": "bob"}),
-    );
-    run(
-        vault,
-        registry,
-        "tag.add",
-        json!({"id": "n1", "label": "history"}),
-    );
-    run(vault, registry, "entity.trash", json!({"id": "n2"}));
-    run(vault, registry, "entity.restore", json!({"id": "n2"}));
-    run(vault, registry, "entity.trash", json!({"id": "n1"}));
-    run(
-        vault,
-        registry,
-        "person.merge",
-        json!({"from": "bob", "into": "ada"}),
-    );
-    run(
-        vault,
-        registry,
-        "follow.contacts",
-        json!({"origin": {"ref": "i", "label": "i"}, "complete": true, "records": [
-            {"external_id": "c1", "fields": {"title": "Grace Hopper", "role": "admiral"}}
-        ]}),
-    );
-    run(vault, registry, "entity.purge", json!({"id": "n1"}));
-    // People's verbs, each person's last word being the verb under test so
-    // nothing after it re-indexes them and hides a missing touch.
-    for (id, title) in [
-        ("cy", "Cy Twombly"),
-        ("di", "Di Arbus"),
-        ("ed", "Ed Ruscha"),
-    ] {
-        run(
-            vault,
-            registry,
-            "person.add",
-            json!({"id": id, "title": title, "role": "painter"}),
-        );
-    }
-    run(
-        vault,
-        registry,
-        "person.add_note",
-        json!({"id": "cy", "text": "likes large canvases"}),
-    );
-    run(
-        vault,
-        registry,
-        "person.log_interaction",
-        json!({"id": "cy", "kind": "call", "text": "talked about Rome"}),
-    );
-    run(
-        vault,
-        registry,
-        "person.add_relationship",
-        json!({"id": "cy", "name": "Mum", "kind": "mother"}),
-    );
-    run(
-        vault,
-        registry,
-        "person.add_date",
-        json!({"id": "cy", "label": "Anniversary", "month_day": "06-01"}),
-    );
-    run(
-        vault,
-        registry,
-        "person.edit",
-        json!({"id": "cy", "nickname": "Cy"}),
-    );
-    run(
-        vault,
-        registry,
-        "person.save_contact_point",
-        json!({"id": "di", "kind": "phone", "value": "+1 555 010 0199"}),
-    );
-    let point = run(
-        vault,
-        registry,
-        "person.save_contact_point",
-        json!({"id": "ed", "kind": "email", "value": "ed@ruscha.example"}),
-    );
-    run(
-        vault,
-        registry,
-        "person.remove_contact_point",
-        json!({"point_id": point["point_id"]}),
-    );
-    run(
-        vault,
-        registry,
-        "person.save_contact_point",
-        json!({"id": "di", "kind": "email", "value": "di@arbus.example", "label": "work"}),
-    );
-    for points in [
-        json!([{"kind": "phone", "value": "+44 20 7946 0958"}]),
-        json!([{"kind": "phone", "value": "+44 20 7946 0958"}, {"kind": "email", "value": "grace@navy.example"}]),
-    ] {
-        run(
-            vault,
-            registry,
-            "follow.contacts",
-            json!({"origin": {"ref": "i", "label": "i"}, "records": [
-                {"external_id": "c1", "fields": {"points": points}}
-            ]}),
-        );
-    }
-    // Agenda's verbs, each row's last word being the verb under test.
-    run(
-        vault,
-        registry,
-        "container.create",
-        json!({"id": "pr", "kind": "project", "title": "Garden"}),
-    );
-    for (id, title) in [("t1", "Prune"), ("t2", "Sow"), ("t3", "Water")] {
-        run(
-            vault,
-            registry,
-            "task.add",
-            json!({"id": id, "title": title, "project_id": "pr", "due": "2026-03-02"}),
-        );
-    }
-    run(
-        vault,
-        registry,
-        "task.edit",
-        json!({"id": "t1", "description": "the roses"}),
-    );
-    run(
-        vault,
-        registry,
-        "task.organize",
-        json!({"id": "t2", "project_id": null}),
-    );
-    run(vault, registry, "task.cancel", json!({"id": "t3"}));
-    run(vault, registry, "task.complete", json!({"id": "t3"}));
-    for (id, title) in [("e1", "Dentist"), ("e2", "Standup"), ("e3", "Picnic")] {
-        run(
-            vault,
-            registry,
-            "event.propose",
-            json!({"id": id, "title": title, "starts": "2026-03-0".to_owned() + &id[1..] + "T10:00", "busy": false}),
-        );
-    }
-    run(
-        vault,
-        registry,
-        "event.edit",
-        json!({"id": "e1", "description": "bring the x-rays"}),
-    );
-    run(vault, registry, "event.cancel", json!({"id": "e2"}));
-    run(
-        vault,
-        registry,
-        "event.edit",
-        json!({"id": "e3", "attendees": ["cy"]}),
-    );
-    run(
-        vault,
-        registry,
-        "event.respond",
-        json!({"id": "e3", "person_id": "cy", "state": "accepted"}),
-    );
-    // A project's rename reaches the tasks filed under it; last of its kind.
-    run(
-        vault,
-        registry,
-        "entity.retitle",
-        json!({"id": "pr", "title": "Allotment"}),
-    );
-    // A LOCKER ITEM IS AN ENTITY AND IS INDEXED BY ITS PLAIN TEXT ONLY: scripting
-    // its commands here is what holds "incremental equals rebuilt" over a kind
-    // whose text is its title, plain cells, aliases, addresses, tags and notes.
-    run(
-        vault,
-        registry,
-        "locker.add_item",
-        json!({"item_id": "lk1", "type": "login", "title": "Vaultbank", "username": "sealedname",
-               "alias": "vb-main", "notes": "ask for Wilhelmina"}),
-    );
-    run(
-        vault,
-        registry,
-        "tag.add",
-        json!({"id": "lk1", "label": "Vaulttag"}),
-    );
-    run(
-        vault,
-        registry,
-        "flag.set",
-        json!({"id": "lk1", "flag": "starred"}),
-    );
-    run(
-        vault,
-        registry,
-        "locker.set_addresses",
-        json!({"item_id": "lk1", "addresses": [{"url": "https://vaultbank.example/login"}]}),
-    );
-    run(
-        vault,
-        registry,
-        "locker.set_memo",
-        json!({"item_id": "lk1", "note": "branch closes early on fridays"}),
-    );
-    run(
-        vault,
-        registry,
-        "note.create",
-        json!({"id": "lkn", "title": "Teller", "body": "the teller is called Ottoline"}),
-    );
-    run(
-        vault,
-        registry,
-        "edge.add",
-        json!({"from": "lkn", "rel": "about", "to": "lk1"}),
-    );
-    run(
-        vault,
-        registry,
-        "edge.add",
-        json!({"from": "lk1", "rel": "links", "to": "n3"}),
-    );
-    run(
-        vault,
-        registry,
-        "entity.retitle",
-        json!({"id": "lk1", "title": "Vaultbank Savings"}),
-    );
-    run(
-        vault,
-        registry,
-        "locker.edit_item",
-        json!({"item_id": "lk1", "username": "other", "notes": "ask for Wilhelmina"}),
-    );
-    // A purged item takes its words with it.
-    run(
-        vault,
-        registry,
-        "locker.add_item",
-        json!({"item_id": "lk2", "type": "login", "title": "Doomedsafe", "username": "gonename"}),
-    );
-    run(vault, registry, "entity.trash", json!({"id": "lk2"}));
-    run(vault, registry, "entity.purge", json!({"id": "lk2"}));
-    run(vault, registry, "entity.trash", json!({"id": "lk1"}));
-    run(vault, registry, "entity.restore", json!({"id": "lk1"}));
-    // Last, so no later command re-indexes it and hides a missing touch.
-    run(
-        vault,
-        registry,
-        "entity.retitle",
-        json!({"id": "n2", "title": "Brunch"}),
-    );
-    // And the note verbs' own last word: nothing after it re-indexes n3.
-    run(
-        vault,
-        registry,
-        "note.edit",
-        json!({"id": "n3", "body": "[[Brunch]] and the final words of the ledger"}),
-    );
-}
-
-#[test]
-fn the_incremental_index_equals_a_rebuild_after_every_search_relevant_command() {
-    let scratch = founded("c6");
-    let registry = Registry::with_system_commands().expect("a registry");
-    script_every_search_relevant_command(&scratch, &registry);
-    let incremental = index_dump(&scratch.vault);
-    assert!(!incremental.is_empty(), "the script left something to find");
-    // What items said before is part of the index the comparison covers: the script's edits
-    // left earlier versions of several kinds in it, and not one of a Locker item (its history
-    // is sealed).
-    let past_docs: BTreeSet<i64> = incremental
-        .iter()
-        .filter(|(_, _, column, _)| column.starts_with("past:"))
-        .map(|(_, doc, _, _)| *doc >> 24)
-        .collect();
-    let past_kinds: BTreeSet<String> = read(&scratch.vault, |connection| {
-        let mut kinds = BTreeSet::new();
-        for n in &past_docs {
-            kinds.insert(connection.query_row(
-                "SELECT kind FROM entity WHERE n = ?1",
-                [n],
-                |row| row.get::<_, String>(0),
-            )?);
-        }
-        Ok(kinds)
-    });
-    assert!(
-        past_kinds.len() >= 3 && past_kinds.contains("note"),
-        "the script left the past of too few kinds to compare: {past_kinds:?}"
-    );
-    assert!(
-        !past_kinds.contains("locker_item"),
-        "a Locker item's earlier versions are in the index"
-    );
-    // The positive control: a Locker item's plain text IS findable, so the
-    // equality below compares an index that holds it.
-    let held = vocabulary(&scratch.vault);
-    for word in [
-        "vaultbank",
-        "savings",
-        "vaulttag",
-        "other",
-        "wilhelmina",
-        "vb",
-        "ottoline",
-        "fridays",
-        "https",
-    ] {
-        assert!(
-            held.contains(word),
-            "`{word}` of a Locker item is not in the index: {held:?}"
-        );
-    }
-    assert!(
-        !held.contains("doomedsafe") && !held.contains("gonename"),
-        "a purged Locker item's words are still in the index"
-    );
-    // The word list holds every word the index does, and may hold more: a word
-    // an edit dropped stays until a purge of something that held it or a rebuild.
-    let (terms, words) = (vocabulary(&scratch.vault), word_list(&scratch.vault));
-    assert_eq!(
-        terms.difference(&words).collect::<Vec<_>>(),
-        Vec::<&String>::new(),
-        "the index holds a word the word list does not"
-    );
-    let rebuilt = rebuilt(&scratch.vault);
-    assert_eq!(
-        incremental, rebuilt,
-        "a command changed searchable text and did not touch"
-    );
-    // A rebuild rewrites the list from the rows: it is exactly the index's
-    // vocabulary, and no word the incremental list did not have.
-    let again = word_list(&scratch.vault);
-    assert_eq!(again, vocabulary(&scratch.vault));
-    assert_eq!(
-        again.difference(&words).collect::<Vec<_>>(),
-        Vec::<&String>::new(),
-        "a rebuilt list is a subset of the incremental one"
-    );
-}
-
-/// Every term of the index's vocabulary.
-fn vocabulary(vault: &Vault) -> BTreeSet<String> {
-    read(vault, |connection| {
-        Ok(connection
-            .prepare("SELECT term FROM search_vocab UNION SELECT term FROM search_past_vocab")?
-            .query_map([], |row| row.get(0))?
-            .collect::<rusqlite::Result<_>>()?)
-    })
-}
-
-/// Every word of the word list.
-fn word_list(vault: &Vault) -> BTreeSet<String> {
-    read(vault, |connection| {
-        Ok(connection
-            .prepare("SELECT word FROM search_word")?
-            .query_map([], |row| row.get(0))?
-            .collect::<rusqlite::Result<_>>()?)
-    })
-}
-
-#[test]
-fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
-    let scratch = founded("c6-words");
-    let vault = &scratch.vault;
-    let registry = Registry::with_system_commands().expect("a registry");
-    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
-    let has = |word: &str| word_list(vault).contains(word);
-
-    go(
-        "note.create",
-        json!({"id": "a", "title": "Zeppelin", "body": "Café au lait, o'brien 3.14"}),
-    );
-    go(
-        "note.create",
-        json!({"id": "b", "title": "Blimp", "body": "au lait only"}),
-    );
-    for word in [
-        "zeppelin", "cafe", "au", "lait", "o", "brien", "3", "14", "blimp", "only",
-    ] {
-        assert!(has(word), "{word} is indexed and in the list");
-    }
-    assert_eq!(word_list(vault), vocabulary(vault));
-
-    // An edit that drops a word leaves it in the list: it still costs nothing to
-    // offer a word the index no longer holds, and finding out is not free.
-    go("note.edit", json!({"id": "a", "body": "au lait"}));
-    let now = |word: &str| {
-        read(vault, |connection| {
-            Ok(connection.query_row(
-                "SELECT EXISTS (SELECT 1 FROM search_vocab WHERE term = ?1)",
-                [word],
-                |row| row.get::<_, bool>(0),
-            )?)
-        })
-    };
-    assert!(!now("cafe"), "the live index no longer holds it");
-    assert!(
-        vocabulary(vault).contains("cafe") && has("cafe"),
-        "what the note said before is findable, so the word stays"
-    );
-
-    // A purge takes the words the entity holds that no other row holds, and keeps
-    // those another row does. It cannot name a word an edit dropped earlier.
-    go("entity.trash", json!({"id": "a"}));
-    go("entity.purge", json!({"id": "a"}));
-    assert!(!has("zeppelin"), "its own title goes");
-    assert!(has("au") && has("lait"), "a word another note holds stays");
-    assert!(
-        !has("cafe") && !has("o") && !has("brien"),
-        "a purge names the words of the earlier versions too: their rows go with it"
-    );
-
-    // A rebuild rewrites the list from the rows, earlier versions' included.
-    go("note.edit", json!({"id": "b", "body": "au only"}));
-    assert!(has("lait"));
-    rebuilt(vault);
-    assert!(has("lait"), "b said `lait` before, which is still findable");
-    assert!(!has("cafe"));
-    assert_eq!(word_list(vault), vocabulary(vault));
-}
-
-#[test]
-fn an_edit_without_explicit_touch_still_updates_search_and_timestamp() {
-    // Auto-touch TEMP triggers guarantee that a raw SQL write without calling `ctx.touch`
-    // still advances `updated_at` and keeps the incremental search index equal to a rebuild,
-    // while an omitted column (`locker_item.last_used_at`) leaves `updated_at` untouched.
-    let scratch = founded("c6-auto");
-    scratch
-        .vault
-        .commit(|tx| {
-            tx.insert_entity("n", Kind::Note, "Note", AT)?;
-            tx.connection()
-                .execute("INSERT INTO note (id, body) VALUES ('n', 'before')", [])?;
-            tx.insert_entity("l", Kind::LockerItem, "Login", AT)?;
-            tx.connection().execute(
-                "INSERT INTO locker_item (id, type) VALUES ('l', 'login')",
-                [],
-            )?;
-            Ok(())
-        })
-        .expect("creates");
-    scratch.clock.advance_ms(60_000);
-    scratch
-        .vault
-        .commit(|tx| {
-            tx.connection()
-                .execute("UPDATE note SET body = 'after' WHERE id = 'n'", [])?;
-            tx.connection().execute(
-                "UPDATE locker_item SET last_used_at = ?1 WHERE id = 'l'",
-                [scratch.clock.now_text()],
-            )?;
-            Ok(())
-        })
-        .expect("edits without touching");
-    let incremental = index_dump(&scratch.vault);
-    assert_eq!(
-        incremental,
-        rebuilt(&scratch.vault),
-        "auto-touch keeps the incremental index equal to a rebuild without manual ctx.touch"
-    );
-    let (note_updated, locker_updated): (String, String) = read(&scratch.vault, |c| {
-        Ok((
-            c.query_row("SELECT updated_at FROM entity WHERE id = 'n'", [], |r| {
-                r.get(0)
-            })?,
-            c.query_row("SELECT updated_at FROM entity WHERE id = 'l'", [], |r| {
-                r.get(0)
-            })?,
-        ))
-    });
-    assert_eq!(note_updated, scratch.clock.now_text());
-    assert_eq!(
-        locker_updated, AT,
-        "a reveal stamp must not move updated_at"
-    );
-}
-
-fn updated_at(vault: &Vault, id: &str) -> String {
-    read(vault, |c| {
-        Ok(
-            c.query_row("SELECT updated_at FROM entity WHERE id = ?1", [id], |r| {
-                r.get(0)
-            })?,
-        )
-    })
-}
-
-#[test]
-fn purging_a_source_photo_stamps_and_reindexes_the_photo_derived_from_it() {
-    // `photo.edited_from` is omitted from the history (immutable) but a purge moving it is still
-    // a change to the derived photograph: the commit triggers' column set is their own.
-    let scratch = founded("c6-detach");
-    let vault = &scratch.vault;
-    vault
-        .commit(|tx| {
-            let c = tx.connection();
-            let blob = centraid_vault::blob::content_digest(b"src");
-            let other = centraid_vault::blob::content_digest(b"der");
-            centraid_vault::blob::stage(c, &blob, 1)?;
-            centraid_vault::blob::stage(c, &other, 1)?;
-            tx.insert_entity("src", Kind::Photo, "Source", AT)?;
-            c.execute(
-                "INSERT INTO photo (id, blob, media_type, form) VALUES ('src', ?1, 'image/jpeg', 'photo')",
-                [&blob],
-            )?;
-            tx.insert_entity("der", Kind::Photo, "Derived", AT)?;
-            c.execute(
-                "INSERT INTO photo (id, blob, media_type, form, edited_from)
-                 VALUES ('der', ?1, 'image/jpeg', 'photo', 'src')",
-                [&other],
-            )?;
-            Ok(())
-        })
-        .expect("two photographs");
-    scratch.clock.advance_ms(60_000);
-    let registry = Registry::with_system_commands().expect("a registry");
-    run(vault, &registry, "entity.trash", json!({ "id": "src" }));
-    run(vault, &registry, "entity.purge", json!({ "id": "src" }));
-    assert_eq!(
-        updated_at(vault, "der"),
-        scratch.clock.now_text(),
-        "detaching a derived photograph is a change to it"
-    );
-    assert_eq!(
-        index_dump(vault),
-        rebuilt(vault),
-        "and the index follows it"
-    );
-}
-
-#[test]
-fn a_write_that_changes_nothing_touches_nothing_and_a_mixed_commit_shares_one_instant() {
-    let scratch = founded("c6-noop");
-    let vault = &scratch.vault;
-    vault
-        .commit(|tx| {
-            let c = tx.connection();
-            tx.insert_entity("ev", Kind::Event, "Series", AT)?;
-            c.execute(
-                "INSERT INTO event (id, starts, timing, rule, calendar_id)
-                 VALUES ('ev', '2026-03-02', 'all-day', 'FREQ=WEEKLY', 'calendar:default')",
-                [],
-            )?;
-            tx.insert_entity("n", Kind::Note, "Note", AT)?;
-            c.execute("INSERT INTO note (id, body) VALUES ('n', 'same')", [])?;
-            tx.insert_entity("m", Kind::Note, "Other", AT)?;
-            c.execute("INSERT INTO note (id, body) VALUES ('m', 'same')", [])?;
-            Ok(())
-        })
-        .expect("a series and two notes");
-    let upsert = |starts: &str| {
-        vault
-            .commit(|tx| {
-                tx.connection().execute(
-                    "INSERT INTO occurrence (series_id, original_start, scope, starts)
-                     VALUES ('ev', '2026-03-09', 'occurrence', ?1)
-                     ON CONFLICT (series_id, original_start, scope)
-                     DO UPDATE SET starts = ?1",
-                    [starts],
-                )?;
-                Ok(())
-            })
-            .expect("an upsert");
-    };
-    scratch.clock.advance_ms(60_000);
-    upsert("2026-03-10");
-    let first = updated_at(vault, "ev");
-    assert_ne!(first, AT, "a changed occurrence stamps its series");
-    scratch.clock.advance_ms(60_000);
-    upsert("2026-03-10");
-    assert_eq!(
-        updated_at(vault, "ev"),
-        first,
-        "re-writing the same values stamps nothing"
-    );
-    vault
-        .commit(|tx| {
-            tx.connection()
-                .execute("UPDATE note SET body = 'same' WHERE id = 'n'", [])?;
-            Ok(())
-        })
-        .expect("a no-op update");
-    assert_eq!(
-        updated_at(vault, "n"),
-        AT,
-        "a no-op host update stamps nothing"
-    );
-
-    // A manual touch (the command's instant) and an auto stamp (the trigger) in one commit
-    // carry the same `updated_at`, even when the vault's clock has moved between them.
-    let before = scratch.clock.now_text();
-    scratch.clock.advance_ms(60_000);
-    vault
-        .commit(|tx| {
-            tx.touch("n", &before)?;
-            tx.connection()
-                .execute("UPDATE note SET body = 'changed' WHERE id = 'm'", [])?;
-            Ok(())
-        })
-        .expect("a mixed commit");
-    assert_eq!(updated_at(vault, "n"), before);
-    assert_eq!(
-        updated_at(vault, "m"),
-        before,
-        "an auto stamp takes the instant the handlers stamped with"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// 7. Concept and container lists, folded keys
-// ---------------------------------------------------------------------------
-
-#[test]
-fn concept_and_container_check_lists_are_the_enums_and_seed_keys_are_folded() {
-    let scratch = founded("c7");
-    read(&scratch.vault, |connection| {
-        assert_eq!(
-            in_list(&table_sql(connection, "concept"), "kind"),
-            Kind::CONCEPTS
-                .iter()
-                .map(|k| k.as_str().to_owned())
-                .collect()
-        );
-        assert_eq!(
-            in_list(&table_sql(connection, "container"), "kind"),
-            Kind::CONTAINERS
-                .iter()
-                .map(|k| k.as_str().to_owned())
-                .collect()
-        );
-        let seeds: Vec<(String, String)> = connection
-            .prepare("SELECT id, kind FROM entity WHERE id LIKE kind || ':%'")?
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect::<rusqlite::Result<_>>()?;
-        assert!(
-            seeds.len() > 20,
-            "founding seeds the flags, categories and kinds"
-        );
-        for (id, kind) in seeds {
-            let key = &id[kind.len() + 1..];
-            assert!(
-                Kind::parse(&kind).is_some_and(|k| k.is_concept() || k == Kind::Calendar),
-                "{id}: a seed id belongs to a concept (or the default calendar)"
-            );
-            assert_eq!(fold_label(key), key, "{id}: a seeded key is already folded");
-        }
-        Ok(())
-    });
-}
-
-// ---------------------------------------------------------------------------
-// 8. Nothing outside the spec is founded
-// ---------------------------------------------------------------------------
-
-#[test]
-fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
-    let scratch = founded("c8");
-    let expected: BTreeSet<&str> = [
-        // the kernel
-        "vault",
-        "entity",
-        "edge",
-        "edge_shape",
-        "concept",
-        "container",
-        "blob",
-        "derivative",
-        "origin",
-        "source",
-        "revision",
-        "action_key",
-        "search",
-        "search_vocab",
-        "search_past",
-        "search_past_vocab",
-        "search_word",
-        "search_owed",
-        "alert",
-        // the kinds' own rows and their children
-        "person",
-        "contact_point",
-        "place",
-        "event",
-        "occurrence",
-        "task",
-        "activity",
-        "workout",
-        "measurement",
-        "note",
-        "document",
-        "photo",
-        "account",
-        "txn",
-        "transfer",
-        "budget",
-        "checkpoint",
-        "rule",
-        "thread",
-        "message",
-        "message_attachment",
-        "reminder",
-        // Locker, which is not an entity kind
-        "locker_item",
-        "locker_item_address",
-        "locker_item_alias",
-        "locker_item_field",
-        "locker_item_passkey",
-        "locker_key",
-    ]
-    .into();
-    read(&scratch.vault, |connection| {
-        let found: BTreeSet<String> = tables(connection).into_iter().collect();
-        let found: BTreeSet<&str> = found.iter().map(String::as_str).collect();
-        assert_eq!(
-            found.difference(&expected).collect::<Vec<_>>(),
-            Vec::<&&str>::new(),
-            "a table the spec does not name was founded"
-        );
-        assert_eq!(
-            expected.difference(&found).collect::<Vec<_>>(),
-            Vec::<&&str>::new(),
-            "a table the spec names was not founded"
-        );
-        Ok(())
-    });
-}
-
-// ---------------------------------------------------------------------------
-// 5 (second half). Following is a per-field three-way merge
-// ---------------------------------------------------------------------------
-
-fn follow_contact(
-    vault: &Vault,
-    registry: &Registry,
-    role: &str,
-    nickname: &str,
-) -> serde_json::Value {
-    run(
-        vault,
-        registry,
-        "follow.contacts",
-        json!({
-            "origin": {"ref": "icloud", "label": "iCloud"},
-            "complete": true,
-            "records": [{
-                "external_id": "c1",
-                "fields": {"title": "Ada", "role": role, "nickname": nickname}
-            }]
-        }),
-    )
-}
-
-fn person_field(vault: &Vault, id: &str, column: &str) -> String {
-    read(vault, |connection| {
-        Ok(connection.query_row(
-            &format!("SELECT {column} FROM person WHERE id = ?1"),
-            [id],
-            |row| row.get(0),
-        )?)
-    })
-}
-
-fn member_sets_nickname(vault: &Vault, id: &str, nickname: &str) {
-    vault
-        .commit(|tx| {
-            tx.connection().execute(
-                "UPDATE person SET nickname = ?2 WHERE id = ?1",
-                [id, nickname],
-            )?;
-            tx.touch(id, AT)?;
-            Ok(())
-        })
-        .expect("the member edits");
-}
-
-#[test]
-fn a_followed_row_merges_per_field_the_source_s_new_word_against_the_member_s_edit() {
-    let scratch = founded("c5b");
-    let vault = &scratch.vault;
-    let registry = Registry::with_system_commands().expect("a registry");
-    follow_contact(vault, &registry, "Engineer", "Ada");
-    let id: String = read(vault, |connection| {
-        Ok(connection.query_row(
-            "SELECT entity_id FROM source WHERE external_id = 'c1'",
-            [],
-            |row| row.get(0),
-        )?)
-    });
-    let stated = |vault: &Vault| -> serde_json::Value {
-        let text: String = read(vault, |connection| {
-            Ok(connection.query_row(
-                "SELECT stated FROM source WHERE external_id = 'c1'",
-                [],
-                |row| row.get(0),
-            )?)
-        });
-        serde_json::from_str(&text).expect("json")
-    };
-
-    // The member edits one field; the source then restates both.
-    member_sets_nickname(vault, &id, "Countess");
-    follow_contact(vault, &registry, "Mathematician", "Ada L.");
-    assert_eq!(
-        person_field(vault, &id, "role"),
-        "Mathematician",
-        "a field the member never edited takes the source's new value"
-    );
-    assert_eq!(
-        person_field(vault, &id, "nickname"),
-        "Countess",
-        "a field the member edited keeps the member's value"
-    );
-    assert_eq!(
-        stated(vault),
-        json!({"title": "Ada", "role": "Mathematician", "nickname": "Ada L."}),
-        "`source.stated` becomes the new statement, whatever the member did"
-    );
-
-    // Reverting to the stated value hands the field back to the source.
-    member_sets_nickname(vault, &id, "Ada L.");
-    follow_contact(vault, &registry, "Mathematician", "Ada Byron");
-    assert_eq!(
-        person_field(vault, &id, "nickname"),
-        "Ada Byron",
-        "a field equal to the stated value follows the source again"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// 7 (second half). Nothing computable is stored
-// ---------------------------------------------------------------------------
-
-/// A column whose name says it holds a rollup or a derived figure: a balance, a
-/// total, a count, a sum, an average, a typical value, a streak, a
-/// `last_*_at` (matched on whole `_`-separated words, so `account_id` is not a
-/// count), a lookup computed from another column, or a bare `value` that is
-/// a real number (a figure, not a word).
-fn names_a_computable(column: &str, declared: &str) -> bool {
-    const WORDS: [&str; 10] = [
-        "balance", "total", "count", "sum", "average", "avg", "typical", "streak", "mean",
-        "locality",
-    ];
-    let last_at = column.starts_with("last_") && column.ends_with("_at");
-    last_at
-        || column.split('_').any(|token| WORDS.contains(&token))
-        || (column == "value" && declared.eq_ignore_ascii_case("REAL"))
-}
-
-/// The columns the spec allows to hold what looks computable, each with its
-/// reason. A new computable column fails the test until it is argued for here.
-/// (`derivative` is the spec's other exception: it holds caches of a blob's
-/// content, and no column of it is named like a rollup, so it needs no line.)
-const STATED_NOT_COMPUTED: [(&str, &str, &str); 4] = [
-    (
-        "checkpoint",
-        "balance_minor",
-        "the bank's stated balance on a date: a statement, never recomputed from txn",
-    ),
-    (
-        "locker_item",
-        "last_used_at",
-        "the one record of a use: the Locker keeps no access log to recompute it from (#1146, owner-ruled), and a stamp is a fact the core states, not a rollup",
-    ),
-    (
-        "measurement",
-        "value",
-        "the store's stated total (steps in a day): the store counted, the vault did not",
-    ),
-    (
-        "place",
-        "locality",
-        "a derived lookup from the coordinates that the spec names, kept so a place reads offline",
-    ),
-];
-
-#[test]
-fn no_column_stores_a_rollup_except_the_stated_figures_the_spec_names() {
-    let scratch = founded("c7b");
-    read(&scratch.vault, |connection| {
-        let mut flagged = BTreeSet::new();
-        for table in tables(connection) {
-            let mut columns = connection.prepare(&format!("PRAGMA table_info({table})"))?;
-            let rows = columns.query_map([], |row| {
-                Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
-            })?;
-            for row in rows {
-                let (column, declared) = row?;
-                if names_a_computable(&column, &declared) {
-                    flagged.insert((table.clone(), column));
-                }
-            }
-        }
-        let allowed: BTreeSet<(String, String)> = STATED_NOT_COMPUTED
-            .iter()
-            .map(|(table, column, _)| ((*table).to_owned(), (*column).to_owned()))
-            .collect();
-        assert_eq!(
-            flagged.difference(&allowed).collect::<Vec<_>>(),
-            Vec::<&(String, String)>::new(),
-            "a column that looks computed is stored; compute it on read, or argue for it in STATED_NOT_COMPUTED"
-        );
-        assert_eq!(
-            allowed.difference(&flagged).collect::<Vec<_>>(),
-            Vec::<&(String, String)>::new(),
-            "an exception no longer matches a column; remove it"
-        );
-        Ok(())
-    });
-}
-
-// ---------------------------------------------------------------------------
-// 9. Every text column is findable, folded into what it labels, or argued out
-// ---------------------------------------------------------------------------
-
-/// How a text column reaches the index.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Reach {
-    /// In the text of its own entity (`text_of`: its row and its children), or
-    /// its title, or (`revision.body`) in the earlier text of its entity. A title also folds into the text of what it labels, and a
-    /// note's body into what it is about; section 10 asks those.
-    Own,
-    /// Not indexed, and why.
-    Not(&'static str),
-}
-
-/// The text columns a member types or a title names a group by, each with its
-/// reach. Every other `TEXT` column of the file is structural (an id, an enum, a
-/// date, a hash, JSON, a Locker cell) and the test below recognises it by its
-/// declaration, so adding a text column fails here until it is placed.
-///
-/// `edge.anchor` has no row: it is JSON, so the declaration marks it structural.
-/// A note's `[[title]]` is `edge.wikilink`, the words of which sit in `note.body`, which
-/// is `Own`; `a_note_is_found_by_the_words_of_its_link` holds that.
-const CENSUS: &[(&str, &str, Reach)] = &[
-    ("entity", "title", Reach::Own),
-    (
-        "search_word",
-        "word",
-        Reach::Not("the index's own vocabulary, kept as a list"),
-    ),
-    (
-        "search_owed",
-        "after",
-        Reach::Not("a cursor in id order over what a label feeds, not prose"),
-    ),
-    ("person", "nickname", Reach::Own),
-    ("person", "role", Reach::Own),
-    ("person", "met", Reach::Own),
-    (
-        "person",
-        "sort_name",
-        Reach::Not("derived from the title for ordering"),
-    ),
-    ("contact_point", "value", Reach::Own),
-    ("contact_point", "label", Reach::Own),
-    (
-        "contact_point",
-        "normalized",
-        Reach::Not("the value, normalised for matching a duplicate"),
-    ),
-    ("place", "address", Reach::Own),
-    ("place", "locality", Reach::Own),
-    ("place", "zone", Reach::Not("a time zone name, not prose")),
-    ("event", "description", Reach::Own),
-    ("event", "zone", Reach::Not("a time zone name, not prose")),
-    ("event", "rule", Reach::Not("an RFC 5545 rule")),
-    ("event", "url", Reach::Own),
-    (
-        "occurrence",
-        "zone",
-        Reach::Not("a time zone name, not prose"),
-    ),
-    ("occurrence", "url", Reach::Own),
-    ("occurrence", "title", Reach::Own),
-    ("occurrence", "description", Reach::Own),
-    ("task", "description", Reach::Own),
-    ("task", "url", Reach::Own),
-    ("task", "rule", Reach::Not("an RFC 5545 rule")),
-    ("task", "zone", Reach::Not("a time zone name, not prose")),
-    ("note", "body", Reach::Own),
-    (
-        "document",
-        "media_type",
-        Reach::Not("a MIME type, not prose"),
-    ),
-    ("photo", "media_type", Reach::Not("a MIME type, not prose")),
-    (
-        "photo",
-        "burst",
-        Reach::Not("a group key the camera minted"),
-    ),
-    (
-        "derivative",
-        "media_type",
-        Reach::Not("a MIME type, not prose"),
-    ),
-    ("derivative", "text", Reach::Own),
-    // An earlier version's words are in the entity's `search_past` rows (#1185): the hit is
-    // the live item, said to match "in an earlier version", and it opens that item's Earlier
-    // versions, which contain the term. A Locker item's history is sealed and has no row.
-    ("revision", "body", Reach::Own),
-    (
-        "revision",
-        "media_type",
-        Reach::Not("a MIME type, not prose"),
-    ),
-    (
-        "thread",
-        "scope",
-        Reach::Not("the key of the screen a chat belongs to"),
-    ),
-    ("message", "text", Reach::Own),
-    (
-        "message_attachment",
-        "label",
-        Reach::Not("a copy of the attached thing's title, or a pasted image's name"),
-    ),
-    (
-        "workout",
-        "recorded_by",
-        Reach::Not("the name of the device that recorded it"),
-    ),
-    (
-        "origin",
-        "label",
-        Reach::Not("the name of an import source, not something a member wrote about a thing"),
-    ),
-    ("origin", "ref", Reach::Not("the source's own key")),
-    (
-        "concept",
-        "key",
-        Reach::Not("the folded form of the title, which is indexed in what it labels"),
-    ),
-    ("container", "icon", Reach::Not("an icon key")),
-    (
-        "vault",
-        "name",
-        Reach::Not("the vault's own name, one per file and not an entity"),
-    ),
-    ("vault", "zone", Reach::Not("a time zone name, not prose")),
-    (
-        "action_key",
-        "key",
-        Reach::Not("an act's correlation key, a token and not prose"),
-    ),
-    (
-        "action_key",
-        "asked",
-        Reach::Not("a digest of what an act asked, not prose"),
-    ),
-    ("account", "currency", Reach::Not("an ISO code")),
-    (
-        "rule",
-        "display_name",
-        Reach::Not(
-            "a rule is not an entity; the name it gives lands on the line's title, which is indexed",
-        ),
-    ),
-    ("txn", "currency", Reach::Not("an ISO code")),
-    ("budget", "currency", Reach::Not("an ISO code")),
-    ("budget", "month", Reach::Not("a month")),
-    ("vault", "currency", Reach::Not("an ISO code")),
-    (
-        "revision",
-        "cause",
-        Reach::Not("the name of the command that made the change"),
-    ),
-    // Locker: `locker_item.memo`, extra addresses, and plain built-in fields
-    // in `locker_item_field.value_text` are findable; every sealed cell lives
-    // in `locker_item_field.value_sealed` or `locker_item_passkey.private_key`
-    // as `lk1:` ciphertext and is never text.
-    ("locker_item", "memo", Reach::Own),
-    ("locker_item_address", "url", Reach::Own),
-    ("locker_item_field", "value_text", Reach::Own),
-    (
-        "locker_item_field",
-        "value_sealed",
-        Reach::Not("a sealed field's value: ciphertext"),
-    ),
-    (
-        "locker_item_passkey",
-        "private_key",
-        Reach::Not("a passkey's private key: ciphertext"),
-    ),
-    (
-        "locker_item_field",
-        "section",
-        Reach::Not("a field's group name; out of search by owner decision D11"),
-    ),
-    (
-        "locker_item_field",
-        "label",
-        Reach::Not("a field's name; out of search by owner decision D11"),
-    ),
-    (
-        "locker_item_passkey",
-        "user_handle",
-        Reach::Not("a relying party's opaque handle"),
-    ),
-    (
-        "locker_item_passkey",
-        "display_name",
-        Reach::Not("the relying party's account label, shown on the item"),
-    ),
-    (
-        "locker_item_passkey",
-        "algorithm",
-        Reach::Not("a signature algorithm name"),
-    ),
-    ("edge_shape", "rel", Reach::Not("a closed vocabulary")),
-    ("source", "system", Reach::Not("a closed vocabulary")),
-    (
-        "source",
-        "stated_title",
-        Reach::Not(
-            "what a phone store called the record: a copy of `stated`, whose live title is the entity's own",
-        ),
-    ),
-    (
-        "origin",
-        "fills",
-        Reach::Not("an entity id: the home a follow filled"),
-    ),
-    (
-        "edge",
-        "wikilink",
-        Reach::Not("the title in a note's `[[words]]`: a copy of `note.body`, which is indexed"),
-    ),
-    (
-        "origin",
-        "cursor",
-        Reach::Not("a platform's change token, opaque to the vault"),
-    ),
-];
-
-/// The text of one column's own definition inside a `CREATE TABLE`: the piece
-/// between two commas at the top level of the parentheses.
+/// The text of one column's own definition inside a `CREATE TABLE`.
 fn column_definition(sql: &str, column: &str) -> String {
     let body = &sql[sql.find('(').map_or(0, |at| at + 1)..];
-    let mut depth = 0_i32;
-    let mut start = 0;
-    let mut pieces = Vec::new();
+    let (mut depth, mut start, mut pieces) = (0_i32, 0, Vec::new());
     for (at, letter) in body.char_indices() {
         match letter {
             '(' => depth += 1,
@@ -1952,17 +723,22 @@ fn column_definition(sql: &str, column: &str) -> String {
         .unwrap_or_default()
 }
 
-/// A `TEXT` column the declaration alone shows is not prose: an id or a hash
-/// (named by a key), an enum, JSON, a date, a generated constant. Locker's
-/// tables are NOT exempt: its plain cells are findable and its sealed ones are
-/// argued out by name, in [`CENSUS`].
+/// A `TEXT` column the declaration alone shows is not prose: a key into another table (an id, a
+/// lookup's code, a hash), a generated constant, a closed list, JSON, a date or an instant.
 fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
-    if column == "id"
-        || column == "kind"
-        || column.ends_with("_id")
-        || column.ends_with("_kind")
-        || column.ends_with("_at")
-    {
+    // A lookup table is a fixed vocabulary written only by a migration; a column that is part of
+    // any foreign key names a row of another table.
+    let keyed: bool = connection
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM pragma_foreign_key_list(?1) WHERE \"from\" = ?2)",
+            [table, column],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if keyed || LOOKUP_TABLES.contains(&table) {
+        return true;
+    }
+    if column == "id" || column == "kind" || column.ends_with("_id") || column.ends_with("_kind") {
         return true;
     }
     let sql = table_sql(connection, table)
@@ -1976,653 +752,387 @@ fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
         || sql.contains(&format!("{column} IN ("))
         || sql.contains(&format!("json_valid({column})"))
         || sql.contains(&format!("date({column})"))
-        || sql.contains(&format!("datetime({column})"))
-        // A time column: its CHECK reads it back through `strftime` in one of the time shapes
-        // (a prose column cannot pass for one by a looser `, col) IS col`).
-        || ["%Y-%m-%dT%H:%M:%fZ", "%Y-%m-%dT%H:%M:%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"]
+        || sql.contains(&format!("length({column}) = 64"))
+        || ["%Y-%m-%dT%H:%M:%fZ", "%Y-%m-%dT%H:%M"]
             .iter()
             .any(|shape| sql.contains(&format!("strftime('{shape}', {column}) IS {column}")))
-        || sql.contains(&format!("length({column}) = 64"))
 }
 
+fn why_of(table: &str, column: &str) -> Option<&'static Text> {
+    TEXT.iter()
+        .find(|(t, c, _)| *t == table && *c == column)
+        .map(|(_, _, why)| why)
+}
+
+/// The two writers of what the index holds: the live text and the earlier versions' words.
+const TEXT_OF: &str = concat!(
+    include_str!("../src/index/text.rs"),
+    include_str!("../src/index/past.rs")
+);
+
+/// What a text column is, when the declaration alone does not say.
+enum Text {
+    /// A member's words: `index::text_of` (or the earlier-versions writer) reads it.
+    Found,
+    /// Ciphertext or a sealed file's cell: never read by any index.
+    Sealed,
+    /// Not prose a member searches, and why.
+    Not(&'static str),
+}
+
+/// Every `TEXT` column of the vault file and of the index file that is not structural by its
+/// declaration. A column added to the schema fails the test until it is placed here.
+const TEXT: &[(&str, &str, Text)] = &[
+    ("entity", "title", Text::Found),
+    (
+        "entity",
+        "arrived_label",
+        Text::Not("a file or device name an item came in with, cut to a length, never content"),
+    ),
+    ("action_key", "key", Text::Not("an act's correlation token")),
+    (
+        "action_key",
+        "asked",
+        Text::Not("a digest of what an act asked"),
+    ),
+    (
+        "vault",
+        "name",
+        Text::Not("the vault's own name, one per file and not an entity"),
+    ),
+    ("vault", "zone", Text::Not("a time zone name")),
+    ("vault", "currency", Text::Not("an ISO code")),
+    (
+        "concept",
+        "key",
+        Text::Not("the folded form of the title, which is found in what it labels"),
+    ),
+    ("container", "icon", Text::Not("an icon key")),
+    ("origin", "ref", Text::Not("the source's own key")),
+    (
+        "origin",
+        "label",
+        Text::Not("the name of a followed store, not something a member wrote about a thing"),
+    ),
+    (
+        "origin",
+        "cursor",
+        Text::Not("a platform's change token, opaque to the vault"),
+    ),
+    (
+        "source",
+        "stated_title",
+        Text::Not("a copy of what a store called the record; the live title is the entity's"),
+    ),
+    (
+        "revision",
+        "cause",
+        Text::Not("the name of the command that made the change"),
+    ),
+    (
+        "revision_blob",
+        "slot",
+        Text::Not("which column a kept blob was in"),
+    ),
+    ("revision_blob", "media_type", Text::Not("a MIME type")),
+    ("derivative", "media_type", Text::Not("a MIME type")),
+    ("derivative", "text", Text::Found),
+    (
+        "person",
+        "sort_name",
+        Text::Not("derived from the name for ordering"),
+    ),
+    ("person", "given", Text::Found),
+    ("person", "family", Text::Found),
+    ("person", "phonetic", Text::Found),
+    ("person", "nickname", Text::Found),
+    ("person", "role", Text::Found),
+    ("person", "org", Text::Found),
+    ("person", "met", Text::Found),
+    ("person_date", "label", Text::Found),
+    ("contact_point", "value", Text::Found),
+    ("contact_point", "label", Text::Found),
+    (
+        "contact_point",
+        "normalized",
+        Text::Not("the value normalised for matching a duplicate"),
+    ),
+    ("place", "address", Text::Found),
+    ("place", "locality", Text::Found),
+    ("place", "zone", Text::Not("a time zone name")),
+    ("event", "description", Text::Found),
+    ("event", "location", Text::Found),
+    ("event", "url", Text::Found),
+    ("event", "rule", Text::Not("an RFC 5545 rule")),
+    ("event", "zone", Text::Not("a time zone name")),
+    ("event_guest", "address", Text::Found),
+    ("event_guest", "name", Text::Found),
+    ("occurrence", "title", Text::Found),
+    ("occurrence", "description", Text::Found),
+    ("occurrence", "location", Text::Found),
+    ("occurrence", "url", Text::Found),
+    ("occurrence", "zone", Text::Not("a time zone name")),
+    ("task", "description", Text::Found),
+    ("task", "url", Text::Found),
+    ("task", "rule", Text::Not("an RFC 5545 rule")),
+    ("task", "zone", Text::Not("a time zone name")),
+    ("note", "body", Text::Found),
+    (
+        "note_asset",
+        "name",
+        Text::Not("a file name of a picture placed in a note"),
+    ),
+    ("note_asset", "media_type", Text::Not("a MIME type")),
+    (
+        "mention",
+        "wikilink",
+        Text::Not("the title in a note's `[[words]]`: a copy of `note.body`, which is found"),
+    ),
+    ("document", "media_type", Text::Not("a MIME type")),
+    ("photo", "media_type", Text::Not("a MIME type")),
+    ("photo", "burst", Text::Not("a group key the camera minted")),
+    ("account", "currency", Text::Not("an ISO code")),
+    ("txn", "original_currency", Text::Not("an ISO code")),
+    ("budget", "month", Text::Not("a month")),
+    (
+        "rule",
+        "display_name",
+        Text::Not(
+            "a rule is not an entity; the name it gives lands on the line's title, which is found",
+        ),
+    ),
+    ("touch", "notes", Text::Found),
+    ("workout", "notes", Text::Found),
+    (
+        "workout",
+        "recorded_by",
+        Text::Not("the name of the device that recorded it"),
+    ),
+    (
+        "thread",
+        "scope",
+        Text::Not("the key of the screen a chat belongs to"),
+    ),
+    ("message", "text", Text::Found),
+    (
+        "message_attachment",
+        "label",
+        Text::Not("a pasted image's own name; a photo's or document's title is read live"),
+    ),
+    (
+        "message_card",
+        "qualifier",
+        Text::Not("a closed code of at most 24 letters that names no word of the item"),
+    ),
+    ("locker_item_field", "value_text", Text::Found),
+    ("locker_item_field", "value_sealed", Text::Sealed),
+    (
+        "locker_item_field",
+        "field_key",
+        Text::Not("a built-in field's key, a token"),
+    ),
+    (
+        "locker_item_field",
+        "section",
+        Text::Not("a field's group name; out of search by owner decision D11"),
+    ),
+    (
+        "locker_item_field",
+        "label",
+        Text::Not("a field's name; out of search by owner decision D11"),
+    ),
+    ("locker_item_passkey", "private_key", Text::Sealed),
+    ("locker_item_passkey", "rp_id", Text::Found),
+    (
+        "locker_item_passkey",
+        "user_handle",
+        Text::Not("a relying party's opaque handle"),
+    ),
+    (
+        "locker_item_passkey",
+        "display_name",
+        Text::Not("the relying party's account label"),
+    ),
+    (
+        "locker_item_passkey",
+        "algorithm",
+        Text::Not("a signature algorithm name"),
+    ),
+    (
+        "edge",
+        "rel",
+        Text::Not("a relation: the vocabulary is `edge_shape`, which a trigger holds the edge to"),
+    ),
+    ("txn", "memo", Text::Found),
+    ("txn_split", "memo", Text::Found),
+    ("revision", "body", Text::Found),
+    (
+        "reading",
+        "context",
+        Text::Not(
+            "a reading is not an item a member searches: no title, never queued for the index",
+        ),
+    ),
+    (
+        "search_owed",
+        "after",
+        Text::Not("a cursor in id order over what a label feeds, not prose"),
+    ),
+    ("alert", "reminder_id", Text::Not("a reminder's id")),
+    (
+        "alert",
+        "timing",
+        Text::Not("how `fire_key` reads: fixed or floating"),
+    ),
+    (
+        "alert",
+        "fire_key",
+        Text::Not("an instant or a wall clock the writer computed"),
+    ),
+    ("index_state", "built_at", Text::Not("an instant")),
+    (
+        "search_word",
+        "word",
+        Text::Not("the index's own vocabulary, kept as a list"),
+    ),
+    (
+        "index_state",
+        "self_id",
+        Text::Not("the id of the vault this file belongs to"),
+    ),
+];
+
 #[test]
-fn every_text_column_is_findable_folded_into_what_it_labels_or_argued_out() {
-    let scratch = founded("c9");
-    read(&scratch.vault, |connection| {
+fn every_text_column_is_findable_sealed_or_argued_out() {
+    let w = World::new("commit_text");
+    read(&w, |connection| {
+        // The control: a prose column is not structural and a key is, so an empty answer below
+        // means every column was looked at and placed.
+        assert!(!is_structural(connection, "note", "body"));
+        assert!(!is_structural(connection, "entity", "title"));
+        assert!(
+            is_structural(connection, "task", "parent_task_id")
+                || is_structural(connection, "entity", "parent_id")
+        );
+        // The vault file and the attached index file, table by table.
+        let mut seen = BTreeSet::new();
         let mut unplaced = Vec::new();
         let mut redundant = Vec::new();
-        let mut seen = BTreeSet::new();
-        for table in tables(connection) {
-            let mut columns = connection.prepare(&format!("PRAGMA table_xinfo({table})"))?;
-            let rows = columns
-                .query_map([], |row| {
-                    Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            for (column, declared) in rows {
-                if !declared.eq_ignore_ascii_case("TEXT") {
+        for schema in ["main", "ix"] {
+            let names: Vec<String> = connection
+                .prepare(&format!(
+                    "SELECT name FROM {schema}.sqlite_master
+                      WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
+                        AND sql NOT LIKE 'CREATE VIRTUAL%' ORDER BY name"
+                ))?
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            for table in names {
+                if schema == "ix"
+                    && ["geo_node", "geo_parent", "geo_rowid"].contains(&table.as_str())
+                    || table.starts_with("search_")
+                        && table != "search_word"
+                        && table != "search_owed"
+                {
                     continue;
                 }
-                seen.insert((table.clone(), column.clone()));
-                let placed = CENSUS.iter().any(|(t, c, _)| *t == table && *c == column);
-                if !placed && !is_structural(connection, &table, &column) {
-                    unplaced.push(format!("{table}.{column}"));
+                let sql: String = connection.query_row(
+                    &format!("SELECT sql FROM {schema}.sqlite_master WHERE name = ?1"),
+                    [&table],
+                    |row| row.get(0),
+                )?;
+                let columns: Vec<(String, String)> = connection
+                    .prepare(&format!(
+                        "SELECT name, type FROM pragma_table_xinfo('{table}', '{schema}')"
+                    ))?
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                    .collect::<rusqlite::Result<_>>()?;
+                let _ = sql;
+                for (column, declared) in columns {
+                    if !declared.eq_ignore_ascii_case("TEXT") {
+                        continue;
+                    }
+                    seen.insert((table.clone(), column.clone()));
+                    let placed = TEXT.iter().any(|(t, c, _)| *t == table && *c == column);
+                    let structural = schema == "main" && is_structural(connection, &table, &column);
+                    if !placed && !structural {
+                        unplaced.push(format!("{table}.{column}"));
+                    }
+                    if placed && structural && matches!(why_of(&table, &column), Some(Text::Not(_)))
+                    {
+                        redundant.push(format!("{table}.{column}"));
+                    }
                 }
             }
         }
-        assert_eq!(
-            unplaced,
-            Vec::<String>::new(),
-            "a text column is neither structural nor placed in CENSUS: index it, fold it into what it labels, or argue it out"
+        assert!(
+            unplaced.is_empty(),
+            "a text column is neither structural by its declaration nor placed in TEXT: index it, seal it or argue it out: {unplaced:?}"
         );
-        for (table, column, _) in CENSUS {
-            assert!(
-                seen.contains(&((*table).to_owned(), (*column).to_owned())),
-                "{table}.{column} is in CENSUS and is not a TEXT column of the file"
-            );
-            if is_structural(connection, table, column) {
-                redundant.push(format!("{table}.{column}"));
+        assert!(
+            redundant.is_empty(),
+            "structural by their declarations, so they need no line in TEXT: {redundant:?}"
+        );
+        let stale: Vec<String> = TEXT
+            .iter()
+            .filter(|(t, c, _)| !seen.contains(&((*t).to_owned(), (*c).to_owned())))
+            .map(|(t, c, _)| format!("{t}.{c}"))
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "in TEXT and not a TEXT column of the files: {stale:?}"
+        );
+        for (table, column, why) in TEXT {
+            // A column called findable is one the index's text or past-words writer reads.
+            if matches!(why, Text::Found) {
+                assert!(
+                    TEXT_OF.contains(&format!("\"{column}\"")) || TEXT_OF.contains(column),
+                    "{table}.{column} is called findable and no text writer names `{column}`"
+                );
+            }
+            if let Text::Not(reason) = why {
+                assert!(
+                    !reason.is_empty(),
+                    "{table}.{column} is argued out without a reason"
+                );
             }
         }
-        assert_eq!(
-            redundant,
-            Vec::<String>::new(),
-            "structural by their declarations: they need no line in CENSUS"
-        );
         Ok(())
     });
 }
 
+/// The earlier versions' words and the live text are one list of what a member typed: every column
+/// the past index reads is one the census calls findable.
 #[test]
-fn every_column_the_past_index_reads_is_a_column_the_census_reaches() {
-    // The earlier versions' text and the live text are one list of what a member typed.
+fn every_column_the_past_index_reads_is_findable() {
     for (table, columns) in centraid_vault::index::EARLIER_COLUMNS {
         for column in *columns {
             assert!(
-                CENSUS
-                    .iter()
-                    .any(|(t, c, reach)| t == table && c == column && matches!(reach, Reach::Own)),
-                "{table}.{column} is read for earlier versions and is not `Own` in CENSUS"
+                TEXT.iter()
+                    .any(|(t, c, why)| t == table && c == column && matches!(why, Text::Found)),
+                "{table}.{column} is read for earlier versions and is not findable in TEXT"
             );
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// 10. A label reaches what it labels, and leaves it again
-// ---------------------------------------------------------------------------
-
-/// Whether the index finds this entity by this word, asked of the index itself.
-fn finds(vault: &Vault, id: &str, word: &str) -> bool {
-    read(vault, |connection| {
-        Ok(connection.query_row(
-            "SELECT EXISTS (SELECT 1 FROM search
-                             WHERE search MATCH ?2
-                               AND rowid = (SELECT n FROM entity WHERE id = ?1))",
-            [id, &format!("\"{word}\"")],
-            |row| row.get(0),
-        )?)
-    })
-}
-
-/// The incremental index is the rebuilt one, asked after every step so that the
-/// step that forgot to re-index is the one that fails.
-fn in_step(vault: &Vault, step: &str) {
-    let incremental = index_dump(vault);
-    assert_eq!(incremental, rebuilt(vault), "{step}: the index is stale");
-}
-
-fn is_found(vault: &Vault, id: &str, word: &str, step: &str) {
-    assert!(
-        finds(vault, id, word),
-        "{step}: `{id}` is not found by `{word}`"
-    );
-    in_step(vault, step);
-}
-
-fn is_not_found(vault: &Vault, id: &str, word: &str, step: &str) {
-    assert!(
-        !finds(vault, id, word),
-        "{step}: `{id}` is still found by `{word}`"
-    );
-    in_step(vault, step);
-}
-
+/// The control: a sealed cell is never named by either writer as text, and a column of the census
+/// that is sealed is one `text_of` is told to leave alone.
 #[test]
-fn a_title_that_labels_is_part_of_the_text_of_what_it_labels() {
-    let scratch = founded("c10");
-    let vault = &scratch.vault;
-    let registry = Registry::with_system_commands().expect("a registry");
-    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
-
-    // A transaction is found by its category and by its account.
-    go(
-        "account.add",
-        json!({"id": "acct", "title": "Everyday Checking", "type": "checking"}),
-    );
-    vault
-        .commit(|tx| {
-            tx.insert_entity("tx1", Kind::Txn, "Corner shop", AT)?;
-            tx.connection().execute(
-                "INSERT INTO txn (id, account_id, currency, posted_on, amount_minor, category_id)
-                 VALUES ('tx1', 'acct', (SELECT currency FROM account WHERE id = 'acct'),
-                         '2026-03-01', -450, 'category:food.groceries')",
-                [],
-            )?;
-            Ok(())
-        })
-        .expect("a line");
-    is_found(vault, "tx1", "corner", "a line's own title");
-    is_found(vault, "tx1", "groceries", "a line's category");
-    is_found(vault, "tx1", "everyday", "a line's account");
-    go(
-        "entity.retitle",
-        json!({"id": "acct", "title": "Joint Account"}),
-    );
-    is_found(vault, "tx1", "joint", "an account renamed");
-    is_not_found(vault, "tx1", "everyday", "an account renamed");
-    go(
-        "txn.categorize",
-        json!({"ids": ["tx1"], "category_id": "category:food.dining"}),
-    );
-    is_found(vault, "tx1", "dining", "a line re-categorised");
-    is_not_found(vault, "tx1", "groceries", "a line re-categorised");
-    go("category.add", json!({"title": "Treats"}));
-    let treats: String = read(vault, |c| {
-        Ok(
-            c.query_row("SELECT id FROM entity WHERE title = 'Treats'", [], |r| {
-                r.get(0)
-            })?,
-        )
-    });
-    go(
-        "txn.categorize",
-        json!({"ids": ["tx1"], "category_id": treats}),
-    );
-    go("entity.retitle", json!({"id": treats, "title": "Sweets"}));
-    is_found(vault, "tx1", "sweets", "a category renamed");
-    go("entity.purge", json!({"id": treats}));
-    is_not_found(vault, "tx1", "sweets", "a category purged");
-
-    // A tag or a flag is part of the text of what carries it.
-    go(
-        "note.create",
-        json!({"id": "nt", "title": "Packing", "body": "socks"}),
-    );
-    let tag = go("tag.add", json!({"id": "nt", "label": "Road Trip"}))["tag"]
-        .as_str()
-        .expect("the tag's id")
-        .to_owned();
-    is_found(vault, "nt", "road", "a tag put on");
-    go("tag.add", json!({"id": "tx1", "label": "Road Trip"}));
-    is_found(vault, "tx1", "trip", "a tag on a line");
-    go("entity.retitle", json!({"id": tag, "title": "Holiday"}));
-    is_found(vault, "nt", "holiday", "a tag renamed");
-    is_found(vault, "tx1", "holiday", "a tag renamed");
-    is_not_found(vault, "nt", "road", "a tag renamed");
-    go("tag.remove", json!({"id": "nt", "label": "Road Trip"}));
-    is_not_found(vault, "nt", "holiday", "a tag taken off");
-    go("flag.set", json!({"id": "nt", "flag": "starred"}));
-    is_found(vault, "nt", "starred", "a flag set");
-    go("flag.clear", json!({"id": "nt", "flag": "starred"}));
-    is_not_found(vault, "nt", "starred", "a flag cleared");
-    go("entity.purge", json!({"id": tag}));
-    is_not_found(vault, "tx1", "holiday", "a tag purged");
-
-    // A calendar is part of the text of its events; so is a day's own title.
-    go(
-        "container.create",
-        json!({"id": "cal", "kind": "calendar", "title": "Work"}),
-    );
-    go(
-        "event.propose",
-        json!({"id": "ev", "title": "Standup", "starts": "2026-03-10T09:00",
-        "rule": "FREQ=DAILY;COUNT=5", "calendar_id": "cal"}),
-    );
-    is_found(vault, "ev", "work", "an event on a calendar");
-    go("entity.retitle", json!({"id": "cal", "title": "Office"}));
-    is_found(vault, "ev", "office", "a calendar renamed");
-    is_not_found(vault, "ev", "work", "a calendar renamed");
-    go(
-        "event.edit_occurrence",
-        json!({"id": "ev", "original_start": "2026-03-11T09:00:00",
-        "scope": "occurrence", "action": "override", "title": "Retro", "description": "bring snacks"}),
-    );
-    is_found(vault, "ev", "retro", "an occurrence's own title");
-    is_found(vault, "ev", "snacks", "an occurrence's own description");
-    go(
-        "event.edit_occurrence",
-        json!({"id": "ev", "original_start": "2026-03-11T09:00:00",
-        "scope": "occurrence", "action": "restore"}),
-    );
-    is_not_found(vault, "ev", "retro", "an occurrence restored");
-
-    // A list is part of the text of the people in it.
-    go("person.add", json!({"id": "ada", "title": "Ada Lovelace"}));
-    go(
-        "container.create",
-        json!({"id": "club", "kind": "list", "title": "Book Club"}),
-    );
-    go("person.move", json!({"id": "ada", "list_id": "club"}));
-    is_found(vault, "ada", "club", "a person filed in a list");
-    go(
-        "entity.retitle",
-        json!({"id": "club", "title": "Reading Circle"}),
-    );
-    is_found(vault, "ada", "circle", "a list renamed");
-    go("person.move", json!({"id": "ada", "list_id": null}));
-    is_not_found(vault, "ada", "circle", "a person taken out of a list");
-    go(
-        "edge.add",
-        json!({"from": "club", "rel": "contains", "to": "ada"}),
-    );
-    is_found(vault, "ada", "circle", "a list that holds a person");
-    go(
-        "edge.remove",
-        json!({"from": "club", "rel": "contains", "to": "ada"}),
-    );
-    is_not_found(vault, "ada", "circle", "a list that lets a person go");
-    go(
-        "edge.add",
-        json!({"from": "club", "rel": "contains", "to": "ada"}),
-    );
-    go("entity.trash", json!({"id": "club"}));
-    go("entity.purge", json!({"id": "club"}));
-    is_not_found(vault, "ada", "circle", "a list purged");
-
-    // A relation's word is part of the text of both people it joins.
-    go(
-        "person.add_relationship",
-        json!({"id": "ada", "name": "Annabella", "kind": "mother"}),
-    );
-    is_found(vault, "ada", "mother", "a relation");
-    go(
-        "entity.retitle",
-        json!({"id": "relation:mother", "title": "Parent"}),
-    );
-    is_found(vault, "ada", "parent", "a relation renamed");
-
-    // An album is part of the text of its photographs.
-    vault
-        .commit(|tx| {
-            tx.connection().execute(
-                "INSERT INTO blob (hash, size) VALUES (?1, 1)",
-                [&"ab".repeat(32)],
-            )?;
-            tx.insert_entity("ph", Kind::Photo, "Shore", AT)?;
-            tx.connection().execute(
-                "INSERT INTO photo (id, blob, media_type, form) VALUES ('ph', ?1, 'image/jpeg', 'photo')",
-                [&"ab".repeat(32)],
-            )?;
-            Ok(())
-        })
-        .expect("a photograph");
-    go(
-        "container.create",
-        json!({"id": "alb", "kind": "album", "title": "Summer"}),
-    );
-    go(
-        "edge.add",
-        json!({"from": "alb", "rel": "contains", "to": "ph"}),
-    );
-    is_found(vault, "ph", "summer", "a photograph in an album");
-    go("entity.retitle", json!({"id": "alb", "title": "Autumn"}));
-    is_found(vault, "ph", "autumn", "an album renamed");
-    go(
-        "edge.remove",
-        json!({"from": "alb", "rel": "contains", "to": "ph"}),
-    );
-    is_not_found(vault, "ph", "autumn", "a photograph taken out of an album");
-
-    // A notebook, a folder and a project are part of the text of what is filed in them.
-    go(
-        "container.create",
-        json!({"id": "book", "kind": "notebook", "title": "Recipes"}),
-    );
-    go("note.move", json!({"id": "nt", "notebook_id": "book"}));
-    is_found(vault, "nt", "recipes", "a note in a notebook");
-    go("entity.retitle", json!({"id": "book", "title": "Cooking"}));
-    is_found(vault, "nt", "cooking", "a notebook renamed");
-    go("note.move", json!({"id": "nt", "notebook_id": null}));
-    is_not_found(vault, "nt", "cooking", "a note taken out of a notebook");
-    vault
-        .commit(|tx| {
-            tx.connection().execute(
-                "INSERT INTO blob (hash, size) VALUES (?1, 1)",
-                [&"cd".repeat(32)],
-            )?;
-            tx.insert_entity("doc", Kind::Document, "Return", AT)?;
-            tx.connection().execute(
-                "INSERT INTO document (id, blob, media_type) VALUES ('doc', ?1, 'application/pdf')",
-                [&"cd".repeat(32)],
-            )?;
-            Ok(())
-        })
-        .expect("a document");
-    go(
-        "container.create",
-        json!({"id": "fold", "kind": "folder", "title": "Taxes"}),
-    );
-    go("document.move", json!({"id": "doc", "folder_id": "fold"}));
-    is_found(vault, "doc", "taxes", "a document in a folder");
-    go("entity.retitle", json!({"id": "fold", "title": "Filing"}));
-    is_found(vault, "doc", "filing", "a folder renamed");
-
-    go(
-        "container.create",
-        json!({"id": "area", "kind": "area", "title": "Home"}),
-    );
-    go(
-        "container.create",
-        json!({"id": "proj", "kind": "project", "title": "Garden", "parent": "area"}),
-    );
-    go(
-        "container.create",
-        json!({"id": "sec", "kind": "section", "title": "Planning", "parent": "proj"}),
-    );
-    go(
-        "task.add",
-        json!({"id": "tk", "title": "Order seeds", "project_id": "proj", "section_id": "sec"}),
-    );
-    is_found(vault, "proj", "home", "a project in an area");
-    is_found(vault, "tk", "planning", "a task in a section");
-    go("entity.retitle", json!({"id": "sec", "title": "Buying"}));
-    is_found(vault, "tk", "buying", "a section renamed");
-    go("entity.retitle", json!({"id": "area", "title": "House"}));
-    is_found(vault, "proj", "house", "an area renamed");
-    go("entity.trash", json!({"id": "area"}));
-    go("entity.purge", json!({"id": "area"}));
-    is_not_found(vault, "proj", "house", "an area purged");
-
-    // An activity is found by the kind of thing it was and by where.
-    go(
-        "person.log_interaction",
-        json!({"id": "ada", "kind": "call", "text": "about the engine"}),
-    );
-    let call: String = read(vault, |c| {
-        Ok(c.query_row("SELECT id FROM activity LIMIT 1", [], |r| r.get(0))?)
-    });
-    is_found(vault, &call, "call", "an activity's kind");
-}
-
-/// A link a member pasted is found by its words, and editing it re-indexes.
-#[test]
-fn a_link_on_an_event_an_occurrence_or_a_task_finds_it() {
-    let scratch = founded("c10url");
-    let vault = &scratch.vault;
-    let registry = Registry::with_system_commands().expect("a registry");
-    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
-
-    go(
-        "event.propose",
-        json!({"id": "ev", "title": "Sync", "starts": "2026-03-10T09:00",
-        "rule": "FREQ=DAILY;COUNT=5", "url": "https://zoom.us/j/123"}),
-    );
-    is_found(vault, "ev", "zoom", "an event's link");
-    go(
-        "event.edit",
-        json!({"id": "ev", "url": "https://meet.example/room"}),
-    );
-    is_found(vault, "ev", "meet", "an event's link edited");
-    is_not_found(vault, "ev", "zoom", "an event's link edited");
-
-    go(
-        "event.propose",
-        json!({"id": "ev2", "title": "Weekly", "starts": "2026-03-10T09:00",
-        "rule": "FREQ=DAILY;COUNT=5"}),
-    );
-    go(
-        "event.edit_occurrence",
-        json!({"id": "ev2", "original_start": "2026-03-11T09:00:00",
-        "scope": "occurrence", "action": "override", "url": "https://webex.example/call"}),
-    );
-    is_found(vault, "ev2", "webex", "an occurrence's link");
-    go(
-        "event.edit_occurrence",
-        json!({"id": "ev2", "original_start": "2026-03-11T09:00:00",
-        "scope": "occurrence", "action": "override", "url": "https://teams.example/call"}),
-    );
-    is_found(vault, "ev2", "teams", "an occurrence's link edited");
-    is_not_found(vault, "ev2", "webex", "an occurrence's link edited");
-
-    go(
-        "task.add",
-        json!({"id": "tk", "title": "Read", "url": "https://articles.example/long-read"}),
-    );
-    is_found(vault, "tk", "articles", "a task's link");
-    go(
-        "task.edit",
-        json!({"id": "tk", "url": "https://papers.example/short"}),
-    );
-    is_found(vault, "tk", "papers", "a task's link edited");
-    is_not_found(vault, "tk", "articles", "a task's link edited");
-}
-
-/// The words of a note's `[[link]]` are in its body, which is indexed; the
-/// anchor on the edge adds nothing to search.
-#[test]
-fn a_note_is_found_by_the_words_of_its_link() {
-    let scratch = founded("c10link");
-    let vault = &scratch.vault;
-    let registry = Registry::with_system_commands().expect("a registry");
-    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
-    go(
-        "note.create",
-        json!({"id": "target", "title": "Harbour", "body": "x"}),
-    );
-    go(
-        "note.create",
-        json!({"id": "src", "title": "Trip", "body": "see [[Harbour]] soon"}),
-    );
-    let anchors: i64 = read(vault, |c| {
-        Ok(c.query_row(
-            "SELECT count(*) FROM edge WHERE from_id = 'src' AND rel = 'links' AND wikilink IS NOT NULL",
-            [],
-            |r| r.get(0),
-        )?)
-    });
-    assert_eq!(anchors, 1, "the link compiled to a flagged edge");
-    is_found(vault, "src", "harbour", "a note's link words");
-}
-
-#[test]
-fn interaction_notes_follow_changes_to_the_people_and_about_edges() {
-    let scratch = founded("interaction-index");
-    let vault = &scratch.vault;
-    let registry = Registry::with_system_commands().expect("a registry");
-    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
-    go("person.add", json!({"id": "ada", "title": "Ada"}));
-    go("person.add", json!({"id": "bob", "title": "Bob"}));
-    go(
-        "person.log_interaction",
-        json!({"id": "ada", "kind": "call", "text": "quartz"}),
-    );
-    let activity: String = read(vault, |c| {
-        Ok(c.query_row("SELECT id FROM activity LIMIT 1", [], |r| r.get(0))?)
-    });
-    let note: String = read(vault, |c| {
-        Ok(c.query_row(
-            "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'about'",
-            [&activity],
-            |r| r.get(0),
-        )?)
-    });
-    is_found(vault, "ada", "quartz", "interaction created");
-    go(
-        "edge.add",
-        json!({"from": activity, "rel": "with", "to": "bob"}),
-    );
-    is_found(vault, "bob", "quartz", "another participant added");
-    go(
-        "edge.remove",
-        json!({"from": activity, "rel": "with", "to": "bob"}),
-    );
-    is_not_found(vault, "bob", "quartz", "participant removed");
-    go(
-        "edge.remove",
-        json!({"from": note, "rel": "about", "to": activity}),
-    );
-    is_not_found(vault, "ada", "quartz", "interaction note unlinked");
-    go(
-        "edge.add",
-        json!({"from": note, "rel": "about", "to": activity}),
-    );
-    is_found(vault, "ada", "quartz", "interaction note relinked");
-    go("entity.trash", json!({"id": note}));
-    is_not_found(vault, "ada", "quartz", "interaction note trashed");
-    go("entity.restore", json!({"id": note}));
-    is_found(vault, "ada", "quartz", "interaction note restored");
-    go("entity.trash", json!({"id": note}));
-    go("entity.purge", json!({"id": note}));
-    is_not_found(vault, "ada", "quartz", "interaction note purged");
-}
-
-// ---------------------------------------------------------------------------
-// 11. The index is tuned for the reads it serves
-// ---------------------------------------------------------------------------
-
-#[test]
-fn the_prefix_index_is_not_in_the_vocabulary() {
-    let scratch = founded("c11-prefix");
-    let vault = &scratch.vault;
-    let registry = Registry::with_system_commands().expect("a registry");
-    run(
-        vault,
-        &registry,
-        "note.create",
-        json!({"id": "n", "title": "Zeppelin", "body": "alphabet soup"}),
-    );
-    let terms = vocabulary(vault);
-    // `prefix = '2 3'` stores `al`, `alp`, `so`, `sou`, `ze` and `zep` as index
-    // entries; the vocabulary is the words, and a correction that scanned a prefix
-    // of it would otherwise be offered `al`.
-    for word in ["alphabet", "soup", "zeppelin"] {
-        assert!(terms.contains(word), "{word}");
-    }
-    for prefix in ["al", "alp", "so", "sou", "ze", "zep", "a", "z"] {
-        assert!(
-            !terms.contains(prefix),
-            "the vocabulary lists the prefix `{prefix}`"
-        );
-    }
-    assert_eq!(terms, word_list(vault));
-    // And the prefix is served: a two- and a three-letter start find the note.
-    assert!(finds_prefix(vault, "n", "al"));
-    assert!(finds_prefix(vault, "n", "zep"));
-    assert!(finds_prefix(vault, "n", "sou"));
-    assert!(!finds_prefix(vault, "n", "qu"));
-}
-
-fn finds_prefix(vault: &Vault, id: &str, start: &str) -> bool {
-    read(vault, |connection| {
-        Ok(connection.query_row(
-            "SELECT EXISTS (SELECT 1 FROM search
-                             WHERE search MATCH ?2
-                               AND rowid = (SELECT n FROM entity WHERE id = ?1))",
-            [id, &format!("\"{start}\" *")],
-            |row| row.get(0),
-        )?)
-    })
-}
-
-#[test]
-fn a_month_across_accounts_reads_the_day_index() {
-    let scratch = founded("c11-day");
-    read(&scratch.vault, |connection| {
-        // The statement `money.transactions.month` writes, without an account.
-        let plan: Vec<String> = connection
-            .prepare(
-                "EXPLAIN QUERY PLAN
-                 SELECT id, account_id, posted_on, amount_minor, currency, status, category_id
-                   FROM txn WHERE posted_on >= ?1 AND posted_on < ?2
-                  ORDER BY posted_on DESC, id DESC LIMIT 51",
-            )?
-            .query_map(["2026-03-01", "2026-04-01"], |row| row.get::<_, String>(3))?
-            .collect::<rusqlite::Result<_>>()?;
-        let plan = plan.join("; ");
-        assert!(plan.contains("txn_by_day"), "{plan}");
-        assert!(!plan.contains("TEMP B-TREE"), "{plan}");
-        Ok(())
-    });
-}
-
-#[test]
-fn a_closed_vault_has_learned_its_statistics() {
-    let dir = centraid_ontology::scratch::scratch_dir();
-    std::fs::create_dir_all(&dir).expect("a directory");
-    let path = dir.join("vault.db");
-    {
-        let vault = Vault::create(&path).expect("a vault");
-        vault.found("Test", "Test Owner").expect("founded");
-        let registry = Registry::with_system_commands().expect("a registry");
-        for n in 0..200 {
-            run(
-                &vault,
-                &registry,
-                "note.create",
-                json!({"id": format!("n{n}"), "title": format!("Note {n}"), "body": "words"}),
+fn a_sealed_column_is_named_by_neither_text_writer_as_text() {
+    for (table, column, why) in TEXT {
+        if matches!(why, Text::Sealed) {
+            let reads = TEXT_OF
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("//"))
+                .any(|line| {
+                    line.contains(&format!("{column} FROM"))
+                        || line.contains(&format!("SELECT {column}"))
+                });
+            assert!(
+                !reads,
+                "{table}.{column} is sealed and a text writer selects it"
             );
         }
-        // A read that the planner can plan better: it is queries that `PRAGMA
-        // optimize` learns from.
-        read(&vault, |connection| {
-            let _: i64 = connection.query_row(
-                "SELECT count(*) FROM entity WHERE kind = 'note' AND deleted_at IS NULL AND title = 'Note 7'",
-                [],
-                |row| row.get(0),
-            )?;
-            Ok(())
-        });
-        vault.close().expect("closes");
     }
-    let vault = Vault::open(&path).expect("reopens");
-    let analysed: i64 = read(&vault, |connection| {
-        Ok(connection.query_row(
-            "SELECT count(*) FROM sqlite_stat1 WHERE tbl = 'entity'",
-            [],
-            |row| row.get(0),
-        )?)
-    });
-    assert!(analysed > 0, "closing a vault runs PRAGMA optimize");
-    drop(vault);
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn a_dropped_vault_has_learned_its_statistics_too() {
-    let dir = centraid_ontology::scratch::scratch_dir();
-    std::fs::create_dir_all(&dir).expect("a directory");
-    let path = dir.join("vault.db");
-    {
-        let vault = Vault::create(&path).expect("a vault");
-        vault.found("Test", "Test Owner").expect("founded");
-        let registry = Registry::with_system_commands().expect("a registry");
-        for n in 0..200 {
-            run(
-                &vault,
-                &registry,
-                "note.create",
-                json!({"id": format!("n{n}"), "title": format!("Note {n}"), "body": "words"}),
-            );
-        }
-        read(&vault, |connection| {
-            let _: i64 = connection.query_row(
-                "SELECT count(*) FROM entity WHERE kind = 'note' AND deleted_at IS NULL AND title = 'Note 7'",
-                [],
-                |row| row.get(0),
-            )?;
-            Ok(())
-        });
-    }
-    let vault = Vault::open(&path).expect("reopens");
-    let analysed: i64 = read(&vault, |connection| {
-        Ok(connection.query_row(
-            "SELECT count(*) FROM sqlite_stat1 WHERE tbl = 'entity'",
-            [],
-            |row| row.get(0),
-        )?)
-    });
-    assert!(analysed > 0, "dropping a vault runs PRAGMA optimize");
-    drop(vault);
-    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -276,7 +276,7 @@ reproduce -> measure (optimized build) -> find the line -> fix -> measure again 
    | --- | --- |
    | A test or request is slow | `RUST_LOG=debug cargo test --release -p <crate> --test <name> -- --nocapture`, with `tracing` spans (`#[tracing::instrument]`, `tracing` is a workspace dependency) around the suspects |
    | CPU hot spot, any function | `perf record -g` then `perf report` on the test binary, if installed (Linux); `cargo flamegraph` if installed; on macOS `xcrun xctrace record --template 'Time Profiler'` |
-   | A SQL read is slow | `EXPLAIN QUERY PLAN` (see the sqlite skill); `crates/core/tests/query_plans.rs` plans every page query |
+   | A SQL read is slow | `EXPLAIN QUERY PLAN` (see the sqlite skill); `crates/domain/tests/read_registry.rs` plans every page query |
    | Allocation churn | count allocations with a counting `#[global_allocator]` in a test, or `heaptrack` if installed |
    | Slow incremental build | `cargo build --timings` |
    | Two implementations, which is faster | a `criterion` or `divan` bench with `std::hint::black_box`; no crate here has `benches/` yet, so adding one is a new dependency to justify |
@@ -289,7 +289,7 @@ reproduce -> measure (optimized build) -> find the line -> fix -> measure again 
 This repo has no gate step or test that asserts on a duration (owner ruling 2026-11-04: they flaked on loaded machines and blocked unrelated changes). Measure by hand, and keep what the gate does check deterministic:
 
 - `tests/journeys.json`: the journey ledger of measured ceilings per surface, volume and hardware. A ceiling is tightened freely; widening one needs an `approvedDeviation` note.
-- Year-3 rigs, `#[ignore]`d from normal runs: `crates/apps/<app>/tests/year3.rs`, e.g. `cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture` (calendar, reminders, docs, health, money, notes, people, photos). Run them in `--release` for numbers you quote.
+- App-domain year-three rigs and the shared core year-three corpus are not implemented yet (target).
 - Nothing whose cost grows with the vault runs on a request path: page by keyset cursor with `LIMIT`.
 
 ## 13. Final checklist

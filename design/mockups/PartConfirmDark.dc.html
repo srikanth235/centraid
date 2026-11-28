@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Part: Confirm (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div data-theme="dark" style="width: 390px; box-sizing: border-box; position: relative; background: var(--surface-page); font-family: Geist, system-ui, sans-serif; color: var(--text-ink); padding: 56px 0 28px;">
+  <div style="padding: 0 16px 4px; font-size: 20px; font-weight: 700;">Confirm</div>
+  <div style="padding: 0 16px 14px; font-size: 13px; color: var(--text-meta); line-height: 1.4;">A confirm keeps its title, reason, action and Cancel together.</div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">EMPTY TRASH</div>
+  <div>
+    <!-- variant:empty -->
+    <div role="dialog" aria-label="Empty trash" style="position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface-page); border-radius: 28px 28px 0 0; padding: 0 16px 28px; box-sizing: border-box;"><div aria-hidden="true" style="width: 32px; height: 4px; border-radius: 2px; background: var(--stroke-strong); margin: 16px auto 12px;"></div><div data-slot="t0" style="font-size: 22px; font-weight: 500; line-height: 28px; padding: 0 8px;">Empty trash?</div><div data-slot="t1" style="font-size: 14px; color: var(--text-body); line-height: 20px; margin: 8px 8px 20px;">Everything in trash leaves this vault for good. This cannot be undone.</div><div style="display: flex; flex-direction: column; gap: 8px;"><button data-slot="t2" style="height: 48px; border-radius: 24px; border: 1.5px solid var(--state-red); background: none; color: var(--state-red); font-size: 14px; font-weight: 600;">Empty trash</button><button data-slot="t3" style="height: 48px; border-radius: 24px; border: none; background: none; color: var(--text-ink); font-size: 14px; font-weight: 600;">Cancel</button></div></div>
+    <!-- /variant -->
+  </div>
+  <div style="padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-meta); letter-spacing: 0.4px;">LEAVE A DIRTY FORM</div>
+  <div>
+    <!-- variant:discard -->
+    <div role="dialog" aria-label="Discard changes?" style="position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface-page); border-radius: 28px 28px 0 0; padding: 0 16px 28px; box-sizing: border-box;"><div aria-hidden="true" style="width: 32px; height: 4px; border-radius: 2px; background: var(--stroke-strong); margin: 16px auto 12px;"></div><div data-slot="t0" style="font-size: 22px; font-weight: 500; line-height: 28px; padding: 0 8px;">Discard changes?</div><div data-slot="t1" style="font-size: 14px; color: var(--text-body); line-height: 20px; margin: 8px 8px 20px;">Your changes are not saved.</div><div style="display: flex; flex-direction: column; gap: 8px;"><button data-slot="t2" style="height: 48px; border-radius: 24px; border: 1.5px solid var(--surface-border); background: none; color: var(--text-ink); font-size: 14px; font-weight: 600;">Discard</button><button data-slot="t3" style="height: 48px; border: none; background: none; color: var(--text-ink); font-size: 14px; font-weight: 600;">Keep editing</button></div></div>
+    <!-- /variant -->
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

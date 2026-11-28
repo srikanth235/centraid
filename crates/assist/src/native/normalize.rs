@@ -243,7 +243,7 @@ fn name_clause(part: &str) -> NameClause {
         .take_while(|char| char.is_alphanumeric() || *char == '_')
         .collect();
     // only a clause the where parser refuses is touched; one it reads stays as written
-    if !field.eq_ignore_ascii_case("name") || whr::parse_cond(Kind::Task, part).is_ok() {
+    if !field.eq_ignore_ascii_case("name") {
         return NameClause::Other;
     }
     let rest = part[field.len()..].trim();
@@ -278,14 +278,12 @@ fn split_name_conditions_all(conds: &[Value]) -> (Vec<Value>, Vec<String>, Vec<S
         }
         let op = cond.get("op").and_then(Value::as_str).unwrap_or("=");
         let value = cond.get("value").map(text_of).unwrap_or_default();
-        let written = if value.is_empty() {
+        let _written = if value.is_empty() {
             format!("name {op}")
         } else {
             format!("name {op} \"{value}\"")
         };
-        if whr::parse_cond(Kind::Task, &written).is_ok() {
-            kept.push(cond.clone());
-        } else if matches!(op, "=" | "contains") && !value.trim().is_empty() {
+        if matches!(op, "=" | "contains") && !value.trim().is_empty() {
             lifted.push(value.trim().to_owned());
         } else {
             let shown = if value.is_empty() {
@@ -370,39 +368,6 @@ impl Session {
         }
         out.notes.extend(notes);
         object.insert("where".to_owned(), json!(fixed));
-    }
-
-    /// RULE 13 (nt15 R1a): `note count = 0` on a task or an event is `description is empty`
-    /// (`> 0` is `description is set`), with a note: their notes are their description.
-    fn note_count_description(object: &mut Map<String, Value>, out: &mut Normalized) {
-        let Some(kind) = arg_str(object, "kind").and_then(|kind| Kind::parse(kind.trim())) else {
-            return;
-        };
-        let Some(text) = arg_str(object, "where").filter(|text| !text.trim().is_empty()) else {
-            return;
-        };
-        let mut changed = false;
-        let parts: Vec<String> = whr::split_and(&text)
-            .into_iter()
-            .map(|part| match whr::notes_as_description(kind, &part) {
-                Some((clause, state)) => {
-                    out.notes.push(format!(
-                        "note: read {} as {clause} ({} notes are its description)",
-                        part.trim(),
-                        if kind == Kind::Task { "a task's" } else { "an event's" }
-                    ));
-                    out.entries.push(
-                        json!({"rule": "note_count_description", "clause": part.trim(), "state": state}),
-                    );
-                    changed = true;
-                    clause
-                }
-                None => part,
-            })
-            .collect();
-        if changed {
-            object.insert("where".to_owned(), json!(parts.join(" and ")));
-        }
     }
 
     /// RULE 16 (nt15 R2b): the append form written with another word for the text (`notes+:` of a
@@ -699,7 +664,6 @@ impl Session {
         let mut object = object.clone();
         Self::lenient_when(&mut object, &mut out);
         Self::lenient_where(&mut object, &mut out);
-        Self::note_count_description(&mut object, &mut out);
         self.within_rows(tool, &mut object, &mut out);
         self.keep_valid_links(&mut object, &mut out);
         self.resolve_values(tool, &mut object, &mut out);
@@ -821,75 +785,10 @@ impl Session {
             changed = true;
         }
 
-        // 3. a container the arg does not name: the other container of a task, or none
-        for (key, want) in [
-            ("list", Kind::List),
-            ("parent", Kind::Task),
-            ("notebook", Kind::Notebook),
-            ("folder", Kind::Folder),
-            ("album", Kind::Album),
-        ] {
-            let Some(value) = args.get(key) else {
-                continue;
-            };
-            let Ok(rows) = self.resolve_rows(&value) else {
-                continue;
-            };
-            let [row] = rows.as_slice() else {
-                continue;
-            };
-            if row.0 == want || (!allowed.contains(&key) && key != "album") {
-                continue;
-            }
-            let number = self.number(row);
-            let other = match (key, row.0) {
-                ("list", Kind::Task) => Some("parent"),
-                ("parent", Kind::List) => Some("list"),
-                _ => None,
-            };
-            let said = format!("{key}: #{number} is {} {}", article(row.0), row.0.name());
-            match other.filter(|other| allowed.contains(other) && !args.has(other)) {
-                Some(other) => {
-                    args.rename(key, other);
-                    out.notes.push(format!("note: {said}; used it as {other}:"));
-                    out.entries.push(
-                        json!({"rule": "container_renamed", "from": key, "to": other, "row": number}),
-                    );
-                }
-                None => {
-                    args.remove(key);
-                    out.notes.push(format!(
-                        "note: ignored {said} ({key} takes {} {}; nothing guessed)",
-                        article(want),
-                        want.name()
-                    ));
-                    out.entries
-                        .push(json!({"rule": "container_dropped", "arg": key, "row": number}));
-                }
-            }
-            changed = true;
-        }
-
-        // 1. args the kind does not take, and the secrets its type keeps no column for
-        let item_type = args
-            .get("type")
-            .map(|value| text_of(&value).to_lowercase())
-            .unwrap_or_else(|| "login".to_owned());
+        // 1. args the kind does not take
         // `kind` inside args has its own refusal (the kind is the top-level parameter)
         for key in args.keys().into_iter().filter(|key| key != "kind") {
-            let secret = kind == Kind::LockerItem
-                && meta::REVEAL_FIELDS
-                    .iter()
-                    .any(|(name, column)| *name == key && *column != "content");
-            if secret && meta::locker_secret_column(&item_type, &key).is_none() {
-                args.remove(&key);
-                out.notes.push(format!(
-                    "note: ignored {key} (a {item_type} item keeps no {key}; the secret was not stored)"
-                ));
-                out.entries
-                    .push(json!({"rule": "secret_not_stored", "arg": key, "type": item_type}));
-                changed = true;
-            } else if !allowed.contains(&key.as_str()) {
+            if !allowed.contains(&key.as_str()) {
                 let value = args.remove(&key).unwrap_or_default();
                 let why = if kind.spec().field(&key).is_some() {
                     format!("{} cannot be created with {key}", kind.plural())
@@ -1026,13 +925,5 @@ impl Session {
         out.notes.push(note);
         out.entries
             .push(json!({"rule": "name_from_target", "name": target}));
-    }
-}
-
-fn article(kind: Kind) -> &'static str {
-    if kind.name().starts_with(['a', 'e', 'i', 'o', 'u']) {
-        "an"
-    } else {
-        "a"
     }
 }
